@@ -3,6 +3,15 @@
 import BaseHTTPServer
 import socket
 import SocketServer
+import subprocess
+
+
+# TODO: Need to install dig on Windows or figure out another approach.
+def dns_lookup(hostname, dns_server='8.8.8.8'):
+  dig = subprocess.Popen(['dig', dns_server, hostname, '+short'], stdout=subprocess.PIPE)
+  short_response = dig.communicate()[0]
+  short_response_lines = short_response.split('\n')
+  return short_response_lines[len(short_response_lines)-2]
 
 
 class RecordHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -21,6 +30,7 @@ class ReplayHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     pass
 
 
+# TODO: Probably need to start up on both 80 for http and 443 for https.
 class HTTPProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
   def __init__(self, record, ip='localhost', port=80):
     if record:

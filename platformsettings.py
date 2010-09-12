@@ -11,6 +11,7 @@ class PlatformSettings(object):
   def set_primary_dns(self, dns):
     raise NotImplemented
 
+
 class OSXPlatformSettings(PlatformSettings):
   def _scutil(self, cmd):
     scutil = subprocess.Popen(['scutil'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -43,6 +44,7 @@ class OSXPlatformSettings(PlatformSettings):
       'set %s' % self._get_dns_service_key()
     ])
     self._scutil(command)
+
 
 def get_platform_settings():
   if platform.system() == 'Darwin':
