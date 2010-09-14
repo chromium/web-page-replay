@@ -1,27 +1,15 @@
 #!/usr/bin/env python
 
 import dnsproxy
-import getopt
 import httpproxy
+import optparse
 import platformsettings
 import sys
 import threading
 import time
 
 
-def main():
-  try:
-    # TODO: Accept a file to record to or replay from.
-    opts, args = getopt.getopt(sys.argv[1:], 'r', ['record'])
-  except getopt.GetoptError, err:
-    print str(err)
-    sys.exit(2)
-
-  recording = False
-  for o, a in opts:
-    if o in ('-r', '--record'):
-      recording = True
-
+def main(options, args):
   dns_server = dnsproxy.DNSProxyServer()
   dns_thread = threading.Thread(target=dns_server.serve_forever)
   dns_thread.setDaemon(True)
@@ -35,13 +23,13 @@ def main():
 
   # TODO: Start shaping traffic if recording.
 
-  http_server = httpproxy.HTTPProxyServer(record=recording)
+  http_server = httpproxy.HTTPProxyServer(record=options.record, replay_file=options.file)
   http_thread = threading.Thread(target=http_server.serve_forever)
   http_thread.setDaemon(True)
   http_thread.start()
   print 'Started HTTP'
 
-  if recording:
+  if options.record:
     print 'Recording...'
   else:
     print 'Replaying...'
@@ -59,4 +47,10 @@ def main():
 
 
 if __name__ == '__main__':
-  main()
+  option_parser = optparse.OptionParser()
+  option_parser.add_option('-r', '--record', default=False, action='store_true',
+                           help='Whether to start in record mode.')
+  option_parser.add_option('-f', '--file', default=None,
+                           help='Path to archive to record to or replay from.')
+  options, args = option_parser.parse_args()
+  sys.exit(main(options, args))
