@@ -52,5 +52,7 @@ class UdpDNSHandler(SocketServer.DatagramRequestHandler):
 
 
 class DNSProxyServer(SocketServer.ThreadingUDPServer):
-  def __init__(self, ip='localhost', port=53):
-    SocketServer.ThreadingUDPServer.__init__(self, (ip, port), UdpDNSHandler)
+  def __init__(self, host='localhost', port=53):
+    SocketServer.ThreadingUDPServer.__init__(self, (host, port), UdpDNSHandler)
+    print 'Faking DNS on (%s:%s)...' % (host, port)
+

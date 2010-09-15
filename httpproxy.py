@@ -19,8 +19,6 @@ import socket
 import SocketServer
 import subprocess
 
-# TODO: How to pass args to Handler?
-HTTP_ARCHIVE = None
 
 # TODO: Need to install dig on Windows or figure out another approach.
 def dns_lookup(hostname, dns_server='8.8.8.8'):
@@ -49,7 +47,7 @@ class RecordHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.wfile.write(response)
 
     # TODO: Are any request headers besides 'host' important?
-    HTTP_ARCHIVE.add(httparchive.URLArchive(host, self.path, request_body, response))
+    self.server.get_http_archive().add(httparchive.URLArchive(host, self.path, request_body, response))
 
   def do_POST(self):
     self.do_GET()
@@ -59,7 +57,14 @@ class ReplayHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_GET(self):
     request_body = get_request_body(self.headers, self.rfile)
     host = self.headers.getheader('host')
-    
+    key = httparchive.get_key(host, self.path, request_body)
+
+    if not self.server.get_http_archive().has(key):
+      self.send_error(404)
+      return
+
+    archived_url = self.server.get_http_archive().get(key)
+    self.wfile.write(archived_url.response())
 
   def do_POST(self):
     self.do_GET()
@@ -67,12 +72,15 @@ class ReplayHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 # TODO: Probably need to start up on both 80 for http and 443 for https.
 class HTTPProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
-  def __init__(self, record, http_archive=None, ip='localhost', port=80):
-    HTTP_ARCHIVE = HTTP_ARCHIVE
-    if record:
-      BaseHTTPServer.HTTPServer.__init__(self, (ip, port), RecordHandler)
+  def __init__(self, http_archive, host='localhost', port=80):
+    if http_archive:
+      self.http_archive = http_archive
+      BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
+      print 'Replaying on (%s:%s)...' % (host, port)
     else:
-      BaseHTTPServer.HTTPServer.__init__(self, (ip, port), ReplayHandler)
+      self.http_archive = httparchive.HTTPArchive()
+      BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
+      print 'Recording on (%s:%s)...' % (host, port)
 
   def get_http_archive(self):
-    return HTTP_ARCHIVE
+    return self.http_archive

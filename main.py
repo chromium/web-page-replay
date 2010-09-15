@@ -13,9 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import cPickle
 import dnsproxy
 import httpproxy
 import optparse
+import os
 import platformsettings
 import sys
 import threading
@@ -23,29 +25,36 @@ import time
 
 
 def main(options, args):
+  if not options.file:
+    print 'You must specify a --file to record to or reply from.'
+    return
+
+  replay_archive = None
+  if options.record:
+    if not os.access(options.file, os.W_OK):
+      print 'Cannot write %s' % options.file
+      return
+  else:
+    if not os.access(options.file, os.R_OK):
+      print 'Cannot read %s' % options.file
+      return
+    replay_archive = cPickle.load(open(options.file, 'r'))
+
   dns_server = dnsproxy.DNSProxyServer()
   dns_thread = threading.Thread(target=dns_server.serve_forever)
   dns_thread.setDaemon(True)
   dns_thread.start()
-  print 'Started DNS'
   
   platform_settings = platformsettings.get_platform_settings()
   original_dns = platform_settings.get_primary_dns()
   platform_settings.set_primary_dns('127.0.0.1')
-  print 'Changed system DNS settings'
 
   # TODO: Start shaping traffic if recording.
 
-  http_server = httpproxy.HTTPProxyServer(record=options.record, replay_file=options.file)
+  http_server = httpproxy.HTTPProxyServer(replay_archive)
   http_thread = threading.Thread(target=http_server.serve_forever)
   http_thread.setDaemon(True)
   http_thread.start()
-  print 'Started HTTP'
-
-  if options.record:
-    print 'Recording...'
-  else:
-    print 'Replaying...'
 
   try:
     while 1:
@@ -57,6 +66,10 @@ def main(options, args):
     # TODO: Stop shaping traffic if recording.
     platform_settings.set_primary_dns(original_dns)  
     dns_server.shutdown()
+    if options.record:
+      dump_file = open(options.file, 'w')
+      cPickle.dump(http_server.get_http_archive(), dump_file)
+      dump_file.close()
 
 
 if __name__ == '__main__':

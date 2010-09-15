@@ -57,6 +57,7 @@ class OSXPlatformSettings(PlatformSettings):
       'set %s' % self._get_dns_service_key()
     ])
     self._scutil(command)
+    print 'Changed system DNS to %s' % dns
 
 
 def get_platform_settings():

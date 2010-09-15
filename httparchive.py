@@ -13,6 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+def get_key(host, path, request_body):
+  return host + '\n' + path + '\n' + request_body
+
+
 class HTTPArchive(object):
   def __init__(self):
     self.url_archives = {}
@@ -28,13 +33,14 @@ class HTTPArchive(object):
       return None
     return self.url_archives[key]
 
+
 class URLArchive(object):
   def __init__(self, host, path, request_body, response):
     self.host = host
     self.path = path
     self.request_body = request_body
     self.response = response
-    self.key = host + '\n' + path + '\n' + request_body
+    self.key = get_key(host, path, request_body)
 
   def __cmp__(self, other):
     return self.key < other.key
