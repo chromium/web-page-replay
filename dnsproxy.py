@@ -13,25 +13,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import errno
 import socket
 import SocketServer
 
 
+class DNSProxyError(Exception):
+  pass
+
+class PermissionDenied(DNSProxyError):
+  pass
+
+
 class UdpDNSHandler(SocketServer.DatagramRequestHandler):
+  STANDARD_QUERY_OPERATION_CODE = 0
+
   def handle(self):
     self.reply_ip = '127.0.0.1'
     self.data = self.rfile.read()
+    self.transaction_id = self.data[0]
+    self.flags = self.data[1]
+    self.qa_counts = self.data[4:6]
     self.domain = ''
-    type = (ord(self.data[2]) >> 3) & 15   # Opcode bits
-    if type == 0:                     # Standard query
-      ini = 12
-      lon = ord(self.data[ini])
-      while lon != 0:
-        self.domain += self.data[ini+1:ini+lon+1] + '.'
-        ini += lon + 1
-        lon = ord(self.data[ini])
-
+    operation_code = (ord(self.data[2]) >> 3) & 15
+    if operation_code == self.STANDARD_QUERY_OPERATION_CODE:
+      self.wire_domain = self.data[12:]
+      self.domain = self._domain(self.wire_domain)
     self.reply(self.get_dns_reply(self.reply_ip))
+
+  @classmethod
+  def _domain(cls, wire_domain):
+    domain = ''
+    index = 0
+    length = ord(wire_domain[index])
+    while length:
+      domain += wire_domain[index + 1:index + length + 1] + '.'
+      index += length + 1
+      length = ord(wire_domain[index])
+    return domain
 
   def reply(self, buf):
     self.wfile.write(buf)
@@ -39,12 +58,19 @@ class UdpDNSHandler(SocketServer.DatagramRequestHandler):
   def get_dns_reply(self, ip):
     packet = ''
     if self.domain:
-      packet += self.data[:2] + "\x81\x80"
-      packet += self.data[4:6] + self.data[4:6] + '\x00\x00\x00\x00'      # Questions and Answers Counts
-      packet += self.data[12:]                                            # Original Domain Name Question
-      packet += '\xc0\x0c'                                                # Pointer to domain name
-      packet += '\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04'                # Response type, ttl and resource data length -> 4 bytes
-      packet += str.join('' , map(lambda x: chr(int(x)), ip.split('.')))  # 4bytes of IP
+      packet = (
+          self.transaction_id +
+          self.flags +
+          '\x81\x80' +        # standard query response, no error
+          self.qa_counts * 2 + '\x00\x00\x00\x00' +  # Q&A counts
+          self.wire_domain +
+          '\xc0\x0c'          # pointer to domain name
+          '\x00\x01'          # resource record type ("A" host address)
+          '\x00\x01'          # class of the data
+          '\x00\x00\x00\x3c'  # ttl (seconds)
+          '\x00\x04' +        # resource data length (4 bytes for ip)
+          socket.inet_aton(ip)
+          )
     return packet
 
   def set_reply_ip(self, ip):
@@ -53,6 +79,11 @@ class UdpDNSHandler(SocketServer.DatagramRequestHandler):
 
 class DNSProxyServer(SocketServer.ThreadingUDPServer):
   def __init__(self, host='localhost', port=53):
-    SocketServer.ThreadingUDPServer.__init__(self, (host, port), UdpDNSHandler)
     print 'Faking DNS on (%s:%s)...' % (host, port)
-
+    try:
+      SocketServer.ThreadingUDPServer.__init__(
+          self, (host, port), UdpDNSHandler)
+    except socket.error, (error_number, msg):
+      if error_number == errno.EACCES:
+        raise PermissionDenied
+      raise

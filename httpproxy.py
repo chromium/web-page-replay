@@ -22,17 +22,16 @@ import subprocess
 
 # TODO: Need to install dig on Windows or figure out another approach.
 def dns_lookup(hostname, dns_server='8.8.8.8'):
-  dig = subprocess.Popen(['dig', dns_server, hostname, '+short'], stdout=subprocess.PIPE)
+  dig = subprocess.Popen(
+      ['dig', dns_server, hostname, '+short'], stdout=subprocess.PIPE)
   short_response = dig.communicate()[0]
   short_response_lines = short_response.split('\n')
-  return short_response_lines[len(short_response_lines)-2]
+  return short_response_lines[-2]
 
 
 def get_request_body(headers, rfile):
-    length = int(headers.getheader('content-length'))
-    if not length:
-      return None
-    return rfile.read(length)
+  length = int(headers.getheader('content-length')) or None
+  return rfile.read(length)
 
 
 class RecordHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -47,7 +46,8 @@ class RecordHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.wfile.write(response)
 
     # TODO: Are any request headers besides 'host' important?
-    self.server.get_http_archive().add(httparchive.URLArchive(host, self.path, request_body, response))
+    http_request = httparchive.HTTPRequest(host, self.path, request_body)
+    self.server.http_archive[http_request] = response
 
   def do_POST(self):
     self.do_GET()
@@ -57,14 +57,12 @@ class ReplayHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_GET(self):
     request_body = get_request_body(self.headers, self.rfile)
     host = self.headers.getheader('host')
-    key = httparchive.get_key(host, self.path, request_body)
-
-    if not self.server.get_http_archive().has(key):
+    http_request = httparchive.HTTPRequest(host, self.path, request_body)
+    response = self.server.http_archive.get(http_request)
+    if response:
+      self.wfile.write(response)
+    else:
       self.send_error(404)
-      return
-
-    archived_url = self.server.get_http_archive().get(key)
-    self.wfile.write(archived_url.response())
 
   def do_POST(self):
     self.do_GET()
@@ -73,14 +71,9 @@ class ReplayHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 # TODO: Probably need to start up on both 80 for http and 443 for https.
 class HTTPProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
   def __init__(self, http_archive, host='localhost', port=80):
-    if http_archive:
-      self.http_archive = http_archive
-      BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
+    self.http_archive = http_archive or httparchive.HTTPArchive()
+    if self.http_archive:
       print 'Replaying on (%s:%s)...' % (host, port)
     else:
-      self.http_archive = httparchive.HTTPArchive()
-      BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
       print 'Recording on (%s:%s)...' % (host, port)
-
-  def get_http_archive(self):
-    return self.http_archive
+    BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
