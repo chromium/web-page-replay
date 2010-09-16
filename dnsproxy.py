@@ -18,14 +18,20 @@ import socket
 import SocketServer
 
 
-class DNSProxyError(Exception):
+class DnsProxyError(Exception):
   pass
 
-class PermissionDenied(DNSProxyError):
+class PermissionDenied(DnsProxyError):
   pass
 
 
-class UdpDNSHandler(SocketServer.DatagramRequestHandler):
+class UdpDnsHandler(SocketServer.DatagramRequestHandler):
+  """Resolve DNS queries to localhost.
+
+  Possible alternative implementation:
+  http://howl.play-bow.org/pipermail/dnspython-users/2010-February/000119.html
+  """
+
   STANDARD_QUERY_OPERATION_CODE = 0
 
   def handle(self):
@@ -77,12 +83,12 @@ class UdpDNSHandler(SocketServer.DatagramRequestHandler):
     self.reply_ip = ip
 
 
-class DNSProxyServer(SocketServer.ThreadingUDPServer):
+class DnsProxyServer(SocketServer.ThreadingUDPServer):
   def __init__(self, host='localhost', port=53):
     print 'Faking DNS on (%s:%s)...' % (host, port)
     try:
       SocketServer.ThreadingUDPServer.__init__(
-          self, (host, port), UdpDNSHandler)
+          self, (host, port), UdpDnsHandler)
     except socket.error, (error_number, msg):
       if error_number == errno.EACCES:
         raise PermissionDenied

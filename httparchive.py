@@ -14,12 +14,12 @@
 # limitations under the License.
 
 
-class HTTPArchive(dict):
-  """Keys are HTTPRequest objects and values are responses."""
+class HttpArchive(dict):
+  """Dict with HttpRequest keys and response values."""
   pass
 
 
-class HTTPRequest(object):
+class HttpRequest(object):
   def __init__(self, host, path, request_body):
     self.host = host
     self.path = path

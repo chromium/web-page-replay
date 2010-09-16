@@ -17,7 +17,25 @@ import platform
 import subprocess
 
 
+class PlatformSettingsError(Exception):
+  """Module catch-all error."""
+  pass
+
+class DnsReadError(PlatformSettingsError):
+  """Raised when unable to read DNS settings."""
+  pass
+
+class DnsUpdateError(PlatformSettingsError):
+  """Raised when unable to update DNS settings."""
+  pass
+
+
 class PlatformSettings(object):
+  # TODO: Use different interface like:
+  #     make_localhost_primary_dns and restore_primary_dns ?
+  #     That would allow the code to be a little more careful about how it
+  #     handles settings.
+
   def get_primary_dns(self):
     raise NotImplemented
 
@@ -25,7 +43,7 @@ class PlatformSettings(object):
     raise NotImplemented
 
 
-class OSXPlatformSettings(PlatformSettings):
+class OsxPlatformSettings(PlatformSettings):
   def _scutil(self, cmd):
     scutil = subprocess.Popen(
         ['scutil'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -61,9 +79,79 @@ class OSXPlatformSettings(PlatformSettings):
     print 'Changed system DNS to %s' % dns
 
 
+class LinuxPlatformSettings(PlatformSettings):
+  """The following thread recommends a way to update DNS on Linux:
+
+  http://ubuntuforums.org/showthread.php?t=337553
+
+         sudo cp /etc/dhcp3/dhclient.conf /etc/dhcp3/dhclient.conf.bak
+         sudo gedit /etc/dhcp3/dhclient.conf
+         #prepend domain-name-servers 127.0.0.1;
+         prepend domain-name-servers 208.67.222.222, 208.67.220.220;
+
+         prepend domain-name-servers 208.67.222.222, 208.67.220.220;
+         request subnet-mask, broadcast-address, time-offset, routers,
+             domain-name, domain-name-servers, host-name,
+             netbios-name-servers, netbios-scope;
+         #require subnet-mask, domain-name-servers;
+
+         sudo/etc/init.d/networking restart
+
+  The code below does not try to change dchp and does not restart networking.
+  Update this as needed to make it more robust on more systems.
+  """
+  RESOLV_CONF = '/etc/resolv.conf'
+
+  def get_primary_dns(self):
+    try:
+      resolv_file = open(self.RESOLV_CONF)
+    except IOError:
+      raise DnsReadError()
+    for line in resolv_file:
+      if line.startswith("nameserver "):
+        return line.split()[1]
+    raise DnsReadError()
+
+  def set_primary_dns(self, dns):
+    """Replace the first nameserver entry with the one given.
+
+    TODO: save the old setting.
+    TODO: catch errors.
+    """
+    if self.get_primary_dns() == dns:
+        return
+    subprocess.Popen(
+        ['perl', '-p', '-i.bak', '-e',
+         'if (!$done) { s/^nameserver\s*(.*)/nameserver %s/; $done++ }' % dns,
+         self.RESOLV_CONF]).communicate()
+    if self.get_primary_dns() == dns:
+      print 'Changed system DNS to %s' % dns
+    else:
+      raise DnsUpdateError()
+
+class WindowsPlatformSettings(PlatformSettings):
+
+  # Using Netsh: http://www.microsoft.com/resources/documentation/windows/xp/all/proddocs/en-us/netsh.mspx?mfr=true
+  # Netsh commands for Interface IP: http://www.microsoft.com/resources/documentation/windows/xp/all/proddocs/en-us/netsh_int_ip.mspx?mfr=true
+
+  # c:\windows\system32\netsh.exe
+
+  def get_primary_dns(self):
+    # netsh interface ip show dns name="Local Area Connection"
+    pass
+
+  def set_primary_dns(self, dns):
+    # netsh interface ip set dns name="Local Area Connection" static 127.0.0.1
+    # netsh interface ip set dns name="Local Area Connection" dhcp
+    pass
+
 def get_platform_settings():
   if platform.system() == 'Darwin':
-    return OSXPlatformSettings()
-  # TODO: Support Win and Linux
+    return OsxPlatformSettings()
+  elif platform.system() == 'Linux':
+    return LinuxPlatformSettings()
+  # TODO: Support Win
+  #elif platform.system() == 'Windows':
+  #  return LinuxPlatformSettings()
   print 'Sorry, %s is not yet supported' % platform.system()
   raise NotImplemented

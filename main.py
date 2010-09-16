@@ -39,46 +39,46 @@ def main(options, args):
     replay_archive = cPickle.load(replay_file)
     replay_file.close()
 
-  if options.test:
-    dns_server = dnsproxy.DNSProxyServer(port=8353)
-  else:
-    try:
-      dns_server = dnsproxy.DNSProxyServer()
-    except dnsproxy.PermissionDenied:
-      print 'Unable to bind to DNS port. Rerun with "sudo".'
-      return
+  try:
+    dns_server = dnsproxy.DnsProxyServer()
+  except dnsproxy.PermissionDenied:
+    # TODO: fix comment for Windows.
+    print 'Unable to bind to DNS port. (Rerun with "sudo"?)'
+    return
   dns_thread = threading.Thread(target=dns_server.serve_forever)
   dns_thread.setDaemon(True)
   dns_thread.start()
 
   platform_settings = platformsettings.get_platform_settings()
-  original_dns = platform_settings.get_primary_dns()
-  print "Original DNS:", original_dns
-  platform_settings.set_primary_dns('127.0.0.1')
-
-  # TODO: Start shaping traffic if recording.
-
-  if options.test:
-    http_server = httpproxy.HTTPProxyServer(replay_archive, port=8080)
-  else:
-    http_server = httpproxy.HTTPProxyServer(replay_archive)
-  http_thread = threading.Thread(target=http_server.serve_forever)
-  http_thread.setDaemon(True)
-  http_thread.start()
-
   try:
+    original_dns = platform_settings.get_primary_dns()
+    print "Original DNS:", original_dns
+    platform_settings.set_primary_dns('127.0.0.1')
+  except platform_settings.PlatformSettingsError:
+    print 'Unable to change primary DNS server.'
+    return
+  try:
+    # TODO: Start shaping traffic if recording.
+
+    http_server = None
+    http_server = httpproxy.HttpProxyServer(replay_archive)
+    http_thread = threading.Thread(target=http_server.serve_forever)
+    http_thread.setDaemon(True)
+    http_thread.start()
+
     while 1:
       time.sleep(1)
   except:
     print 'Shutting down'
   finally:
-    http_server.shutdown()
-    # TODO: Stop shaping traffic if recording.
     platform_settings.set_primary_dns(original_dns)
+    # TODO: Stop shaping traffic if recording.
     dns_server.shutdown()
-    if options.record:
-      cPickle.dump(http_server.http_archive, replay_file)
-      replay_file.close()
+    if http_server:
+      http_server.shutdown()
+      if options.record and http_server.http_archive:
+        cPickle.dump(http_server.http_archive, replay_file)
+        replay_file.close()
 
 
 if __name__ == '__main__':
