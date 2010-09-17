@@ -13,8 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TODO: Rename the module and the classes here (e.g. dns_manager)
+
 import platform
 import subprocess
+
+import logging
+# TODO: configure logging level from a command-line flag.
+logging.basicConfig(level=logging.DEBUG)
+
+import third_party
+import dns.resolver
 
 
 class PlatformSettingsError(Exception):
@@ -36,11 +45,38 @@ class PlatformSettings(object):
   #     That would allow the code to be a little more careful about how it
   #     handles settings.
 
+  def set_localhost_dns(self):
+    """Configure DNS to use localhost.
+
+    TODO: Should it be simply be put first in the list, or made the only option?
+    """
+    raise NotImplemented
+
+  def restore_dns(self):
+    """Restore the DNS configuration."""
+    raise NotImplemented
+
+  def get_default_nameservers(self):
+    """Get the original list of DNS nameservers."""
+    raise NotImplemented
+
   def get_primary_dns(self):
     raise NotImplemented
 
   def set_primary_dns(self, dns):
     raise NotImplemented
+
+  def dns_lookup(self, hostname, dns_server='8.8.8.8'):
+    # TODO: Check if this works on Mac OS X and Windows.
+    # TODO: Use default nameservers (settings before using localhost).
+    resolver = dns.resolver.get_default_resolver()
+    resolver.nameservers = [dns_server]
+    answers = resolver.query(hostname, 'A')
+    ip = None
+    if answers:
+      ip = str(answers[0])
+    logging.debug("httpproxy.dns_lookup(%s), answer: %s", hostname, ip)
+    return ip
 
 
 class OsxPlatformSettings(PlatformSettings):
@@ -77,6 +113,13 @@ class OsxPlatformSettings(PlatformSettings):
     ])
     self._scutil(command)
     print 'Changed system DNS to %s' % dns
+
+  def dns_lookup(self, hostname, dns_server='8.8.8.8'):
+    dig = subprocess.Popen(
+        ['dig', dns_server, hostname, '+short'], stdout=subprocess.PIPE)
+    short_response = dig.communicate()[0]
+    short_response_lines = short_response.split('\n')
+    return short_response_lines[-2]
 
 
 class LinuxPlatformSettings(PlatformSettings):
@@ -128,6 +171,7 @@ class LinuxPlatformSettings(PlatformSettings):
       print 'Changed system DNS to %s' % dns
     else:
       raise DnsUpdateError()
+
 
 class WindowsPlatformSettings(PlatformSettings):
 

@@ -17,6 +17,10 @@ import errno
 import socket
 import SocketServer
 
+import logging
+# TODO: configure logging level from a command-line flag.
+#logging.basicConfig(level=logging.DEBUG)
+
 
 class DnsProxyError(Exception):
   pass
@@ -45,6 +49,10 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
     if operation_code == self.STANDARD_QUERY_OPERATION_CODE:
       self.wire_domain = self.data[12:]
       self.domain = self._domain(self.wire_domain)
+    else:
+      logging.debug("DNS request with non-zero operation code: %s",
+                    operation_code)
+
     self.reply(self.get_dns_reply(self.reply_ip))
 
   @classmethod
@@ -64,6 +72,7 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
   def get_dns_reply(self, ip):
     packet = ''
     if self.domain:
+      logging.debug("DNS request to fake DNS server: %s -> %s", self.domain, ip)
       packet = (
           self.transaction_id +
           self.flags +

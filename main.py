@@ -48,7 +48,12 @@ def main(options, args):
   dns_thread = threading.Thread(target=dns_server.serve_forever)
   dns_thread.setDaemon(True)
   dns_thread.start()
-
+  # TODO: Because of python's Global Interpreter Lock (GIL), the threads
+  # will run on the same CPU. Consider using processes instead because
+  # the components do not need to communicate with each other. On Linux,
+  # "taskset" could be used to assign each process to specific CPU/core.
+  # Of course, only bother with this if the processing speed is an issue.
+  # Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
   platform_settings = platformsettings.get_platform_settings()
   try:
     original_dns = platform_settings.get_primary_dns()
@@ -61,7 +66,8 @@ def main(options, args):
     # TODO: Start shaping traffic if recording.
 
     http_server = None
-    http_server = httpproxy.HttpProxyServer(replay_archive)
+    http_server = httpproxy.HttpProxyServer(
+        replay_archive, platform_settings.dns_lookup)
     http_thread = threading.Thread(target=http_server.serve_forever)
     http_thread.setDaemon(True)
     http_thread.start()
@@ -69,6 +75,8 @@ def main(options, args):
     while 1:
       time.sleep(1)
   except:
+    import traceback
+    print traceback.format_exc()
     print 'Shutting down'
   finally:
     platform_settings.set_primary_dns(original_dns)
@@ -87,7 +95,5 @@ if __name__ == '__main__':
                            help='Whether to start in record mode.')
   option_parser.add_option('-f', '--file', default=None,
                            help='Path to archive to record to or replay from.')
-  option_parser.add_option('-t', '--test', default=False, action='store_true',
-                           help='Use test ports.')
   options, args = option_parser.parse_args()
   sys.exit(main(options, args))
