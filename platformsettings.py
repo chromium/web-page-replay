@@ -18,8 +18,6 @@
 import logging
 import platform
 import subprocess
-import third_party
-import dns.resolver
 
 
 class PlatformSettingsError(Exception):
@@ -62,18 +60,6 @@ class PlatformSettings(object):
   def set_primary_dns(self, dns):
     raise NotImplemented
 
-  def dns_lookup(self, hostname, dns_server='8.8.8.8'):
-    # TODO: Check if this works on Mac OS X and Windows.
-    # TODO: Use default nameservers (settings before using localhost).
-    resolver = dns.resolver.get_default_resolver()
-    resolver.nameservers = [dns_server]
-    answers = resolver.query(hostname, 'A')
-    ip = None
-    if answers:
-      ip = str(answers[0])
-    logging.debug('dns_lookup(%s), answer: %s', hostname, ip)
-    return ip
-
 
 class OsxPlatformSettings(PlatformSettings):
   def _scutil(self, cmd):
@@ -112,16 +98,6 @@ class OsxPlatformSettings(PlatformSettings):
     ])
     self._scutil(command)
     logging.info('Changed system DNS to %s', dns)
-
-  def dns_lookup(self, hostname, dns_server='8.8.8.8'):
-    resolver = dns.resolver.get_default_resolver()
-    resolver.nameservers = [dns_server]
-    answers = resolver.query(hostname, 'A')
-    ip = None
-    if answers:
-      ip = str(answers[0])
-    logging.debug('dns_lookup(%s), answer: %s', hostname, ip)
-    return ip
 
 
 class LinuxPlatformSettings(PlatformSettings):

@@ -21,65 +21,83 @@ import socket
 import SocketServer
 import subprocess
 
-
-def get_request_body(headers, rfile):
-  request_body = None
-  length = int(headers.getheader('content-length') or 0) or None
-  if length:
-    request_body = rfile.read(length)
-  return request_body
+import third_party
+import dns.resolver
 
 
-def get_header_dict(headers):
-  dict = {}
-  for key in headers:
-    dict[key] = headers[key]
-  return dict
+def real_dns_lookup(hostname, dns_server='8.8.8.8'):
+  resolver = dns.resolver.get_default_resolver()
+  resolver.nameservers = [dns_server]
+  answers = resolver.query(hostname, 'A')
+  ip = None
+  if answers:
+    ip = str(answers[0])
+  logging.debug('dns_lookup(%s), answer: %s', hostname, ip)
+  return ip
 
 
-class RecordHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-  def do_GET(self):
-    request_body = get_request_body(self.headers, self.rfile)
+def real_http_request(host_ip, request, headers):
+  conn = httplib.HTTPConnection(host_ip)
+  conn.request(request.command, request.path, request.request_body, headers)
+  response = conn.getresponse()
+  archived_http_response = httparchive.ArchivedHttpResponse(
+      response.status, response.reason, response.getheaders(), response.read())
+  conn.close()
+  return archived_http_response
+
+    
+class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+  def read_request_body(self):
+    request_body = None
+    length = int(self.headers.getheader('content-length') or 0) or None
+    if length:
+      request_body = self.rfile.read(length)
+    return request_body
+
+  def get_header_dict(self):
+    dict = {}
+    for key in self.headers:
+      dict[key] = self.headers[key]
+    return dict
+
+  def get_archived_http_request(self):
+    request_body = self.read_request_body()
+    headers = self.get_header_dict()
     host = self.headers.getheader('host')
-    host_ip = self.server.dns_lookup(host)
-    headers = get_header_dict(self.headers)
 
-    logging.debug('Record do_GET: %s %s', host, self.path)
+    return httparchive.ArchivedHttpRequest(
+        self.command, host, self.path, request_body)
 
-    conn = httplib.HTTPConnection(host_ip)
-    conn.request(self.command, self.path, request_body, headers)
-    response = conn.getresponse()
-
+  def send_archived_http_response(self, response):
     self.send_response(response.status, response.reason)
-    for header, value in response.getheaders():
+    for header, value in response.headers:
       self.send_header(header, value)
     self.end_headers()
-    response_data = response.read()
-    conn.close()
+    self.wfile.write(response.response_data)
+    
 
-    self.wfile.write(response_data)
-
-    # TODO: Are any request headers besides 'host' important?
-    http_request = httparchive.HttpRequest(host, self.path, request_body)
-    self.server.http_archive[http_request] = response_data
+class RecordHandler(HttpArchiveHandler):
+  def do_GET(self):
+    request = self.get_archived_http_request()
+    host_ip = real_dns_lookup(request.host)
+    response = real_http_request(host_ip, request, self.get_header_dict())
+    self.send_archived_http_response(response)
+    self.server.http_archive[request] = response
+    logging.debug('Recorded: %s', request)
 
   def do_POST(self):
     self.do_GET()
 
 
-class ReplayHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+class ReplayHandler(HttpArchiveHandler):
   def do_GET(self):
-    request_body = get_request_body(self.headers, self.rfile)
-    host = self.headers.getheader('host')
-
-    logging.debug('Replay do_GET: %s %s', host, self.path)
-
-    http_request = httparchive.HttpRequest(host, self.path, request_body)
-    if http_request in self.server.http_archive:
-      self.wfile.write(self.server.http_archive[http_request])
+    request = self.get_archived_http_request()
+    if request in self.server.http_archive:
+      self.send_archived_http_response(self.server.http_archive[request])
+      logging.debug('Replayed: %s', request)
     else:
-      logging.error('No recorded response for: %s', http_request)
       self.send_error(404)
+      logging.error('Could not replay: %s', request)
 
   def do_POST(self):
     self.do_GET()
@@ -87,9 +105,8 @@ class ReplayHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 # TODO: Probably need to start up on both 80 for http and 443 for https.
 class HttpProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
-  def __init__(self, http_archive, dns_lookup, host='localhost', port=80):
+  def __init__(self, http_archive, host='localhost', port=80):
     self.http_archive = http_archive or httparchive.HttpArchive()
-    self.dns_lookup = dns_lookup
     if self.http_archive:
       logging.info('Replaying on (%s:%s)...', host, port)
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)

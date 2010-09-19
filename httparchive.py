@@ -15,18 +15,30 @@
 
 
 class HttpArchive(dict):
-  """Dict with HttpRequest keys and response values."""
+  """Dict with ArchivedHttpRequest keys and ArchivedHttpResponse values."""
   pass
 
 
-class HttpRequest(object):
-  def __init__(self, host, path, request_body):
+class ArchivedHttpRequest(object):
+  def __init__(self, command, host, path, request_body):
+    self.command = command
     self.host = host
     self.path = path
     self.request_body = request_body
 
-  def __key__(self):
-    return self.host, self.path, self.request_body
+  def __repr__(self):
+    return repr((self.command, self.host, self.path, self.request_body))
 
-  def __str__(self):
-    return str(self.__key__())
+  def __hash__(self):
+    return hash(self.__repr__())
+
+  def __eq__(self, other):
+    return self.__repr__() == other.__repr__()
+
+
+class ArchivedHttpResponse(object):
+  def __init__(self, status, reason, headers, response_data):
+    self.status = status
+    self.reason = reason
+    self.headers = headers
+    self.response_data = response_data

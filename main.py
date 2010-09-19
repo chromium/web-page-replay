@@ -68,8 +68,7 @@ def main(options, args):
     # TODO: Start shaping traffic if recording.
 
     http_server = None
-    http_server = httpproxy.HttpProxyServer(
-        replay_archive, platform_settings.dns_lookup)
+    http_server = httpproxy.HttpProxyServer(replay_archive)
     http_thread = threading.Thread(target=http_server.serve_forever)
     http_thread.setDaemon(True)
     http_thread.start()
