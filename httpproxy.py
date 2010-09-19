@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import cPickle
 import BaseHTTPServer
 import httparchive
 import httplib
@@ -103,13 +104,30 @@ class ReplayHandler(HttpArchiveHandler):
     self.do_GET()
 
 
-# TODO: Probably need to start up on both 80 for http and 443 for https.
+# TODO: Need to start up on both 80 for http and 443 for https.
 class HttpProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
-  def __init__(self, http_archive, host='localhost', port=80):
-    self.http_archive = http_archive or httparchive.HttpArchive()
-    if self.http_archive:
-      logging.info('Replaying on (%s:%s)...', host, port)
-      BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
-    else:
-      logging.info('Recording on (%s:%s)...', host, port)
+  def __init__(self, record, http_archive_filename, host='localhost', port=80):
+    self.record = record
+    self.archive_filename = http_archive_filename
+    self.archive_file = open(self.archive_filename, self.record and 'w' or 'r')
+    if self.record:
+      self.http_archive = httparchive.HttpArchive()
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
+      logging.info('Recording on (%s:%s)...', host, port)
+    else:
+      self.http_archive = cPickle.load(self.archive_file)
+      self.archive_file.close()
+      logging.info('Loaded %d responses from %s',
+                   len(self.http_archive), self.archive_filename)
+      BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
+      logging.info('Replaying on (%s:%s)...', host, port)
+
+  def cleanup(self):
+    self.shutdown()
+    logging.info('Stopped HTTP server')
+    if self.record and self.archive_file:
+      cPickle.dump(self.http_archive, self.archive_file)
+      self.archive_file.close()
+      logging.info('Saved %d response to %s',
+                   len(self.http_archive), self.archive_filename)
+

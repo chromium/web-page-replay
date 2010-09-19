@@ -34,9 +34,27 @@ class DnsUpdateError(PlatformSettingsError):
   pass
 
 
+class TrafficShapingError(PlatformSettingsError):
+  """Raised when unable to shape traffic."""
+  pass
+
+
 class PlatformSettings(object):
   def __init__(self):
     self.original_primary_dns = None
+
+  def set_traffic_shaping(self, bandwidth=0, delay_ms=0, packet_loss_rate=0):
+    """Start shaping traffic.
+
+    Args:
+      bandwidth: Bandwidth in [K|M]{bit/s|Byte/s}. Zero means unlimited.
+      delay_ms: Propagation delay in milliseconds. Zero means no delay.
+      packet_loss_rate: Packet loss rate in range [0..1]. Zero means no loss.
+    """
+    raise NotImplemented
+
+  def restore_traffic_shaping(self):
+    raise NotImplemented
 
   def get_primary_dns(self):
     raise NotImplemented
@@ -65,6 +83,32 @@ class OsxPlatformSettings(PlatformSettings):
     list_parts = list_lines[0].split(' ')
     service_keys = [line.split(' ')[-1] for line in list_lines if line]
     return service_keys[0]
+
+  def set_traffic_shaping(self, bandwidth='0', delay_ms='0', packet_loss_rate='0'):
+    try:
+      # Create pipe '1' with requested shape.
+      subprocess.check_call([
+          'ipfw',
+          'pipe', '1',
+          'config',
+          'bw', bandwidth,
+          'delay', delay_ms,
+          'plr', packet_loss_rate
+      ])
+      # Install pipe '1'.
+      subprocess.check_call(
+          ['ipfw', 'add', '1', 'pipe', '1', 'src-ip', '127.0.0.1'])
+      logging.info('Started shaping traffic')
+    except:
+      raise TrafficShapingError()
+
+  def restore_traffic_shaping(self):
+    try:
+      # Delete pipe '1' (which was created in set_traffic_shaping).
+      subprocess.check_call(['ipfw', 'delete', '1'])
+      logging.info('Stopped shaping traffic')
+    except:
+      raise TrafficShapingError()
 
   def get_primary_dns(self):
     # <dictionary> {

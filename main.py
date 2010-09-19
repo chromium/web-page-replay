@@ -13,7 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import cPickle
+# TODO: Because of python's Global Interpreter Lock (GIL), the threads
+# will run on the same CPU. Consider using processes instead because
+# the components do not need to communicate with each other. On Linux,
+# "taskset" could be used to assign each process to specific CPU/core.
+# Of course, only bother with this if the processing speed is an issue.
+# Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
+
+
 import dnsproxy
 import httpproxy
 import logging
@@ -30,72 +37,65 @@ def main(options, args):
     logging.critical('You must specify a --file to record to or reply from.')
     return
 
-  try:
-    replay_file = open(options.file, options.record and 'w' or 'r')
-  except IOError, (error_number, msg):
-    logging.critical('Cannot open file: %s: %s', options.file, msg)
-    return
-  replay_archive = None
-  if not options.record:
-    replay_archive = cPickle.load(replay_file)
-    replay_file.close()
-    logging.info('Loaded %d responses from %s', len(replay_archive), options.file)
+  platform_settings = platformsettings.get_platform_settings()
 
   try:
-    dns_server = dnsproxy.DnsProxyServer()
+    dns_server = dnsproxy.DnsProxyServer(platform_settings=platform_settings)
   except dnsproxy.PermissionDenied:
     # TODO: fix comment for Windows.
     logging.critical('Unable to bind to DNS port. (Rerun with "sudo"?)')
     return
-  dns_thread = threading.Thread(target=dns_server.serve_forever)
-  dns_thread.setDaemon(True)
-  dns_thread.start()
-  # TODO: Because of python's Global Interpreter Lock (GIL), the threads
-  # will run on the same CPU. Consider using processes instead because
-  # the components do not need to communicate with each other. On Linux,
-  # "taskset" could be used to assign each process to specific CPU/core.
-  # Of course, only bother with this if the processing speed is an issue.
-  # Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
-  platform_settings = platformsettings.get_platform_settings()
-  try:
-    platform_settings.set_primary_dns('127.0.0.1')
   except platformsettings.PlatformSettingsError:
     logging.critical('Unable to change primary DNS server.')
     return
-  try:
-    # TODO: Start shaping traffic if recording.
+  dns_thread = threading.Thread(target=dns_server.serve_forever)
+  dns_thread.setDaemon(True)
+  dns_thread.start()
 
+  try:
     http_server = None
-    http_server = httpproxy.HttpProxyServer(replay_archive)
+    http_server = httpproxy.HttpProxyServer(options.record, options.file)
     http_thread = threading.Thread(target=http_server.serve_forever)
     http_thread.setDaemon(True)
     http_thread.start()
 
+    if not options.record:
+      platform_settings.set_traffic_shaping(
+          options.bandwidth, options.delay_ms, options.packet_loss_rate)
+
     while 1:
       time.sleep(1)
+  except IOError, (error_number, msg):
+    logging.critical('Cannot open file: %s: %s', options.file, msg)
+  except platformsettings.TrafficShapingError:
+    logging.critical('Unable to shape traffic.')
   except:
     import traceback
     print traceback.format_exc()
     logging.info('Shutting down')
   finally:
-    platform_settings.restore_primary_dns()
-    # TODO: Stop shaping traffic if recording.
-    dns_server.shutdown()
+    dns_server.cleanup()
     if http_server:
-      http_server.shutdown()
-      if options.record and http_server.http_archive:
-        cPickle.dump(http_server.http_archive, replay_file)
-        replay_file.close()
+      http_server.cleanup()
+    if not options.record:
+      platform_settings.restore_traffic_shaping()
 
 
 if __name__ == '__main__':
   option_parser = optparse.OptionParser()
   option_parser.add_option('-l', '--log_level', default='debug',
-                           help='Log level, one of {debug, info, warning, error, critical}')
+      help='Log level, one of {debug, info, warning, error, critical}')
   option_parser.add_option('-r', '--record', default=False, action='store_true',
-                           help='Whether to start in record mode.')
+      help='Whether to start in record mode.')
   option_parser.add_option('-f', '--file', default=None,
-                           help='Path to archive to record to or replay from.')
+      help='Path to archive to record to or replay from.')
+  option_parser.add_option('-b', '--bandwidth', default='0',
+      help='Replay bandwidth in [K|M]{bit/s|Byte/s}. Zero means unlimited.')
+  option_parser.add_option('-d', '--delay_ms', default='0',
+      help='Replay propagation delay in milliseconds. Zero means no delay.')
+  option_parser.add_option('-p', '--packet_loss_rate', default='0',
+      help='Replay packet loss rate in range [0..1]. Zero means no loss.')
+
   options, args = option_parser.parse_args()
 
   LEVELS = {'debug': logging.DEBUG,

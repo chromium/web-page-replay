@@ -15,6 +15,7 @@
 
 import errno
 import logging
+import platformsettings
 import socket
 import SocketServer
 
@@ -36,7 +37,6 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
   STANDARD_QUERY_OPERATION_CODE = 0
 
   def handle(self):
-    self.reply_ip = '127.0.0.1'
     self.data = self.rfile.read()
     self.transaction_id = self.data[0]
     self.flags = self.data[1]
@@ -50,8 +50,8 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
       logging.debug("DNS request with non-zero operation code: %s",
                     operation_code)
 
-    logging.debug('DNS reply for %s with %s', self.domain, self.reply_ip)
-    self.reply(self.get_dns_reply(self.reply_ip))
+    logging.debug('DNS reply for %s with %s', self.domain, self.server.host)
+    self.reply(self.get_dns_reply(self.server.host))
 
   @classmethod
   def _domain(cls, wire_domain):
@@ -86,13 +86,11 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
           )
     return packet
 
-  def set_reply_ip(self, ip):
-    self.reply_ip = ip
-
 
 class DnsProxyServer(SocketServer.ThreadingUDPServer):
-  def __init__(self, host='localhost', port=53):
-    logging.info('Faking DNS on (%s:%s)...', host, port)
+  def __init__(self, host='127.0.0.1', port=53, platform_settings=platformsettings.get_platform_settings()):
+    self.host = host
+    self.platform_settings = platform_settings
     try:
       SocketServer.ThreadingUDPServer.__init__(
           self, (host, port), UdpDnsHandler)
@@ -100,3 +98,10 @@ class DnsProxyServer(SocketServer.ThreadingUDPServer):
       if error_number == errno.EACCES:
         raise PermissionDenied
       raise
+    logging.info('Started DNS server on (%s:%s)...', host, port)
+    platform_settings.set_primary_dns(host)
+
+  def cleanup(self):
+    self.platform_settings.restore_primary_dns()
+    self.shutdown()
+    logging.info('Shutdown DNS server')
