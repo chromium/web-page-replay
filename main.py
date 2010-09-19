@@ -58,8 +58,6 @@ def main(options, args):
   # Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
   platform_settings = platformsettings.get_platform_settings()
   try:
-    original_dns = platform_settings.get_primary_dns()
-    logging.debug("Original DNS: %s", original_dns)
     platform_settings.set_primary_dns('127.0.0.1')
   except platformsettings.PlatformSettingsError:
     logging.critical('Unable to change primary DNS server.')
@@ -80,7 +78,7 @@ def main(options, args):
     print traceback.format_exc()
     logging.info('Shutting down')
   finally:
-    platform_settings.set_primary_dns(original_dns)
+    platform_settings.restore_primary_dns()
     # TODO: Stop shaping traffic if recording.
     dns_server.shutdown()
     if http_server:

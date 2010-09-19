@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: Rename the module and the classes here (e.g. dns_manager)
 
 import logging
 import platform
@@ -24,9 +23,11 @@ class PlatformSettingsError(Exception):
   """Module catch-all error."""
   pass
 
+
 class DnsReadError(PlatformSettingsError):
   """Raised when unable to read DNS settings."""
   pass
+
 
 class DnsUpdateError(PlatformSettingsError):
   """Raised when unable to update DNS settings."""
@@ -34,31 +35,20 @@ class DnsUpdateError(PlatformSettingsError):
 
 
 class PlatformSettings(object):
-  # TODO: Use different interface like:
-  #     make_localhost_primary_dns and restore_primary_dns ?
-  #     That would allow the code to be a little more careful about how it
-  #     handles settings.
-
-  def set_localhost_dns(self):
-    """Configure DNS to use localhost.
-
-    TODO: Should it be simply be put first in the list, or made the only option?
-    """
-    raise NotImplemented
-
-  def restore_dns(self):
-    """Restore the DNS configuration."""
-    raise NotImplemented
-
-  def get_default_nameservers(self):
-    """Get the original list of DNS nameservers."""
-    raise NotImplemented
+  def __init__(self):
+    self.original_primary_dns = None
 
   def get_primary_dns(self):
     raise NotImplemented
 
   def set_primary_dns(self, dns):
     raise NotImplemented
+
+  def restore_primary_dns(self):
+    if not self.original_primary_dns:
+      raise DnsUpdateError()
+    self.set_primary_dns(self.original_primary_dns)
+    self.original_primary_dns = None
 
 
 class OsxPlatformSettings(PlatformSettings):
@@ -71,7 +61,6 @@ class OsxPlatformSettings(PlatformSettings):
     # subKey [0] = State:/Network/Service/8824452C-FED4-4C09-9256-40FB146739E0/DNS
     # subKey [1] = State:/Network/Service/net.juniper.ncproxyd.main/DNS
     list_out = self._scutil('list State:/Network/Service/[^/]+/DNS')
-    logging.debug('DNS service keys:\n%s', list_out)
     list_lines = list_out.split('\n')
     list_parts = list_lines[0].split(' ')
     service_keys = [line.split(' ')[-1] for line in list_lines if line]
@@ -91,6 +80,8 @@ class OsxPlatformSettings(PlatformSettings):
     return line_parts[-1]
 
   def set_primary_dns(self, dns):
+    if not self.original_primary_dns:
+      self.original_primary_dns = self.get_primary_dns()
     command = '\n'.join([
       'd.init',
       'd.add ServerAddresses * %s' % dns,
@@ -129,18 +120,17 @@ class LinuxPlatformSettings(PlatformSettings):
     except IOError:
       raise DnsReadError()
     for line in resolv_file:
-      if line.startswith("nameserver "):
+      if line.startswith('nameserver '):
         return line.split()[1]
     raise DnsReadError()
 
   def set_primary_dns(self, dns):
     """Replace the first nameserver entry with the one given.
 
-    TODO: save the old setting.
     TODO: catch errors.
     """
-    if self.get_primary_dns() == dns:
-        return
+    if not self.original_primary_dns:
+      self.original_primary_dns = self.get_primary_dns()
     subprocess.Popen(
         ['perl', '-p', '-i.bak', '-e',
          'if (!$done) { s/^nameserver\s*(.*)/nameserver %s/; $done++ }' % dns,
@@ -160,20 +150,20 @@ class WindowsPlatformSettings(PlatformSettings):
 
   def get_primary_dns(self):
     # netsh interface ip show dns name="Local Area Connection"
-    pass
+    raise NotImplemented
 
   def set_primary_dns(self, dns):
     # netsh interface ip set dns name="Local Area Connection" static 127.0.0.1
     # netsh interface ip set dns name="Local Area Connection" dhcp
-    pass
+    raise NotImplemented
+
 
 def get_platform_settings():
   if platform.system() == 'Darwin':
     return OsxPlatformSettings()
   elif platform.system() == 'Linux':
     return LinuxPlatformSettings()
-  # TODO: Support Win
-  #elif platform.system() == 'Windows':
-  #  return LinuxPlatformSettings()
-  logging.error('Sorry, %s is not yet supported', platform.system())
+  elif platform.system() == 'Windows':
+    return WindowsPlatformSettings()
+  logging.critical('Sorry, %s is not yet supported', platform.system())
   raise NotImplemented
