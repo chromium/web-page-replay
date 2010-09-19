@@ -27,3 +27,6 @@ class HttpRequest(object):
 
   def __key__(self):
     return self.host, self.path, self.request_body
+
+  def __str__(self):
+    return str(self.__key__())

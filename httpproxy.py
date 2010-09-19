@@ -69,14 +69,16 @@ class RecordHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 class ReplayHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_GET(self):
-    logging.debug('Replay do_GET: %s', host)
     request_body = get_request_body(self.headers, self.rfile)
     host = self.headers.getheader('host')
+
+    logging.debug('Replay do_GET: %s %s', host, self.path)
+
     http_request = httparchive.HttpRequest(host, self.path, request_body)
-    response = self.server.http_archive.get(http_request)
-    if response:
-      self.wfile.write(response)
+    if http_request in self.server.http_archive:
+      self.wfile.write(self.server.http_archive[http_request])
     else:
+      logging.error('No recorded response for: %s', http_request)
       self.send_error(404)
 
   def do_POST(self):
