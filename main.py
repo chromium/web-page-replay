@@ -16,6 +16,7 @@
 import cPickle
 import dnsproxy
 import httpproxy
+import logging
 import optparse
 import platformsettings
 import socket
@@ -26,24 +27,25 @@ import time
 
 def main(options, args):
   if not options.file:
-    print 'You must specify a --file to record to or reply from.'
+    logging.critical('You must specify a --file to record to or reply from.')
     return
 
   try:
     replay_file = open(options.file, options.record and 'w' or 'r')
   except IOError, (error_number, msg):
-    print 'Cannot open file: %s: %s' % (options.file, msg)
+    logging.critical('Cannot open file: %s: %s', options.file, msg)
     return
   replay_archive = None
   if not options.record:
     replay_archive = cPickle.load(replay_file)
     replay_file.close()
+    logging.info('Loaded %d responses from %s', len(replay_archive), options.file)
 
   try:
     dns_server = dnsproxy.DnsProxyServer()
   except dnsproxy.PermissionDenied:
     # TODO: fix comment for Windows.
-    print 'Unable to bind to DNS port. (Rerun with "sudo"?)'
+    logging.critical('Unable to bind to DNS port. (Rerun with "sudo"?)')
     return
   dns_thread = threading.Thread(target=dns_server.serve_forever)
   dns_thread.setDaemon(True)
@@ -57,10 +59,10 @@ def main(options, args):
   platform_settings = platformsettings.get_platform_settings()
   try:
     original_dns = platform_settings.get_primary_dns()
-    print "Original DNS:", original_dns
+    logging.debug("Original DNS: %s", original_dns)
     platform_settings.set_primary_dns('127.0.0.1')
-  except platform_settings.PlatformSettingsError:
-    print 'Unable to change primary DNS server.'
+  except platformsettings.PlatformSettingsError:
+    logging.critical('Unable to change primary DNS server.')
     return
   try:
     # TODO: Start shaping traffic if recording.
@@ -77,7 +79,7 @@ def main(options, args):
   except:
     import traceback
     print traceback.format_exc()
-    print 'Shutting down'
+    logging.info('Shutting down')
   finally:
     platform_settings.set_primary_dns(original_dns)
     # TODO: Stop shaping traffic if recording.
@@ -91,9 +93,19 @@ def main(options, args):
 
 if __name__ == '__main__':
   option_parser = optparse.OptionParser()
+  option_parser.add_option('-l', '--log_level', default='debug',
+                           help='Log level, one of {debug, info, warning, error, critical}')
   option_parser.add_option('-r', '--record', default=False, action='store_true',
                            help='Whether to start in record mode.')
   option_parser.add_option('-f', '--file', default=None,
                            help='Path to archive to record to or replay from.')
   options, args = option_parser.parse_args()
+
+  LEVELS = {'debug': logging.DEBUG,
+            'info': logging.INFO,
+            'warning': logging.WARNING,
+            'error': logging.ERROR,
+            'critical': logging.CRITICAL}
+  logging.basicConfig(level=LEVELS.get(options.log_level, logging.NOTSET))
+
   sys.exit(main(options, args))

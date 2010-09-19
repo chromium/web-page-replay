@@ -14,12 +14,9 @@
 # limitations under the License.
 
 import errno
+import logging
 import socket
 import SocketServer
-
-import logging
-# TODO: configure logging level from a command-line flag.
-#logging.basicConfig(level=logging.DEBUG)
 
 
 class DnsProxyError(Exception):
@@ -53,6 +50,7 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
       logging.debug("DNS request with non-zero operation code: %s",
                     operation_code)
 
+    logging.debug('DNS reply for %s with %s', self.domain, self.reply_ip)
     self.reply(self.get_dns_reply(self.reply_ip))
 
   @classmethod
@@ -94,7 +92,7 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
 
 class DnsProxyServer(SocketServer.ThreadingUDPServer):
   def __init__(self, host='localhost', port=53):
-    print 'Faking DNS on (%s:%s)...' % (host, port)
+    logging.info('Faking DNS on (%s:%s)...', host, port)
     try:
       SocketServer.ThreadingUDPServer.__init__(
           self, (host, port), UdpDnsHandler)

@@ -15,14 +15,11 @@
 
 import BaseHTTPServer
 import httparchive
+import httplib
+import logging
 import socket
 import SocketServer
 import subprocess
-import urllib2
-
-import logging
-# TODO: configure logging level from a command-line flag.
-logging.basicConfig(level=logging.DEBUG)
 
 
 def get_request_body(headers, rfile):
@@ -33,23 +30,32 @@ def get_request_body(headers, rfile):
   return request_body
 
 
+def get_header_dict(headers):
+  dict = {}
+  for key in headers:
+    dict[key] = headers[key]
+  return dict
+
+
 class RecordHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_GET(self):
     request_body = get_request_body(self.headers, self.rfile)
     host = self.headers.getheader('host')
-    logging.debug("httpproxy Record do_GET: %s", host)
     host_ip = self.server.dns_lookup(host)
+    headers = get_header_dict(self.headers)
 
-    # TODO: Connect to |host_ip|, send same request and set response.
-    url = 'http://%s%s' % (host_ip, self.path)
-    logging.debug("Get URL: %s", url)
-    logging.debug("  request_body: %s", request_body)
-    logging.debug("  headers: %s", self.headers)
-    proxied_request = urllib2.Request(url, request_body, self.headers)
-    response = urllib2.urlopen(proxied_request)
-    print "Response: %s" % response
-    # TODO: Check if read() is the right thing to do with the response.
+    logging.debug('Record do_GET: %s %s', host, self.path)
+
+    conn = httplib.HTTPConnection(host_ip)
+    conn.request(self.command, self.path, request_body, headers)
+    response = conn.getresponse()
+
+    self.send_response(response.status, response.reason)
+    for header, value in response.getheaders():
+      self.send_header(header, value)
+    self.end_headers()
     response_data = response.read()
+    conn.close()
 
     self.wfile.write(response_data)
 
@@ -63,7 +69,7 @@ class RecordHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 class ReplayHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_GET(self):
-    logging.debug("httpproxy Replay do_GET: %s", host)
+    logging.debug('Replay do_GET: %s', host)
     request_body = get_request_body(self.headers, self.rfile)
     host = self.headers.getheader('host')
     http_request = httparchive.HttpRequest(host, self.path, request_body)
@@ -83,8 +89,8 @@ class HttpProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
     self.http_archive = http_archive or httparchive.HttpArchive()
     self.dns_lookup = dns_lookup
     if self.http_archive:
-      print 'Replaying on (%s:%s)...' % (host, port)
+      logging.info('Replaying on (%s:%s)...', host, port)
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
     else:
-      print 'Recording on (%s:%s)...' % (host, port)
+      logging.info('Recording on (%s:%s)...', host, port)
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)

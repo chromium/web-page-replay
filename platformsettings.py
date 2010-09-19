@@ -15,13 +15,9 @@
 
 # TODO: Rename the module and the classes here (e.g. dns_manager)
 
+import logging
 import platform
 import subprocess
-
-import logging
-# TODO: configure logging level from a command-line flag.
-logging.basicConfig(level=logging.DEBUG)
-
 import third_party
 import dns.resolver
 
@@ -75,7 +71,7 @@ class PlatformSettings(object):
     ip = None
     if answers:
       ip = str(answers[0])
-    logging.debug("httpproxy.dns_lookup(%s), answer: %s", hostname, ip)
+    logging.debug('dns_lookup(%s), answer: %s', hostname, ip)
     return ip
 
 
@@ -86,11 +82,14 @@ class OsxPlatformSettings(PlatformSettings):
     return scutil.communicate(cmd)[0]
 
   def _get_dns_service_key(self):
-    # TODO: There may be multiple keys
     # subKey [0] = State:/Network/Service/8824452C-FED4-4C09-9256-40FB146739E0/DNS
+    # subKey [1] = State:/Network/Service/net.juniper.ncproxyd.main/DNS
     list_out = self._scutil('list State:/Network/Service/[^/]+/DNS')
-    list_parts = list_out.split(' ')
-    return list_parts[-1]
+    logging.debug('DNS service keys:\n%s', list_out)
+    list_lines = list_out.split('\n')
+    list_parts = list_lines[0].split(' ')
+    service_keys = [line.split(' ')[-1] for line in list_lines if line]
+    return service_keys[0]
 
   def get_primary_dns(self):
     # <dictionary> {
@@ -112,14 +111,17 @@ class OsxPlatformSettings(PlatformSettings):
       'set %s' % self._get_dns_service_key()
     ])
     self._scutil(command)
-    print 'Changed system DNS to %s' % dns
+    logging.info('Changed system DNS to %s', dns)
 
   def dns_lookup(self, hostname, dns_server='8.8.8.8'):
-    dig = subprocess.Popen(
-        ['dig', dns_server, hostname, '+short'], stdout=subprocess.PIPE)
-    short_response = dig.communicate()[0]
-    short_response_lines = short_response.split('\n')
-    return short_response_lines[-2]
+    resolver = dns.resolver.get_default_resolver()
+    resolver.nameservers = [dns_server]
+    answers = resolver.query(hostname, 'A')
+    ip = None
+    if answers:
+      ip = str(answers[0])
+    logging.debug('dns_lookup(%s), answer: %s', hostname, ip)
+    return ip
 
 
 class LinuxPlatformSettings(PlatformSettings):
@@ -168,7 +170,7 @@ class LinuxPlatformSettings(PlatformSettings):
          'if (!$done) { s/^nameserver\s*(.*)/nameserver %s/; $done++ }' % dns,
          self.RESOLV_CONF]).communicate()
     if self.get_primary_dns() == dns:
-      print 'Changed system DNS to %s' % dns
+      logging.info('Changed system DNS to %s', dns)
     else:
       raise DnsUpdateError()
 
@@ -197,5 +199,5 @@ def get_platform_settings():
   # TODO: Support Win
   #elif platform.system() == 'Windows':
   #  return LinuxPlatformSettings()
-  print 'Sorry, %s is not yet supported' % platform.system()
+  logging.error('Sorry, %s is not yet supported', platform.system())
   raise NotImplemented
