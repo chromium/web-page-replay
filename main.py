@@ -54,7 +54,8 @@ def main(options, args):
 
   try:
     http_server = None
-    http_server = httpproxy.HttpProxyServer(options.record, options.file)
+    http_server = httpproxy.HttpProxyServer(
+        options.record, options.file, options.deterministic_script)
     http_thread = threading.Thread(target=http_server.serve_forever)
     http_thread.setDaemon(True)
     http_thread.start()
@@ -95,6 +96,9 @@ if __name__ == '__main__':
       help='Replay propagation delay in milliseconds. Zero means no delay.')
   option_parser.add_option('-p', '--packet_loss_rate', default='0',
       help='Replay packet loss rate in range [0..1]. Zero means no loss.')
+  option_parser.add_option('-s', '--deterministic_script', default=True,
+      help=('Inject javascript which makes sources of entropy such as '
+            'Date() and Math.random() deterministic.'))
 
   options, args = option_parser.parse_args()
 

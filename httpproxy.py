@@ -46,6 +46,43 @@ def real_http_request(host_ip, request, headers):
   conn.close()
   return archived_http_response
 
+
+def inject_deterministic_script(response):
+  deterministic_script = """
+  <script>
+    (function () {
+      var orig_date = Date;
+      var x = 0;
+      var time_seed = 1204251968254;
+      Math.random = function() {
+        x += .1;
+        return (x % 1);
+      };
+      Date = function() {
+        if (this instanceof Date) {
+          switch (arguments.length) {
+            case 0: return new orig_date(time_seed += 50);
+            case 1: return new orig_date(arguments[0]);
+            default: return new orig_date(arguments[0], arguments[1],
+                arguments.length >= 3 ? arguments[2] : 1,
+                arguments.length >= 4 ? arguments[3] : 0,
+                arguments.length >= 5 ? arguments[4] : 0,
+                arguments.length >= 6 ? arguments[5] : 0,
+                arguments.length >= 7 ? arguments[6] : 0);
+          }
+        }
+        return new Date().toString();
+      };
+      Date.__proto__ = orig_date;
+      Date.prototype.constructor = Date;
+      orig_date.now = function() {
+        return new Date().getTime();
+      };
+    })();
+  </script>
+  """
+  return response.replace('<head>', '<head>%s' % deterministic_script, 1)
+
     
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def read_request_body(self):
@@ -82,6 +119,11 @@ class RecordHandler(HttpArchiveHandler):
     request = self.get_archived_http_request()
     host_ip = real_dns_lookup(request.host)
     response = real_http_request(host_ip, request, self.get_header_dict())
+    if self.server.deterministic_script:
+      # TODO: Need to handle zipped response_data.
+      raise NotImplemented
+      response.response_data = inject_deterministic_script(
+          response.response_data)
     self.send_archived_http_response(response)
     self.server.http_archive[request] = response
     logging.debug('Recorded: %s', request)
@@ -106,8 +148,9 @@ class ReplayHandler(HttpArchiveHandler):
 
 # TODO: Need to start up on both 80 for http and 443 for https.
 class HttpProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
-  def __init__(self, record, http_archive_filename, host='localhost', port=80):
+  def __init__(self, record, http_archive_filename, deterministic_script, host='localhost', port=80):
     self.record = record
+    self.deterministic_script = deterministic_script
     self.archive_filename = http_archive_filename
     self.archive_file = open(self.archive_filename, self.record and 'w' or 'r')
     if self.record:
