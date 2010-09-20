@@ -15,11 +15,13 @@
 
 import cPickle
 import BaseHTTPServer
+import gzip
 import httparchive
 import httplib
 import logging
 import socket
 import SocketServer
+import StringIO
 import subprocess
 
 import third_party
@@ -48,6 +50,24 @@ def real_http_request(host_ip, request, headers):
 
 
 def inject_deterministic_script(response):
+  content_type = response.get_header('content-type')
+  if not content_type or not content_type.startswith('text/html'):
+    return response
+
+  # TODO: No content-length probably means chunked. Need to teach httpproxy
+  # about chunking in order to inject into chunked content.
+  if not response.get_header('content-length'):
+    logging.error('Failed to inject script. Need to support chunked encoding.')
+    return response
+
+  is_gzipped = response.get_header('content-encoding') == 'gzip'
+
+  if is_gzipped:
+    compressed_response_data = StringIO.StringIO(response.response_data)
+    response_data = gzip.GzipFile(fileobj=compressed_response_data).read()
+  else:
+    response_data = response.response_data
+
   deterministic_script = """
   <script>
     (function () {
@@ -81,7 +101,21 @@ def inject_deterministic_script(response):
     })();
   </script>
   """
-  return response.replace('<head>', '<head>%s' % deterministic_script, 1)
+  len_response_data = len(response_data)
+  response_data = response_data.replace(
+      '<head>', '<head>%s' % deterministic_script, 1)
+  if len_response_data == len(response_data):
+    logging.error('Failed to inject deterministic script')
+
+  if is_gzipped:
+    compressed_response = StringIO.StringIO()
+    gzip.GzipFile(fileobj=compressed_response, mode='w').write(response_data)
+    response.response_data = compressed_response.getvalue()
+  else:
+    response.response_data = response_data
+
+  response.set_header('content-length', len(response.response_data))
+  return response
 
     
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -120,10 +154,7 @@ class RecordHandler(HttpArchiveHandler):
     host_ip = real_dns_lookup(request.host)
     response = real_http_request(host_ip, request, self.get_header_dict())
     if self.server.deterministic_script:
-      # TODO: Need to handle zipped response_data.
-      raise NotImplemented
-      response.response_data = inject_deterministic_script(
-          response.response_data)
+      response = inject_deterministic_script(response)
     self.send_archived_http_response(response)
     self.server.http_archive[request] = response
     logging.debug('Recorded: %s', request)

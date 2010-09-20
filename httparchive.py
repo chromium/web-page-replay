@@ -42,3 +42,18 @@ class ArchivedHttpResponse(object):
     self.reason = reason
     self.headers = headers
     self.response_data = response_data
+
+  def get_header(self, key):
+    for k, v in self.headers:
+      if key == k:
+        return v
+    return None
+
+  def set_header(self, key, value):
+    i = 0
+    for k, v in self.headers:
+      if key == k:
+        self.headers[i] = (key, value)
+        return
+      i = i + 1
+    raise NotImplemented() # Add header
