@@ -56,4 +56,12 @@ class ArchivedHttpResponse(object):
         self.headers[i] = (key, value)
         return
       i = i + 1
-    raise NotImplemented() # Add header
+    self.headers.append((key, value))
+
+  def remove_header(self, key):
+    i = 0
+    for k, v in self.headers:
+      if key == k:
+        self.headers.pop(i)
+        return
+      i = i + 1

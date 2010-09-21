@@ -54,11 +54,17 @@ def inject_deterministic_script(response):
   if not content_type or not content_type.startswith('text/html'):
     return response
 
-  # TODO: No content-length probably means chunked. Need to teach httpproxy
-  # about chunking in order to inject into chunked content.
   if not response.get_header('content-length'):
-    logging.error('Failed to inject script. Need to support chunked encoding.')
-    return response
+    if response.get_header('transfer-encoding') != 'chunked':
+      logging.error('Failed to inject deterministic script.')
+      return response
+
+    # TODO: httplib has unchunked the response_data for us, so we have to strip
+    # the "transfer-encoding: chunked" header and the add content-length at the
+    # end. Ideally, we'd want to preserve the chunked response instead of
+    # unchunking it.
+    logging.warning('Unchunked a chunked response.')
+    response.remove_header('transfer-encoding')
 
   is_gzipped = response.get_header('content-encoding') == 'gzip'
 
@@ -162,6 +168,9 @@ class RecordHandler(HttpArchiveHandler):
   def do_POST(self):
     self.do_GET()
 
+  def do_HEAD(self):
+    self.do_GET()
+
 
 class ReplayHandler(HttpArchiveHandler):
   def do_GET(self):
@@ -174,6 +183,9 @@ class ReplayHandler(HttpArchiveHandler):
       logging.error('Could not replay: %s', request)
 
   def do_POST(self):
+    self.do_GET()
+
+  def do_HEAD(self):
     self.do_GET()
 
 
