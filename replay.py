@@ -12,14 +12,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+description = """
+Replays web pages under simulated network conditions.
 
-# TODO: Because of python's Global Interpreter Lock (GIL), the threads
-# will run on the same CPU. Consider using processes instead because
-# the components do not need to communicate with each other. On Linux,
-# "taskset" could be used to assign each process to specific CPU/core.
-# Of course, only bother with this if the processing speed is an issue.
-# Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
+Must be run with administrative rights (sudo).
 
+To record web pages:
+1. Start the program in record mode.
+     $ sudo ./replay.py --record my_archive.wpr
+2. Load the web pages you want to record in a web browser.
+   It is important to clear browser caches before this so
+   that all subresources are requested from the network.
+3. Kill the process to stop recording.
+
+To replay web pages:
+1. Start the program in replay mode with a previously recorded archive.
+     $ sudo ./replay.py my_archive.wpr
+2. Load recorded pages in a web browser. A 404 will be served
+   for any pages or resources not in the recorded archive.
+
+Network simulation examples:
+# 128KByte/s bandwidth with 100ms RTT time
+$ sudo ./replay.py --bandwidth 128KByte/s --delay_ms=100 my_archive.wpr
+
+# 128KByte/s bandwidth with 1% packet loss rate
+$ sudo ./replay.py --bandwidth 128KByte/s --packet_loss_rate=0.01 my_archive.wpr
+"""
 
 import dnsproxy
 import httpproxy
@@ -32,11 +50,7 @@ import threading
 import time
 
 
-def main(options, args):
-  if not options.file:
-    logging.critical('You must specify a --file to record to or reply from.')
-    return
-
+def main(options, replay_file):
   platform_settings = platformsettings.get_platform_settings()
 
   try:
@@ -53,9 +67,15 @@ def main(options, args):
   dns_thread.start()
 
   try:
+    # TODO: Because of python's Global Interpreter Lock (GIL), the threads
+    # will run on the same CPU. Consider using processes instead because
+    # the components do not need to communicate with each other. On Linux,
+    # "taskset" could be used to assign each process to specific CPU/core.
+    # Of course, only bother with this if the processing speed is an issue.
+    # Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
     http_server = None
     http_server = httpproxy.HttpProxyServer(
-        options.record, options.file, options.deterministic_script)
+        options.record, replay_file, options.deterministic_script)
     http_thread = threading.Thread(target=http_server.serve_forever)
     http_thread.setDaemon(True)
     http_thread.start()
@@ -67,7 +87,7 @@ def main(options, args):
     while 1:
       time.sleep(1)
   except IOError, (error_number, msg):
-    logging.critical('Cannot open file: %s: %s', options.file, msg)
+    logging.critical('Cannot open file: %s: %s', replay_file, msg)
   except platformsettings.TrafficShapingError:
     logging.critical('Unable to shape traffic.')
   except:
@@ -83,30 +103,54 @@ def main(options, args):
 
 
 if __name__ == '__main__':
-  option_parser = optparse.OptionParser()
+  log_levels = {'debug': logging.DEBUG,
+                'info': logging.INFO,
+                'warning': logging.WARNING,
+                'error': logging.ERROR,
+                'critical': logging.CRITICAL}
+
+  option_parser = optparse.OptionParser(
+      usage='%prog [options] replay_file',
+      description=description,
+      epilog='http://code.google.com/p/web-page-replay/')
+
+  option_parser.add_option('-r', '--record', default=False,
+      action='store_true',
+      help='Download real responses and record them to replay_file')
+  option_parser.add_option('-n', '--no-deterministic_script', default=True,
+      action='store_false',
+      dest='deterministic_script',
+      help=('Don\'t inject JavaScript which makes sources of entropy such as '
+            'Date() and Math.random() deterministic. CAUTION: With this option '
+            'many web pages will not replay properly.'))
   option_parser.add_option('-l', '--log_level', default='debug',
-      help='Log level, one of {debug, info, warning, error, critical}')
-  option_parser.add_option('-r', '--record', default=False, action='store_true',
-      help='Whether to start in record mode.')
-  option_parser.add_option('-f', '--file', default=None,
-      help='Path to archive to record to or replay from.')
-  option_parser.add_option('-b', '--bandwidth', default='0',
-      help='Replay bandwidth in [K|M]{bit/s|Byte/s}. Zero means unlimited.')
-  option_parser.add_option('-d', '--delay_ms', default='0',
-      help='Replay propagation delay in milliseconds. Zero means no delay.')
-  option_parser.add_option('-p', '--packet_loss_rate', default='0',
-      help='Replay packet loss rate in range [0..1]. Zero means no loss.')
-  option_parser.add_option('-s', '--deterministic_script', default=True,
-      help=('Inject javascript which makes sources of entropy such as '
-            'Date() and Math.random() deterministic.'))
+      action='store',
+      type='choice',
+      choices=log_levels.keys(),
+      help='Minimum verbosity level to log')
+
+  network_group = optparse.OptionGroup(option_parser,
+      'Network Simulation Options',
+      'These options configure the network simulation in replay mode')
+  network_group.add_option('-b', '--bandwidth', default='0',
+      action='store',
+      type='string',
+      help='Bandwidth in [K|M]{bit/s|Byte/s}. Zero means unlimited.')
+  network_group.add_option('-d', '--delay_ms', default='0',
+      action='store',
+      type='string',
+      help='Propagation delay in milliseconds. Zero means no delay.')
+  network_group.add_option('-p', '--packet_loss_rate', default='0',
+      action='store',
+      type='string',
+      help='Packet loss rate in range [0..1]. Zero means no loss.')
+  option_parser.add_option_group(network_group)
 
   options, args = option_parser.parse_args()
 
-  LEVELS = {'debug': logging.DEBUG,
-            'info': logging.INFO,
-            'warning': logging.WARNING,
-            'error': logging.ERROR,
-            'critical': logging.CRITICAL}
-  logging.basicConfig(level=LEVELS.get(options.log_level, logging.NOTSET))
+  if len(args) != 1:
+    option_parser.error('Must specify a replay_file')
 
-  sys.exit(main(options, args))
+  logging.basicConfig(level=log_levels.get(options.log_level, logging.NOTSET))
+
+  sys.exit(main(options, args[0]))
