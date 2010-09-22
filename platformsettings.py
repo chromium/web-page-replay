@@ -69,27 +69,9 @@ class PlatformSettings(object):
     self.original_primary_dns = None
 
 
-class OsxPlatformSettings(PlatformSettings):
-  def _scutil(self, cmd):
-    scutil = subprocess.Popen(
-        ['scutil'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    return scutil.communicate(cmd)[0]
+class OsxAndLinuxCommonPlatformSettings(PlatformSettings):
 
-  def _get_dns_service_key(self):
-    # <dictionary> {
-    #   PrimaryInterface : en1
-    #   PrimaryService : 8824452C-FED4-4C09-9256-40FB146739E0
-    #   Router : 192.168.1.1
-    # }
-    output = self._scutil('show State:/Network/Global/IPv4')
-    lines = output.split('\n')
-    for line in lines:
-      key_value = line.split(' : ')
-      if key_value[0] == '  PrimaryService':
-        return 'State:/Network/Service/%s/DNS' % key_value[1]
-    raise DnsUpdateError
-
-  def set_traffic_shaping(self, bandwidth='0', delay_ms='0', packet_loss_rate='0'):
+  def set_traffic_shaping(self, bandwidth=0, delay_ms=0, packet_loss_rate=0):
     try:
       # Create pipe '1' with requested shape.
       subprocess.check_call([
@@ -114,6 +96,27 @@ class OsxPlatformSettings(PlatformSettings):
       logging.info('Stopped shaping traffic')
     except:
       raise TrafficShapingError()
+
+
+class OsxPlatformSettings(OsxAndLinuxCommonPlatformSettings):
+  def _scutil(self, cmd):
+    scutil = subprocess.Popen(
+        ['scutil'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    return scutil.communicate(cmd)[0]
+
+  def _get_dns_service_key(self):
+    # <dictionary> {
+    #   PrimaryInterface : en1
+    #   PrimaryService : 8824452C-FED4-4C09-9256-40FB146739E0
+    #   Router : 192.168.1.1
+    # }
+    output = self._scutil('show State:/Network/Global/IPv4')
+    lines = output.split('\n')
+    for line in lines:
+      key_value = line.split(' : ')
+      if key_value[0] == '  PrimaryService':
+        return 'State:/Network/Service/%s/DNS' % key_value[1]
+    raise DnsUpdateError
 
   def get_primary_dns(self):
     # <dictionary> {
@@ -140,7 +143,7 @@ class OsxPlatformSettings(PlatformSettings):
     logging.info('Changed system DNS to %s', dns)
 
 
-class LinuxPlatformSettings(PlatformSettings):
+class LinuxPlatformSettings(OsxAndLinuxCommonPlatformSettings):
   """The following thread recommends a way to update DNS on Linux:
 
   http://ubuntuforums.org/showthread.php?t=337553

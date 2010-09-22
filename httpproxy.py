@@ -192,7 +192,8 @@ class ReplayHandler(HttpArchiveHandler):
 
 # TODO: Need to start up on both 80 for http and 443 for https.
 class HttpProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
-  def __init__(self, record, http_archive_filename, deterministic_script, host='localhost', port=80):
+  def __init__(self, record, http_archive_filename, deterministic_script,
+               host='localhost', port=80):
     self.record = record
     self.deterministic_script = deterministic_script
     self.archive_filename = http_archive_filename
