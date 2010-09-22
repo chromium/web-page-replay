@@ -76,13 +76,18 @@ class OsxPlatformSettings(PlatformSettings):
     return scutil.communicate(cmd)[0]
 
   def _get_dns_service_key(self):
-    # subKey [0] = State:/Network/Service/8824452C-FED4-4C09-9256-40FB146739E0/DNS
-    # subKey [1] = State:/Network/Service/net.juniper.ncproxyd.main/DNS
-    list_out = self._scutil('list State:/Network/Service/[^/]+/DNS')
-    list_lines = list_out.split('\n')
-    list_parts = list_lines[0].split(' ')
-    service_keys = [line.split(' ')[-1] for line in list_lines if line]
-    return service_keys[0]
+    # <dictionary> {
+    #   PrimaryInterface : en1
+    #   PrimaryService : 8824452C-FED4-4C09-9256-40FB146739E0
+    #   Router : 192.168.1.1
+    # }
+    output = self._scutil('show State:/Network/Global/IPv4')
+    lines = output.split('\n')
+    for line in lines:
+      key_value = line.split(' : ')
+      if key_value[0] == '  PrimaryService':
+        return 'State:/Network/Service/%s/DNS' % key_value[1]
+    raise DnsUpdateError
 
   def set_traffic_shaping(self, bandwidth='0', delay_ms='0', packet_loss_rate='0'):
     try:
