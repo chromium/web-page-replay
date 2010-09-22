@@ -87,9 +87,11 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
 
 
 class DnsProxyServer(SocketServer.ThreadingUDPServer):
-  def __init__(self, host='127.0.0.1', port=53, platform_settings=platformsettings.get_platform_settings()):
+  def __init__(self, host='127.0.0.1', port=53, platform_settings=None):
+    if not platformsettings:
+      platformsettings.get_platform_settings()
     self.host = host
-    self.platform_settings = platform_settings
+    self.restore_primary_dns = platform_settings.restore_primary_dns
     try:
       SocketServer.ThreadingUDPServer.__init__(
           self, (host, port), UdpDnsHandler)
@@ -101,6 +103,6 @@ class DnsProxyServer(SocketServer.ThreadingUDPServer):
     platform_settings.set_primary_dns(host)
 
   def cleanup(self):
-    self.platform_settings.restore_primary_dns()
+    self.restore_primary_dns()
     self.shutdown()
     logging.info('Shutdown DNS server')
