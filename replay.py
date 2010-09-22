@@ -141,6 +141,10 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Log file to use in addition to writting logs to stderr.')
+  option_parser.add_option('-t', '--time_limit', default=None,
+      action='store',
+      type='int',
+      help='Maximum number of seconds to run before quiting.')
 
   network_group = optparse.OptionGroup(option_parser,
       'Network Simulation Options',
@@ -157,10 +161,6 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Packet loss rate in range [0..1]. Zero means no loss.')
-  network_group.add_option('-t', '--time_limit', default=None,
-      action='store',
-      type='int',
-      help='Maximum number of seconds to run before quiting.')
 
   option_parser.add_option_group(network_group)
 
