@@ -15,7 +15,7 @@
 
 description = """Replays web pages under simulated network conditions.
 
-Must be run with as administrator (sudo).
+Must be run as administrator (sudo).
 
 To record web pages:
   1. Start the program in record mode.
@@ -59,12 +59,11 @@ def main(options, replay_file):
 
   try:
     dns_server = dnsproxy.DnsProxyServer(platform_settings=platform_settings)
-  except dnsproxy.PermissionDenied:
-    # TODO: fix comment for Windows.
-    logging.critical('Unable to bind to DNS port. (Rerun with "sudo"?)')
+  except dnsproxy.PermissionDenied, e:
+    logging.critical('Unable to bind to DNS port.\n%s' % e)
     return
-  except platformsettings.PlatformSettingsError:
-    logging.critical('Unable to change primary DNS server.')
+  except platformsettings.PlatformSettingsError, e:
+    logging.critical('Unable to change primary DNS server.\n%s' % e)
     return
   dns_thread = threading.Thread(target=dns_server.serve_forever)
   dns_thread.setDaemon(True)

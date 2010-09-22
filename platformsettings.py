@@ -51,20 +51,20 @@ class PlatformSettings(object):
       delay_ms: Propagation delay in milliseconds. Zero means no delay.
       packet_loss_rate: Packet loss rate in range [0..1]. Zero means no loss.
     """
-    raise NotImplemented
+    raise NotImplementedError()
 
   def restore_traffic_shaping(self):
-    raise NotImplemented
+    raise NotImplementedError()
 
   def get_primary_dns(self):
-    raise NotImplemented
+    raise NotImplementedError()
 
   def set_primary_dns(self, dns):
-    raise NotImplemented
+    raise NotImplementedError()
 
   def restore_primary_dns(self):
     if not self.original_primary_dns:
-      raise DnsUpdateError()
+      raise DnsUpdateError('Cannot restore because never set.')
     self.set_primary_dns(self.original_primary_dns)
     self.original_primary_dns = None
 
@@ -116,7 +116,7 @@ class OsxPlatformSettings(OsxAndLinuxCommonPlatformSettings):
       key_value = line.split(' : ')
       if key_value[0] == '  PrimaryService':
         return 'State:/Network/Service/%s/DNS' % key_value[1]
-    raise DnsUpdateError
+    raise DnsUpdateError('Did you run under sudo?')
 
   def get_primary_dns(self):
     # <dictionary> {
@@ -190,32 +190,34 @@ class LinuxPlatformSettings(OsxAndLinuxCommonPlatformSettings):
     if self.get_primary_dns() == dns:
       logging.info('Changed system DNS to %s', dns)
     else:
-      raise DnsUpdateError()
+      raise DnsUpdateError('Did you run under sudo?')
 
 
 class WindowsPlatformSettings(PlatformSettings):
-
-  # Using Netsh: http://www.microsoft.com/resources/documentation/windows/xp/all/proddocs/en-us/netsh.mspx?mfr=true
-  # Netsh commands for Interface IP: http://www.microsoft.com/resources/documentation/windows/xp/all/proddocs/en-us/netsh_int_ip.mspx?mfr=true
-
-  # c:\windows\system32\netsh.exe
-
+  def _netsh_dns(self, cmd, arg=''):
+    try:
+      subprocess.check_call(
+          'netsh interface ip %s dns name="Local Area Connection" %s' % (
+          cmd, arg))
+    except subprocess.CalledProcessError, e:
+      raise DnsUpdateError('Did you run as administrator?\n%s' % e)
+   
   def get_primary_dns(self):
-    # netsh interface ip show dns name="Local Area Connection"
-    raise NotImplemented
+    self._netsh_dns('show')
 
   def set_primary_dns(self, dns):
-    # netsh interface ip set dns name="Local Area Connection" static 127.0.0.1
-    # netsh interface ip set dns name="Local Area Connection" dhcp
-    raise NotImplemented
+    self._netsh_dns('set', 'static %s' % dns)
+
+  def restore_primary_dns(self):
+    self._netsh_dns('set', 'dhcp')
 
 
 def get_platform_settings():
-  if platform.system() == 'Darwin':
+  system = platform.system()
+  if system == 'Darwin':
     return OsxPlatformSettings()
-  elif platform.system() == 'Linux':
+  elif system == 'Linux':
     return LinuxPlatformSettings()
-  elif platform.system() == 'Windows':
+  elif system == 'Windows':
     return WindowsPlatformSettings()
-  logging.critical('Sorry, %s is not yet supported', platform.system())
-  raise NotImplemented
+  raise NotImplementedError('Sorry, %s is not yet supported.', system)
