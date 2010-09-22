@@ -12,32 +12,31 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-description = """
-Replays web pages under simulated network conditions.
 
-Must be run with administrative rights (sudo).
+description = """Replays web pages under simulated network conditions.
+
+Must be run with as administrator (sudo).
 
 To record web pages:
-1. Start the program in record mode.
+  1. Start the program in record mode.
      $ sudo ./replay.py --record my_archive.wpr
-2. Load the web pages you want to record in a web browser.
-   It is important to clear browser caches before this so
-   that all subresources are requested from the network.
-3. Kill the process to stop recording.
+  2. Load the web pages you want to record in a web browser. It is important to
+     clear browser caches before this so that all subresources are requested
+     from the network.
+  3. Kill the process to stop recording.
 
 To replay web pages:
-1. Start the program in replay mode with a previously recorded archive.
+  1. Start the program in replay mode with a previously recorded archive.
      $ sudo ./replay.py my_archive.wpr
-2. Load recorded pages in a web browser. A 404 will be served
-   for any pages or resources not in the recorded archive.
+  2. Load recorded pages in a web browser. A 404 will be served for any pages or
+     resources not in the recorded archive.
 
 Network simulation examples:
-# 128KByte/s bandwidth with 100ms RTT time
-$ sudo ./replay.py --bandwidth 128KByte/s --delay_ms=100 my_archive.wpr
+  # 128KByte/s bandwidth with 100ms RTT time
+  $ sudo ./replay.py --bandwidth 128KByte/s --delay_ms=100 my_archive.wpr
 
-# 128KByte/s bandwidth with 1% packet loss rate
-$ sudo ./replay.py --bandwidth 128KByte/s --packet_loss_rate=0.01 my_archive.wpr
-"""
+  # 1% packet loss rate
+  $ sudo ./replay.py --packet_loss_rate=0.01 my_archive.wpr"""
 
 import dnsproxy
 import httpproxy
@@ -105,8 +104,16 @@ def main(options, replay_file):
 if __name__ == '__main__':
   log_levels = ('debug', 'info', 'warning', 'error', 'critical')
 
+  class PlainHelpFormatter(optparse.IndentedHelpFormatter): 
+    def format_description(self, description):
+      if description:
+        return description + '\n'
+      else:
+        return ''
+
   option_parser = optparse.OptionParser(
       usage='%prog [options] replay_file',
+      formatter=PlainHelpFormatter(),
       description=description,
       epilog='http://code.google.com/p/web-page-replay/')
 
