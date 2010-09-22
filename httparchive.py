@@ -50,18 +50,14 @@ class ArchivedHttpResponse(object):
     return None
 
   def set_header(self, key, value):
-    i = 0
-    for k, v in self.headers:
+    for i, (k, v) in enumerate(self.headers):
       if key == k:
         self.headers[i] = (key, value)
         return
-      i = i + 1
     self.headers.append((key, value))
 
   def remove_header(self, key):
-    i = 0
-    for k, v in self.headers:
+    for i, (k, v) in enumerate(self.headers):
       if key == k:
         self.headers.pop(i)
         return
-      i = i + 1
