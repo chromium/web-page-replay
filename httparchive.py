@@ -78,7 +78,9 @@ if __name__ == '__main__':
     print 'Reason:', response.reason
     print 'headers:', response.headers
     headers = dict(response.headers)
-    if headers.get('content-type', '').startswith('text/'):
+    content_type = headers.get('content-type', '')
+    if (content_type.startswith('text/') or
+        content_type == 'application/x-javascript'):
       print '-' * 70
       if headers.get('content-encoding', '') == 'gzip':
         compressed_response_data = StringIO.StringIO(response.response_data)
