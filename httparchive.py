@@ -61,3 +61,28 @@ class ArchivedHttpResponse(object):
       if key == k:
         self.headers.pop(i)
         return
+
+
+if __name__ == '__main__':
+  import sys
+  import cPickle
+  import gzip
+  import StringIO
+  wpr_file = sys.argv[1]
+  http_archive = cPickle.load(open(wpr_file))
+  for request in http_archive.keys():
+    print request.command, request.host, request.path, request.request_body
+    print '-' * 70
+    response = http_archive[request]
+    print 'Status:', response.status
+    print 'Reason:', response.reason
+    print 'headers:', response.headers
+    headers = dict(response.headers)
+    if headers.get('content-type', '').startswith('text/'):
+      print '-' * 70
+      if headers.get('content-encoding', '') == 'gzip':
+        compressed_response_data = StringIO.StringIO(response.response_data)
+        print gzip.GzipFile(fileobj=compressed_response_data).read()
+      else:
+        print response.response_data
+    print '=' * 70
