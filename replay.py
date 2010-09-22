@@ -49,6 +49,11 @@ import threading
 import time
 
 
+if sys.version < '2.6':
+  print 'Need Python 2.6 or greater.'
+  sys.exit(1)
+
+
 def main(options, replay_file):
   platform_settings = platformsettings.get_platform_settings()
 
@@ -83,7 +88,8 @@ def main(options, replay_file):
       platform_settings.set_traffic_shaping(
           options.bandwidth, options.delay_ms, options.packet_loss_rate)
 
-    while 1:
+    start = time.time()
+    while not options.time_limit or time.time() - start < options.time_limit:
       time.sleep(1)
   except IOError, (error_number, msg):
     logging.critical('Cannot open file: %s: %s', replay_file, msg)
@@ -104,7 +110,7 @@ def main(options, replay_file):
 if __name__ == '__main__':
   log_levels = ('debug', 'info', 'warning', 'error', 'critical')
 
-  class PlainHelpFormatter(optparse.IndentedHelpFormatter): 
+  class PlainHelpFormatter(optparse.IndentedHelpFormatter):
     def format_description(self, description):
       if description:
         return description + '\n'
@@ -151,6 +157,11 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Packet loss rate in range [0..1]. Zero means no loss.')
+  network_group.add_option('-t', '--time_limit', default=None,
+      action='store',
+      type='int',
+      help='Maximum number of seconds to run before quiting.')
+
   option_parser.add_option_group(network_group)
 
   options, args = option_parser.parse_args()
