@@ -50,7 +50,7 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
       logging.debug("DNS request with non-zero operation code: %s",
                     operation_code)
 
-    logging.debug('DNS reply for %s with %s', self.domain, self.server.host)
+    logging.debug('dnsproxy: handle(%s) -> %s', self.domain, self.server.host)
     self.reply(self.get_dns_reply(self.server.host))
 
   @classmethod
@@ -70,7 +70,6 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
   def get_dns_reply(self, ip):
     packet = ''
     if self.domain:
-      logging.debug("DNS request to fake DNS server: %s -> %s", self.domain, ip)
       packet = (
           self.transaction_id +
           self.flags +

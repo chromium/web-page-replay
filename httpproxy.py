@@ -35,11 +35,12 @@ def real_dns_lookup(hostname, dns_server='8.8.8.8'):
   ip = None
   if answers:
     ip = str(answers[0])
-  logging.debug('dns_lookup(%s), answer: %s', hostname, ip)
+  logging.debug('real_dns_lookup(%s) -> %s', hostname, ip)
   return ip
 
 
 def real_http_request(host_ip, request, headers):
+  logging.debug('read_http_request: %s%s', host_ip, request.path)
   conn = httplib.HTTPConnection(host_ip)
   conn.request(request.command, request.path, request.request_body, headers)
   response = conn.getresponse()
@@ -123,7 +124,7 @@ def inject_deterministic_script(response):
   response.set_header('content-length', len(response.response_data))
   return response
 
-    
+
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def read_request_body(self):
     request_body = None
@@ -152,7 +153,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.send_header(header, value)
     self.end_headers()
     self.wfile.write(response.response_data)
-    
+
 
 class RecordHandler(HttpArchiveHandler):
   def do_GET(self):
@@ -216,4 +217,3 @@ class HttpProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
       self.archive_file.close()
       logging.info('Saved %d response to %s',
                    len(self.http_archive), self.archive_filename)
-
