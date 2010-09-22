@@ -103,11 +103,7 @@ def main(options, replay_file):
 
 
 if __name__ == '__main__':
-  log_levels = {'debug': logging.DEBUG,
-                'info': logging.INFO,
-                'warning': logging.WARNING,
-                'error': logging.ERROR,
-                'critical': logging.CRITICAL}
+  log_levels = ('debug', 'info', 'warning', 'error', 'critical')
 
   option_parser = optparse.OptionParser(
       usage='%prog [options] replay_file',
@@ -126,8 +122,12 @@ if __name__ == '__main__':
   option_parser.add_option('-l', '--log_level', default='debug',
       action='store',
       type='choice',
-      choices=log_levels.keys(),
+      choices=log_levels,
       help='Minimum verbosity level to log')
+  option_parser.add_option('-f', '--log_file', default=None,
+      action='store',
+      type='string',
+      help='Log file to use in addition to writting logs to stderr.')
 
   network_group = optparse.OptionGroup(option_parser,
       'Network Simulation Options',
@@ -151,6 +151,11 @@ if __name__ == '__main__':
   if len(args) != 1:
     option_parser.error('Must specify a replay_file')
 
-  logging.basicConfig(level=log_levels.get(options.log_level, logging.NOTSET))
+  log_level = logging.__dict__[options.log_level.upper()]
+  logging.basicConfig(level=log_level)
+  if options.log_file:
+    fh = logging.FileHandler(options.log_file)
+    fh.setLevel(log_level)
+    logging.getLogger('').addHandler(fh)
 
   sys.exit(main(options, args[0]))
