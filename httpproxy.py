@@ -13,15 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import cPickle
 import BaseHTTPServer
-import gzip
 import httparchive
 import httplib
 import logging
 import socket
 import SocketServer
-import StringIO
 import subprocess
 
 import third_party
@@ -40,7 +37,7 @@ def real_dns_lookup(hostname, dns_server='8.8.8.8'):
 
 
 def real_http_request(host_ip, request, headers):
-  logging.debug('read_http_request: %s%s', host_ip, request.path)
+  logging.debug('real_http_request: %s%s', host_ip, request.path)
   conn = httplib.HTTPConnection(host_ip)
   conn.request(request.command, request.path, request.request_body, headers)
   response = conn.getresponse()
@@ -48,81 +45,6 @@ def real_http_request(host_ip, request, headers):
       response.status, response.reason, response.getheaders(), response.read())
   conn.close()
   return archived_http_response
-
-
-def inject_deterministic_script(response):
-  content_type = response.get_header('content-type')
-  if not content_type or not content_type.startswith('text/html'):
-    return response
-
-  if not response.get_header('content-length'):
-    if response.get_header('transfer-encoding') != 'chunked':
-      logging.error('Failed to inject deterministic script.')
-      return response
-
-    # TODO: httplib has unchunked the response_data for us, so we have to strip
-    # the "transfer-encoding: chunked" header and the add content-length at the
-    # end. Ideally, we'd want to preserve the chunked response instead of
-    # unchunking it.
-    logging.warning('Unchunked a chunked response.')
-    response.remove_header('transfer-encoding')
-
-  is_gzipped = response.get_header('content-encoding') == 'gzip'
-
-  if is_gzipped:
-    compressed_response_data = StringIO.StringIO(response.response_data)
-    response_data = gzip.GzipFile(fileobj=compressed_response_data).read()
-  else:
-    response_data = response.response_data
-
-  deterministic_script = """
-  <script>
-    (function () {
-      var orig_date = Date;
-      var x = 0;
-      var time_seed = 1204251968254;
-      Math.random = function() {
-        x += .1;
-        return (x % 1);
-      };
-      Date = function() {
-        if (this instanceof Date) {
-          switch (arguments.length) {
-            case 0: return new orig_date(time_seed += 50);
-            case 1: return new orig_date(arguments[0]);
-            default: return new orig_date(arguments[0], arguments[1],
-                arguments.length >= 3 ? arguments[2] : 1,
-                arguments.length >= 4 ? arguments[3] : 0,
-                arguments.length >= 5 ? arguments[4] : 0,
-                arguments.length >= 6 ? arguments[5] : 0,
-                arguments.length >= 7 ? arguments[6] : 0);
-          }
-        }
-        return new Date().toString();
-      };
-      Date.__proto__ = orig_date;
-      Date.prototype.constructor = Date;
-      orig_date.now = function() {
-        return new Date().getTime();
-      };
-    })();
-  </script>
-  """
-  len_response_data = len(response_data)
-  response_data = response_data.replace(
-      '<head>', '<head>%s' % deterministic_script, 1)
-  if len_response_data == len(response_data):
-    logging.error('Failed to inject deterministic script')
-
-  if is_gzipped:
-    compressed_response = StringIO.StringIO()
-    gzip.GzipFile(fileobj=compressed_response, mode='w').write(response_data)
-    response.response_data = compressed_response.getvalue()
-  else:
-    response.response_data = response_data
-
-  response.set_header('content-length', len(response.response_data))
-  return response
 
 
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -154,23 +76,23 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.end_headers()
     self.wfile.write(response.response_data)
 
+  def do_POST(self):
+    self.do_GET()
+
+  def do_HEAD(self):
+    self.do_GET()
+
 
 class RecordHandler(HttpArchiveHandler):
   def do_GET(self):
     request = self.get_archived_http_request()
     host_ip = real_dns_lookup(request.host)
     response = real_http_request(host_ip, request, self.get_header_dict())
-    if self.server.deterministic_script:
-      response = inject_deterministic_script(response)
+    if self.server.use_deterministic_script:
+      response.inject_deterministic_script()
     self.send_archived_http_response(response)
     self.server.http_archive[request] = response
     logging.debug('Recorded: %s', request)
-
-  def do_POST(self):
-    self.do_GET()
-
-  def do_HEAD(self):
-    self.do_GET()
 
 
 class ReplayHandler(HttpArchiveHandler):
@@ -183,28 +105,23 @@ class ReplayHandler(HttpArchiveHandler):
       self.send_error(404)
       logging.error('Could not replay: %s', request)
 
-  def do_POST(self):
-    self.do_GET()
-
-  def do_HEAD(self):
-    self.do_GET()
-
 
 # TODO: Need to start up on both 80 for http and 443 for https.
 class HttpProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
-  def __init__(self, record, http_archive_filename, deterministic_script,
+  def __init__(self, is_record_mode, http_archive_filename,
+               use_deterministic_script,
                host='localhost', port=80):
-    self.record = record
-    self.deterministic_script = deterministic_script
+    self.is_record_mode = is_record_mode
+    self.use_deterministic_script = use_deterministic_script
     self.archive_filename = http_archive_filename
-    self.archive_file = open(self.archive_filename, self.record and 'w' or 'r')
-    if self.record:
+    if self.is_record_mode:
+      # Open the file early to make sure it will succeed.
+      self.archive_file = open(self.archive_filename, 'wb')
       self.http_archive = httparchive.HttpArchive()
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
       logging.info('Recording on (%s:%s)...', host, port)
     else:
-      self.http_archive = cPickle.load(self.archive_file)
-      self.archive_file.close()
+      self.http_archive = httparchive.load(open(self.archive_filename, 'rb'))
       logging.info('Loaded %d responses from %s',
                    len(self.http_archive), self.archive_filename)
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
@@ -213,8 +130,8 @@ class HttpProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
   def cleanup(self):
     self.shutdown()
     logging.info('Stopped HTTP server')
-    if self.record and self.archive_file:
-      cPickle.dump(self.http_archive, self.archive_file)
+    if self.is_record_mode:
+      httparchive.dump(self.http_archive, self.archive_file)
       self.archive_file.close()
-      logging.info('Saved %d response to %s',
+      logging.info('Saved %d responses to %s',
                    len(self.http_archive), self.archive_filename)

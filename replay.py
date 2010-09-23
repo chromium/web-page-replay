@@ -47,6 +47,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 
 
 if sys.version < '2.6':
@@ -94,11 +95,12 @@ def main(options, replay_file):
     logging.critical('Cannot open file: %s: %s', replay_file, msg)
   except platformsettings.TrafficShapingError:
     logging.critical('Unable to shape traffic.')
+  except KeyboardInterrupt:
+    pass
   except:
-    import traceback
     print traceback.format_exc()
-    logging.info('Shutting down')
   finally:
+    logging.info('Shutting down.')
     dns_server.cleanup()
     if http_server:
       http_server.cleanup()
