@@ -15,8 +15,10 @@
 
 
 import logging
+import os
 import platform
 import subprocess
+import tempfile
 
 
 class PlatformSettingsError(Exception):
@@ -200,28 +202,46 @@ class LinuxPlatformSettings(PosixPlatformSettings):
 
 
 class WindowsPlatformSettings(PlatformSettings):
-  def _netsh_dns(self, cmd, arg=''):
+  def _netsh_set_dns(self, args):
     try:
-      # TODO: "Local Area Connection" is a default, but not necessarily correct.
-      subprocess.check_call(
-          'netsh interface ip %s dns name="Local Area Connection" %s' % (
-          cmd, arg))
+      subprocess.check_call('netsh interface ip set dns %s' % args)
     except subprocess.CalledProcessError, e:
       raise DnsUpdateError('Did you run as administrator?\n%s' % e)
-   
-  def get_primary_dns(self):
-    self._netsh_dns('show')
 
+  def _netsh_get_interface_name(self):
+    # Configuration for interface "Local Area Connection 3"
+    # DNS servers configured through DHCP:  None
+    # Register with which suffix:           Primary only
+    #
+    # Configuration for interface "Wireless Network Connection 2"
+    # DNS servers configured through DHCP:  192.168.1.1
+    # Register with which suffix:           Primary only
+    output = subprocess.Popen(
+        ['netsh', 'interface', 'ip', 'show', 'dns'],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE).communicate()[0]
+    return 'name="%s"' % output.split('"')[1]
+   
   def set_primary_dns(self, dns):
-    self._netsh_dns('set', 'static %s' % dns)
+    vbs = """Set objWMIService = GetObject("winmgmts:{impersonationLevel=impersonate}!\\\\.\\root\\cimv2")
+Set colNetCards = objWMIService.ExecQuery("Select * From Win32_NetworkAdapterConfiguration Where IPEnabled = True")
+For Each objNetCard in colNetCards
+  arrDNSServers = Array("%s")
+  objNetCard.SetDNSServerSearchOrder(arrDNSServers)
+Next
+""" % dns
+    vbs_file = tempfile.NamedTemporaryFile(suffix='.vbs', delete=False)
+    vbs_file.write(vbs)
+    vbs_file.close()
+    subprocess.check_call(['cscript', '//nologo', vbs_file.name])
+    os.remove(vbs_file.name)
 
   def restore_primary_dns(self):
-    self._netsh_dns('set', 'dhcp')
+    self._netsh_set_dns('%s dhcp primary' % self._netsh_get_interface_name())
 
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
   def _ipfw(self, args):
-    subprocess.check_call(['third_party\ipfw_win32\ipfw.exe'] + args)
+    subprocess.check_call(['third_party\\ipfw_win32\\ipfw.exe'] + args)
 
 
 def get_platform_settings():

@@ -16,6 +16,7 @@
 
 import cPickle
 import gzip
+import logging
 import StringIO
 import sys
 
