@@ -219,8 +219,8 @@ class WindowsPlatformSettings(PlatformSettings):
     output = subprocess.Popen(
         ['netsh', 'interface', 'ip', 'show', 'dns'],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE).communicate()[0]
-    return 'name="%s"' % output.split('"')[1]
-   
+    return ['name="%s"' % name for i, name in enumerate(output.split('"')) if i % 2]
+
   def set_primary_dns(self, dns):
     vbs = """Set objWMIService = GetObject("winmgmts:{impersonationLevel=impersonate}!\\\\.\\root\\cimv2")
 Set colNetCards = objWMIService.ExecQuery("Select * From Win32_NetworkAdapterConfiguration Where IPEnabled = True")
@@ -236,7 +236,9 @@ Next
     os.remove(vbs_file.name)
 
   def restore_primary_dns(self):
-    self._netsh_set_dns('%s dhcp primary' % self._netsh_get_interface_name())
+    for name in self._netsh_get_interface_name():
+      logging.debug('Restoring DNS on %s' % name)
+      self._netsh_set_dns('%s dhcp primary' % name)
 
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
