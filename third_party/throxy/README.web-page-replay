@@ -1,0 +1,6 @@
+Source code home: http://github.com/jcrocholl/throxy
+    commit  96aeef133d30dd91d389
+    tree    2a9cc97f48cac7356ed0
+    parent  adb4cd1947001c98118b
+
+There is no need to run setup.py since the code is loaded from this location.
