@@ -17,6 +17,7 @@ import BaseHTTPServer
 import httparchive
 import httplib
 import logging
+import os
 import socket
 import SocketServer
 import subprocess
@@ -115,13 +116,12 @@ class HttpProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
     self.use_deterministic_script = use_deterministic_script
     self.archive_filename = http_archive_filename
     if self.is_record_mode:
-      # Open the file early to make sure it will succeed.
-      self.archive_file = open(self.archive_filename, 'wb')
+      assert os.access(self.archive_filename, os.W_OK)
       self.http_archive = httparchive.HttpArchive()
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
       logging.info('Recording on (%s:%s)...', host, port)
     else:
-      self.http_archive = httparchive.load(open(self.archive_filename, 'rb'))
+      self.http_archive = httparchive.HttpArchive.Create(self.archive_filename)
       logging.info('Loaded %d responses from %s',
                    len(self.http_archive), self.archive_filename)
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
@@ -131,7 +131,6 @@ class HttpProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
     self.shutdown()
     logging.info('Stopped HTTP server')
     if self.is_record_mode:
-      httparchive.dump(self.http_archive, self.archive_file)
-      self.archive_file.close()
+      self.http_archive.Persist(self.archive_filename)
       logging.info('Saved %d responses to %s',
                    len(self.http_archive), self.archive_filename)

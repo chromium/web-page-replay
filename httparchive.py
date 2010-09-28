@@ -17,18 +17,12 @@
 import cPickle
 import gzip
 import logging
+import persistentmixin
 import StringIO
 import sys
 
 
-def load(wpr_file):
-  return cPickle.load(wpr_file)
-
-def dump(http_archive, wpr_file):
-  return cPickle.dump(http_archive, wpr_file)
-
-
-class HttpArchive(dict):
+class HttpArchive(dict, persistentmixin.PersistentMixin):
   """Dict with ArchivedHttpRequest keys and ArchivedHttpResponse values."""
 
   def debug_str(self):
@@ -176,5 +170,5 @@ class ArchivedHttpResponse(object):
 
 if __name__ == '__main__':
   wpr_file = sys.argv[1]
-  http_archive = load(open(wpr_file, 'rb'))
+  http_archive = HttpArchive.Create(wpr_file)
   print http_archive.debug_str()
