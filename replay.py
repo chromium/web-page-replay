@@ -57,6 +57,7 @@ if sys.version < '2.6':
 
 def main(options, replay_file):
   platform_settings = platformsettings.get_platform_settings()
+  name_servers = [platform_settings.get_primary_dns()]
 
   try:
     dns_server = dnsproxy.DnsProxyServer(platform_settings=platform_settings)
@@ -79,7 +80,8 @@ def main(options, replay_file):
     # Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
     http_server = None
     http_server = httpproxy.HttpProxyServer(
-        options.record, replay_file, options.deterministic_script)
+        options.record, replay_file, options.deterministic_script,
+        name_servers=name_servers)
     http_thread = threading.Thread(target=http_server.serve_forever)
     http_thread.setDaemon(True)
     http_thread.start()

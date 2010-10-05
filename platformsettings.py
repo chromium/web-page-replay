@@ -17,6 +17,7 @@
 import logging
 import os
 import platform
+import re
 import subprocess
 import tempfile
 
@@ -208,18 +209,29 @@ class WindowsPlatformSettings(PlatformSettings):
     except subprocess.CalledProcessError, e:
       raise DnsUpdateError('Did you run as administrator?\n%s' % e)
 
-  def _netsh_get_interface_name(self):
-    # Configuration for interface "Local Area Connection 3"
-    # DNS servers configured through DHCP:  None
-    # Register with which suffix:           Primary only
-    #
-    # Configuration for interface "Wireless Network Connection 2"
-    # DNS servers configured through DHCP:  192.168.1.1
-    # Register with which suffix:           Primary only
-    output = subprocess.Popen(
+  def _netsh_show_dns(self):
+    """Return DNS information:
+
+    Example output:
+
+    Configuration for interface "Local Area Connection 3"
+    DNS servers configured through DHCP:  None
+    Register with which suffix:           Primary only
+
+    Configuration for interface "Wireless Network Connection 2"
+    DNS servers configured through DHCP:  192.168.1.1
+    Register with which suffix:           Primary only
+    """
+    return subprocess.Popen(
         ['netsh', 'interface', 'ip', 'show', 'dns'],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE).communicate()[0]
-    return ['name="%s"' % name for i, name in enumerate(output.split('"')) if i % 2]
+        stdout=subprocess.PIPE).communicate()[0]
+
+  def _netsh_get_interface_names(self):
+    return re.findall(r'"(.+?)"', self._netsh_show_dns())
+
+  def get_primary_dns(self):
+    match = re.search(r':\s+(\d+\.\d+\.\d+\.\d+)', self._netsh_show_dns())
+    return match and match.group(1) or None
 
   def set_primary_dns(self, dns):
     vbs = """Set objWMIService = GetObject("winmgmts:{impersonationLevel=impersonate}!\\\\.\\root\\cimv2")
@@ -236,14 +248,14 @@ Next
     os.remove(vbs_file.name)
 
   def restore_primary_dns(self):
-    for name in self._netsh_get_interface_name():
-      logging.debug('Restoring DNS on %s' % name)
-      self._netsh_set_dns('%s dhcp primary' % name)
+    for name in self._netsh_get_interface_names():
+      logging.debug('Restoring DNS on "%s"' % name)
+      self._netsh_set_dns('name="%s" dhcp primary' % name)
 
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
   def _ipfw(self, args):
-    subprocess.check_call(['third_party\\ipfw_win32\\ipfw.exe'] + args)
+    subprocess.check_call([r'third_party\ipfw_win32\ipfw.exe'] + args)
 
 
 def get_platform_settings():
