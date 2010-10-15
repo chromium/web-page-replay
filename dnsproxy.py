@@ -19,12 +19,38 @@ import platformsettings
 import socket
 import SocketServer
 
+import third_party
+import dns.resolver
+import ipaddr
 
 class DnsProxyError(Exception):
   pass
 
 class PermissionDenied(DnsProxyError):
   pass
+
+
+class RealDnsLookup(object):
+  def __init__(self, name_servers=None):
+    self.resolver = dns.resolver.get_default_resolver()
+    self.resolver.nameservers = name_servers or ['8.8.8.8']
+
+  def __call__(self, hostname):
+    try:
+      answers = self.resolver.query(hostname, 'A')
+    except dns.resolver.NoAnswer:
+      # TODO: should these exceptions be handled at the next level up?
+      logging.debug('_real_dns_lookup(%s) -> None (NoAnswer)', hostname)
+      return None
+    except dns.resolver.NXDOMAIN:
+      # TODO: should these exceptions be handled at the next level up?
+      logging.debug('_real_dns_lookup(%s) -> None (NXDOMAIN)', hostname)
+      return None
+    ip = None
+    if answers:
+      ip = str(answers[0])
+    logging.debug('_real_dns_lookup(%s) -> %s', hostname, ip)
+    return ip
 
 
 class UdpDnsHandler(SocketServer.DatagramRequestHandler):
@@ -50,8 +76,16 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
       logging.debug("DNS request with non-zero operation code: %s",
                     operation_code)
 
-    logging.debug('dnsproxy: handle(%s) -> %s', self.domain, self.server.host)
-    self.reply(self.get_dns_reply(self.server.host))
+    ip = self.server.host
+    if self.server.is_private_passthrough:
+      real_ip = self.server.real_dns_lookup(self.domain)
+      if real_ip and ipaddr.IPv4Address(real_ip).is_private:
+        ip = real_ip
+    if ip == self.server.host:
+      logging.debug('dnsproxy: handle(%s) -> %s', self.domain, self.server.host)
+    else:
+      logging.debug('dnsproxy: passthrough(%s) -> %s', self.domain, ip)
+    self.reply(self.get_dns_reply(ip))
 
   @classmethod
   def _domain(cls, wire_domain):
@@ -87,10 +121,14 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
 
 
 class DnsProxyServer(SocketServer.ThreadingUDPServer):
-  def __init__(self, host='127.0.0.1', port=53, platform_settings=None):
-    if not platformsettings:
-      platformsettings.get_platform_settings()
+  def __init__(self, host='127.0.0.1', port=53, platform_settings=None,
+               is_private_passthrough=True):
     self.host = host
+    if not platform_settings:
+      platform_settings = platformsettings.get_platform_settings()
+    self.is_private_passthrough = is_private_passthrough
+    self.real_dns_lookup = RealDnsLookup(
+        name_servers=[platform_settings.get_primary_dns()])
     self.restore_primary_dns = platform_settings.restore_primary_dns
     try:
       SocketServer.ThreadingUDPServer.__init__(

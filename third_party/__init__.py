@@ -19,4 +19,7 @@ try:
     __file__
 except NameError:
     __file__ = sys.argv[0]
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+third_party_dir = os.path.dirname(os.path.abspath(__file__))
+ipaddr_dir = os.path.join(third_party_dir, "ipaddr")
+sys.path.append(ipaddr_dir)  # workaround for no __init__.py
+sys.path.append(third_party_dir)

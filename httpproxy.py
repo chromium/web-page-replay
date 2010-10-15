@@ -22,25 +22,13 @@ import socket
 import SocketServer
 import subprocess
 
-import third_party
-import dns.resolver
 
+class RealHttpRequest(object):
+  def __init__(self, real_dns_lookup):
+    self._real_dns_lookup = real_dns_lookup
 
-class RealHttpConnection(object):
-  def __init__(self, name_servers=None):
-    self.resolver = dns.resolver.get_default_resolver()
-    self.resolver.nameservers = name_servers or ['8.8.8.8']
-
-  def _real_dns_lookup(self, hostname):
-    answers = self.resolver.query(hostname, 'A')
-    ip = None
-    if answers:
-      ip = str(answers[0])
-    logging.debug('_real_dns_lookup(%s) -> %s', hostname, ip)
-    return ip
-
-  def request(self, request, headers):
-    logging.debug('RealHttpConnection: %s %s', request.host, request.path)
+  def __call_(self, request, headers):
+    logging.debug('RealHttpRequest: %s %s', request.host, request.path)
     host_ip = self._real_dns_lookup(request.host)
     connection = httplib.HTTPConnection(host_ip)
     connection.request(
@@ -49,13 +37,8 @@ class RealHttpConnection(object):
         request.request_body,
         headers)
     response = connection.getresponse()
-    archived_http_response = httparchive.ArchivedHttpResponse(
-        response.status,
-        response.reason,
-        response.getheaders(),
-        response.read())
     connection.close()
-    return archived_http_response
+    return response
 
 
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -93,12 +76,16 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 class RecordHandler(HttpArchiveHandler):
   def do_GET(self):
     request = self.get_archived_http_request()
-    response = self.server.real_http_connection.request(
-        request, self.get_header_dict())
+    response = self.server.real_http_request(request, self.get_header_dict())
+    archived_http_response = httparchive.ArchivedHttpResponse(
+        response.status,
+        response.reason,
+        response.getheaders(),
+        response.read())
     if self.server.use_deterministic_script:
-      response.inject_deterministic_script()
-    self.send_archived_http_response(response)
-    self.server.http_archive[request] = response
+      archived_http_response.inject_deterministic_script()
+    self.send_archived_http_response(archived_http_response)
+    self.server.http_archive[request] = archived_http_response
     logging.debug('Recorded: %s', request)
 
 
@@ -114,35 +101,48 @@ class ReplayHandler(HttpArchiveHandler):
 
 
 # TODO: Need to start up on both 80 for http and 443 for https.
-class HttpProxyServer(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
+
+class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
+                            BaseHTTPServer.HTTPServer):
   def __init__(
-      self, is_record_mode, http_archive_filename, use_deterministic_script,
-      host='localhost', port=80, name_servers=None):
-    self.is_record_mode = is_record_mode
+      self, http_archive_filename, use_deterministic_script, real_dns_lookup,
+      host='localhost', port=80):
     self.use_deterministic_script = use_deterministic_script
     self.archive_filename = http_archive_filename
-    self.real_http_connection = RealHttpConnection(name_servers)
-    if self.is_record_mode:
-      archive_dir = os.path.dirname(os.path.abspath(self.archive_filename))
-      assert os.path.exists(archive_dir), "Archive directory must exist."
-      assert (os.access(self.archive_filename, os.W_OK) or
-              (os.access(archive_dir, os.W_OK) and
-               not os.path.exists(self.archive_filename))), \
-          "Need permissions to write archive file"
-      self.http_archive = httparchive.HttpArchive()
-      BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
-      logging.info('Recording on (%s:%s)...', host, port)
-    else:
-      self.http_archive = httparchive.HttpArchive.Create(self.archive_filename)
-      logging.info('Loaded %d responses from %s',
-                   len(self.http_archive), self.archive_filename)
-      BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
-      logging.info('Replaying on (%s:%s)...', host, port)
+    self.real_http_request = RealHttpRequest(real_dns_lookup)
+
+    self._assert_archive_file_writable()
+    self.http_archive = httparchive.HttpArchive()
+    BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
+    logging.info('Recording on %s:%s...', host, port)
+
+  def _assert_archive_file_writable(self):
+    archive_dir = os.path.dirname(os.path.abspath(self.archive_filename))
+    assert os.path.exists(archive_dir), "Archive directory must exist."
+    assert (os.access(self.archive_filename, os.W_OK) or
+            (os.access(archive_dir, os.W_OK) and
+             not os.path.exists(self.archive_filename))), \
+             "Need permissions to write archive file"
+
+  def cleanup(self):
+    self.shutdown()
+    logging.info('Stopped Record HTTP server')
+    self.http_archive.Persist(self.archive_filename)
+    logging.info('Saved %d responses to %s',
+                 len(self.http_archive), self.archive_filename)
+
+
+class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
+                            BaseHTTPServer.HTTPServer):
+  def __init__(self, http_archive_filename, use_deterministic_script,
+               host='localhost', port=80):
+    self.use_deterministic_script = use_deterministic_script
+    self.http_archive = httparchive.HttpArchive.Create(http_archive_filename)
+    logging.info('Loaded %d responses from %s',
+                 len(self.http_archive), http_archive_filename)
+    BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
+    logging.info('Replaying on %s:%s...', host, port)
 
   def cleanup(self):
     self.shutdown()
     logging.info('Stopped HTTP server')
-    if self.is_record_mode:
-      self.http_archive.Persist(self.archive_filename)
-      logging.info('Saved %d responses to %s',
-                   len(self.http_archive), self.archive_filename)

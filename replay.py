@@ -56,11 +56,9 @@ if sys.version < '2.6':
 
 
 def main(options, replay_file):
-  platform_settings = platformsettings.get_platform_settings()
-  name_servers = [platform_settings.get_primary_dns()]
-
   try:
-    dns_server = dnsproxy.DnsProxyServer(platform_settings=platform_settings)
+    dns_server = dnsproxy.DnsProxyServer(
+        is_private_passthrough=options.dns_private_passthrough)
   except dnsproxy.PermissionDenied, e:
     logging.critical('Unable to bind to DNS port.\n%s' % e)
     return
@@ -79,9 +77,12 @@ def main(options, replay_file):
     # Of course, only bother with this if the processing speed is an issue.
     # Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
     http_server = None
-    http_server = httpproxy.HttpProxyServer(
-        options.record, replay_file, options.deterministic_script,
-        name_servers=name_servers)
+    if options.record:
+      http_server = httpproxy.RecordHttpProxyServer(
+          replay_file, options.deterministic_script, dns_server.real_dns_lookup)
+    else:
+      http_server = httpproxy.ReplayHttpProxyServer(
+          replay_file, options.deterministic_script)
     http_thread = threading.Thread(target=http_server.serve_forever)
     http_thread.setDaemon(True)
     http_thread.start()
@@ -164,6 +165,12 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Packet loss rate in range [0..1]. Zero means no loss.')
+  network_group.add_option('-P', '--no-dns_private_passthrough', default=True,
+      action='store_false',
+      dest='dns_private_passthrough',
+      help='Don\'t forward DNS requests that resolve to private network '
+           'addresses. CAUTION: With the option important services like '
+           'Kerberos will resolve to the HTTP proxy address.')
 
   option_parser.add_option_group(network_group)
 
