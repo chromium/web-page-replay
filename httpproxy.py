@@ -113,7 +113,11 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
 
     self._assert_archive_file_writable()
     self.http_archive = httparchive.HttpArchive()
-    BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
+    try:
+      BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
+    except Exception, e:
+      logging.critical('Could not start HTTPServer on port %d: %s', port, e)
+      return
     logging.info('Recording on %s:%s...', host, port)
 
   def _assert_archive_file_writable(self):
@@ -140,7 +144,11 @@ class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
     self.http_archive = httparchive.HttpArchive.Create(http_archive_filename)
     logging.info('Loaded %d responses from %s',
                  len(self.http_archive), http_archive_filename)
-    BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
+    try:
+      BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
+    except Exception, e:
+      logging.critical('Could not start HTTPServer on port %d: %s', port, e)
+      return
     logging.info('Replaying on %s:%s...', host, port)
 
   def cleanup(self):
