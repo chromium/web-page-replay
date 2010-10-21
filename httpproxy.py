@@ -27,7 +27,7 @@ class RealHttpRequest(object):
   def __init__(self, real_dns_lookup):
     self._real_dns_lookup = real_dns_lookup
 
-  def __call_(self, request, headers):
+  def __call__(self, request, headers):
     logging.debug('RealHttpRequest: %s %s', request.host, request.path)
     host_ip = self._real_dns_lookup(request.host)
     connection = httplib.HTTPConnection(host_ip)
