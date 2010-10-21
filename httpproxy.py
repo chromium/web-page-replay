@@ -31,14 +31,18 @@ class RealHttpRequest(object):
     logging.debug('RealHttpRequest: %s %s', request.host, request.path)
     host_ip = self._real_dns_lookup(request.host)
     connection = httplib.HTTPConnection(host_ip)
-    connection.request(
-        request.command,
-        request.path,
-        request.request_body,
-        headers)
-    response = connection.getresponse()
-    connection.close()
-    return response
+    try:
+      connection.request(
+          request.command,
+          request.path,
+          request.request_body,
+          headers)
+      response = connection.getresponse()
+      connection.close()
+      return response
+    except Exception, e:
+      logging.critical('Could not fetch %s: %s', request, e)
+      return None
 
 
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -77,6 +81,10 @@ class RecordHandler(HttpArchiveHandler):
   def do_GET(self):
     request = self.get_archived_http_request()
     response = self.server.real_http_request(request, self.get_header_dict())
+    if response is None:
+      self.send_error(404)
+      return
+   
     archived_http_response = httparchive.ArchivedHttpResponse(
         response.status,
         response.reason,
