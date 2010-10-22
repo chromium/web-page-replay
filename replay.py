@@ -19,7 +19,7 @@ Must be run as administrator (sudo).
 
 To record web pages:
   1. Start the program in record mode.
-     $ sudo ./replay.py --record my_archive.wpr
+     $ sudo ./replay.py --record archive.wpr
   2. Load the web pages you want to record in a web browser. It is important to
      clear browser caches before this so that all subresources are requested
      from the network.
@@ -27,16 +27,16 @@ To record web pages:
 
 To replay web pages:
   1. Start the program in replay mode with a previously recorded archive.
-     $ sudo ./replay.py my_archive.wpr
+     $ sudo ./replay.py archive.wpr
   2. Load recorded pages in a web browser. A 404 will be served for any pages or
      resources not in the recorded archive.
 
 Network simulation examples:
-  # 128KByte/s bandwidth with 100ms RTT time
-  $ sudo ./replay.py --bandwidth 128KByte/s --delay_ms=100 my_archive.wpr
+  # 128KByte/s uplink bandwidth, 4Mbps/s downlink bandwidth with 100ms RTT time
+  $ sudo ./replay.py --up 128KByte/s --down 4Mbit/s --delay_ms=100 archive.wpr
 
   # 1% packet loss rate
-  $ sudo ./replay.py --packet_loss_rate=0.01 my_archive.wpr"""
+  $ sudo ./replay.py --packet_loss_rate=0.01 archive.wpr"""
 
 import dnsproxy
 import httpproxy
@@ -90,7 +90,7 @@ def main(options, replay_file):
 
     if not options.record:
       platform_settings.set_traffic_shaping(
-          options.bandwidth, options.delay_ms, options.packet_loss_rate)
+          options.up, options.down, options.delay_ms, options.packet_loss_rate)
 
     start = time.time()
     while not options.time_limit or time.time() - start < options.time_limit:
@@ -154,14 +154,18 @@ if __name__ == '__main__':
   network_group = optparse.OptionGroup(option_parser,
       'Network Simulation Options',
       'These options configure the network simulation in replay mode')
-  network_group.add_option('-b', '--bandwidth', default='0',
+  network_group.add_option('-u', '--up', default='0',
       action='store',
       type='string',
-      help='Bandwidth in [K|M]{bit/s|Byte/s}. Zero means unlimited.')
-  network_group.add_option('-d', '--delay_ms', default='0',
+      help='Upload Bandwidth in [K|M]{bit/s|Byte/s}. Zero means unlimited.')
+  network_group.add_option('-d', '--down', default='0',
       action='store',
       type='string',
-      help='Propagation delay in milliseconds. Zero means no delay.')
+      help='Download Bandwidth in [K|M]{bit/s|Byte/s}. Zero means unlimited.')
+  network_group.add_option('-m', '--delay_ms', default='0',
+      action='store',
+      type='string',
+      help='Propagation delay (latency) in milliseconds. Zero means no delay.')
   network_group.add_option('-p', '--packet_loss_rate', default='0',
       action='store',
       type='string',

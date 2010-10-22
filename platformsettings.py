@@ -46,42 +46,91 @@ class PlatformSettings(object):
   def __init__(self):
     self.original_primary_dns = None
     self.is_traffic_shaping = False
+    self.pipe_set = '5'         # We configure our rules on IPFW set #5.
 
-  def set_traffic_shaping(self, bandwidth='0', delay_ms='0',
-                          packet_loss_rate='0'):
+  def set_traffic_shaping(self,
+                          up_bandwidth = '0',
+                          down_bandwidth = '0',
+                          delay_ms = '0',
+                          packet_loss_rate = '0'):
     """Start shaping traffic.
 
     Args:
-      bandwidth: Bandwidth in [K|M]{bit/s|Byte/s}. '0' means unlimited.
+      up_bandwidth: Upload bandwidth
+      down_bandwidth: Download bandwidth
+           Bandwidths measured in [K|M]{bit/s|Byte/s}. '0' means unlimited.
       delay_ms: Propagation delay in milliseconds. '0' means no delay.
       packet_loss_rate: Packet loss rate in range [0..1]. '0' means no loss.
     """
     if self.is_traffic_shaping:
       self.restore_traffic_shaping()
-    if bandwidth == '0' and delay_ms == '0' and packet_loss_rate == '0':
+    if up_bandwidth == '0' and down_bandwidth == '0' and \
+       delay_ms == '0' and packet_loss_rate == '0':
       return
     try:
-      # Create pipe '1' with requested shape.
+      upload_pipe = '1'      # The IPFW pipe for upload rules.
+      download_pipe = '2'    # The IPFW pipe for download rules.
+      dns_pipe = '3'         # The IPFW pipe for DNS.
+
+      # Distribute the delay across the uplink and downlink bandwidths evenly.
+      delay_ms = str(int(delay_ms) / 2)
+
+      # TODO(mbelshe):  DNS shaping disabled for now.  Our DNS server has
+      #                 no cache, so we repeatedly send network DNS requests
+      #                 to our server.  Traffic shaping with every connect
+      #                 is not realistic.
+
+      # Configure DNS shaping.
+      #self._ipfw([
+      #    'pipe', dns_pipe,
+      #    'config',
+      #    'bw', '0',
+      #    'delay', delay_ms,
+      #    'plr', packet_loss_rate
+      #])
+      #self._ipfw(['add', self.pipe_set,
+      #            'pipe', dns_pipe,
+      #            'udp',
+      #            'from', 'any',
+      #            'to', '127.0.0.1',
+      #            'dst-port', '53'])
+
+      # Configure upload shaping.
       self._ipfw([
-          'pipe', '1',
+          'pipe', upload_pipe,
           'config',
-          'bw', bandwidth,
+          'bw', up_bandwidth,
           'delay', delay_ms,
           'plr', packet_loss_rate
       ])
-      # Install pipe '1'.
-      self._ipfw(['add', '1', 'pipe', '1', 'src-ip', '127.0.0.1'])
+      self._ipfw(['add', self.pipe_set,
+                  'pipe', upload_pipe,
+                  'dst-port', '80'])
+
+      # Configure download shaping.
+      self._ipfw([
+          'pipe', download_pipe,
+          'config',
+          'bw', down_bandwidth,
+          'delay', delay_ms,
+          'plr', packet_loss_rate
+      ])
+      self._ipfw(['add', self.pipe_set,
+                  'pipe', download_pipe,
+                  'src-port', '80'])
+
       logging.info('Started shaping traffic')
       self.is_traffic_shaping = True
-    except:
+    except Exception, e:
+      logging.critical("Traffic Shaping Exception ", e)
       raise TrafficShapingError()
 
   def restore_traffic_shaping(self):
     if not self.is_traffic_shaping:
       return
     try:
-      # Delete pipe '1' (which was created in set_traffic_shaping).
-      self._ipfw(['delete', '1'])
+      # Delete pipe 
+      self._ipfw(['delete', self.pipe_set])
       logging.info('Stopped shaping traffic')
     except:
       raise TrafficShapingError()
