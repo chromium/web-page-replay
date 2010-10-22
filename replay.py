@@ -56,6 +56,7 @@ if sys.version < '2.6':
 
 
 def main(options, replay_file):
+  platform_settings = platformsettings.get_platform_settings()
   try:
     dns_server = dnsproxy.DnsProxyServer(
         is_private_passthrough=options.dns_private_passthrough)
