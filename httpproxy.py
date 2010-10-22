@@ -38,6 +38,7 @@ class RealHttpRequest(object):
           request.request_body,
           headers)
       response = connection.getresponse()
+      response.raw_data = response.read()
       connection.close()
       return response
     except Exception, e:
@@ -84,12 +85,12 @@ class RecordHandler(HttpArchiveHandler):
     if response is None:
       self.send_error(404)
       return
-   
+
     archived_http_response = httparchive.ArchivedHttpResponse(
         response.status,
         response.reason,
         response.getheaders(),
-        response.read())
+        response.raw_data)
     if self.server.use_deterministic_script:
       archived_http_response.inject_deterministic_script()
     self.send_archived_http_response(archived_http_response)
