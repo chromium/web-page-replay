@@ -101,11 +101,14 @@ class PlatformSettings(object):
           'config',
           'bw', up_bandwidth,
           'delay', delay_ms,
-          'plr', packet_loss_rate
+          'plr', packet_loss_rate,
+          'queue', '4000000'
       ])
       self._ipfw(['add', self.pipe_set,
                   'pipe', upload_pipe,
-                  'dst-port', '80'])
+                  'out',
+                  'dst-port', '80'
+      ])
 
       # Configure download shaping.
       self._ipfw([
@@ -113,11 +116,14 @@ class PlatformSettings(object):
           'config',
           'bw', down_bandwidth,
           'delay', delay_ms,
-          'plr', packet_loss_rate
+          'plr', packet_loss_rate,
+          'queue', '4000000'
       ])
       self._ipfw(['add', self.pipe_set,
                   'pipe', download_pipe,
-                  'src-port', '80'])
+                  'in',
+                  'src-port', '80'
+      ])
 
       logging.info('Started shaping traffic')
       self.is_traffic_shaping = True
