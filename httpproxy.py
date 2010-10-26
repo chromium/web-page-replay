@@ -30,8 +30,8 @@ class RealHttpRequest(object):
   def __call__(self, request, headers):
     logging.debug('RealHttpRequest: %s %s', request.host, request.path)
     host_ip = self._real_dns_lookup(request.host)
-    connection = httplib.HTTPConnection(host_ip)
     try:
+      connection = httplib.HTTPConnection(host_ip)
       connection.request(
           request.command,
           request.path,
@@ -65,11 +65,17 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.read_request_body())
 
   def send_archived_http_response(self, response):
-    self.send_response(response.status, response.reason)
-    for header, value in response.headers:
-      self.send_header(header, value)
-    self.end_headers()
-    self.wfile.write(response.response_data)
+    try:
+      self.send_response(response.status, response.reason)
+      for header, value in response.headers:
+        self.send_header(header, value)
+      self.end_headers()
+      self.wfile.write(response.response_data)
+    except Exception, e:
+      logging.critical("Error sending respose for %s/%s: %s",
+                       self.headers['host'],
+                       self.path,
+                       e)
 
   def do_POST(self):
     self.do_GET()
