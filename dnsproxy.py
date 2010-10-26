@@ -34,9 +34,15 @@ class RealDnsLookup(object):
   def __init__(self, name_servers=None):
     self.resolver = dns.resolver.get_default_resolver()
     self.resolver.nameservers = name_servers or ['8.8.8.8']
+    self._cache = {}
 
   def __call__(self, hostname):
     try:
+      ip = self._cache.get(hostname);
+      if ip:
+        logging.debug('_real_dns_lookup(%s) cache hit! -> %s', hostname, ip)
+        return ip
+
       answers = self.resolver.query(hostname, 'A')
     except dns.resolver.NoAnswer:
       # TODO: should these exceptions be handled at the next level up?
@@ -50,6 +56,7 @@ class RealDnsLookup(object):
     if answers:
       ip = str(answers[0])
     logging.debug('_real_dns_lookup(%s) -> %s', hostname, ip)
+    self._cache[hostname] = ip
     return ip
 
 
