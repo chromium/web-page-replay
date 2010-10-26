@@ -58,9 +58,14 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     return dict(self.headers.items())
 
   def get_archived_http_request(self):
+    host = self.headers.get('host')
+    if host == None:
+      logging.error("Request without host header")
+      return None
+
     return httparchive.ArchivedHttpRequest(
         self.command,
-        self.headers['host'],
+        host,
         self.path,
         self.read_request_body())
 
@@ -72,7 +77,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.end_headers()
       self.wfile.write(response.response_data)
     except Exception, e:
-      logging.critical("Error sending respose for %s/%s: %s",
+      logging.error("Error sending response for %s/%s: %s",
                        self.headers['host'],
                        self.path,
                        e)
@@ -87,6 +92,10 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 class RecordHandler(HttpArchiveHandler):
   def do_GET(self):
     request = self.get_archived_http_request()
+    if request is None:
+      self.send_error(500)
+      return
+
     response = self.server.real_http_request(request, self.get_header_dict())
     if response is None:
       self.send_error(404)
