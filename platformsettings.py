@@ -81,19 +81,19 @@ class PlatformSettings(object):
       #                 is not realistic.
 
       # Configure DNS shaping.
-      #self._ipfw([
-      #    'pipe', dns_pipe,
-      #    'config',
-      #    'bw', '0',
-      #    'delay', delay_ms,
-      #    'plr', packet_loss_rate
-      #])
-      #self._ipfw(['add', self.pipe_set,
-      #            'pipe', dns_pipe,
-      #            'udp',
-      #            'from', 'any',
-      #            'to', '127.0.0.1',
-      #            'dst-port', '53'])
+      self._ipfw([
+          'pipe', dns_pipe,
+          'config',
+          'bw', '0',
+          'delay', delay_ms,
+          'plr', packet_loss_rate
+      ])
+      self._ipfw(['add', self.pipe_set,
+                  'pipe', dns_pipe,
+                  'udp',
+                  'from', 'any',
+                  'to', '127.0.0.1',
+                  'dst-port', '53'])
 
       # Configure upload shaping.
       self._ipfw([
