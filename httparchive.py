@@ -44,11 +44,15 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       if (content_type.startswith('text/') or
           content_type == 'application/x-javascript'):
         print >>out, '-' * 70
+        # Concatenate the chunks so we can decompress it.
+        raw_data = ""
+        for item in response.response_data:
+          raw_data += item
         if headers.get('content-encoding', '') == 'gzip':
-          compressed_response_data = StringIO.StringIO(response.response_data)
+          compressed_response_data = StringIO.StringIO(raw_data)
           print >>out, gzip.GzipFile(fileobj=compressed_response_data).read()
         else:
-          print >>out, response.response_data
+          print >>out, raw_data
       print >>out, '=' * 70
     return out.getvalue()
 
@@ -101,24 +105,15 @@ class ArchivedHttpResponse(object):
     if not content_type or not content_type.startswith('text/html'):
       return
 
-    if not self.get_header('content-length'):
-      if self.get_header('transfer-encoding') != 'chunked':
-        logging.error('Failed to inject deterministic script.')
-        return
-
-      # TODO: httplib has unchunked the response_data for us, so we have to
-      # strip the "transfer-encoding: chunked" header and the add content-length
-      # at the end. Ideally, we'd want to preserve the chunked response instead
-      # of unchunking it.
-      logging.warning('Unchunked a chunked response.')
-      self.remove_header('transfer-encoding')
+    # Concatenate the chunks so we can decompress it.
+    raw_data = ""
+    for item in self.response_data:
+      raw_data += item
 
     is_gzipped = self.get_header('content-encoding') == 'gzip'
     if is_gzipped:
-      compressed_response_data = StringIO.StringIO(self.response_data)
-      response_data = gzip.GzipFile(fileobj=compressed_response_data).read()
-    else:
-      response_data = self.response_data
+      compressed_data = StringIO.StringIO(raw_data)
+      raw_data = gzip.GzipFile(fileobj=compressed_data).read()
 
     deterministic_script = """
     <script>
@@ -153,19 +148,24 @@ class ArchivedHttpResponse(object):
       })();
     </script>
     """
-    len_response_data = len(response_data)
-    response_data = response_data.replace(
-        '<head>', '<head>%s' % deterministic_script, 1)
-    if len_response_data == len(response_data):
+    len_raw_data = len(raw_data)
+    raw_data = raw_data.replace('<head>', '<head>%s' % deterministic_script, 1)
+    if len_raw_data == len(raw_data):
       logging.error('Failed to inject deterministic script')
 
+    len_raw_data = len(raw_data)
+    self.response_data = []
     if is_gzipped:
       compressed_response = StringIO.StringIO()
-      gzip.GzipFile(fileobj=compressed_response, mode='w').write(response_data)
-      self.response_data = compressed_response.getvalue()
+      gzip.GzipFile(fileobj=compressed_response, mode='w').write(raw_data)
+      self.response_data.append(compressed_response.getvalue())
+      len_raw_data = len(self.response_data[0])
     else:
-      self.response_data = response_data
-    self.set_header('content-length', len(self.response_data))
+      self.response_data.append(raw_data)
+    self.response_data.append("")    # append a null chunk
+
+    if not self.get_header('transfer-encoding'):
+      self.set_header('content-length', len_raw_data)
 
 
 if __name__ == '__main__':

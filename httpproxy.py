@@ -38,8 +38,11 @@ class RealHttpRequest(object):
           request.request_body,
           headers)
       response = connection.getresponse()
-      response.raw_data = response.read()
-      connection.close()
+
+      # On the response, we'll save every read exactly as we read it
+      # from the network.  We'll use this to replay chunks similarly to
+      # how we recorded them.
+      response.raw_data = []
       return response
     except Exception, e:
       logging.critical('Could not fetch %s: %s', request, e)
@@ -71,11 +74,35 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
   def send_archived_http_response(self, response):
     try:
-      self.send_response(response.status, response.reason)
+      # We need to set the server name before we start the response.
+      server_name = "WebPageReplay"
       for header, value in response.headers:
-        self.send_header(header, value)
+        if header == "server":
+          server_name = value
+      self.server_version = server_name
+      self.sys_version = ""
+
+      self.send_response(response.status, response.reason)
+      use_chunked = False
+      # TODO(mbelshe): This is lame - each write is a packet!
+      for header, value in response.headers:
+        skip_header = False
+        if header == "transfer-encoding":
+          use_chunked = True
+        if header == "server":
+          skip_header = True
+        if skip_header == False:
+          self.send_header(header, value)
       self.end_headers()
-      self.wfile.write(response.response_data)
+      
+      for item in response.response_data:
+        if use_chunked:
+          self.wfile.write(str(hex(len(item)))[2:])
+          self.wfile.write("\r\n")
+        self.wfile.write(item)
+        if use_chunked:
+          self.wfile.write("\r\n")
+
     except Exception, e:
       logging.error("Error sending response for %s/%s: %s",
                        self.headers['host'],
@@ -100,6 +127,13 @@ class RecordHandler(HttpArchiveHandler):
     if response is None:
       self.send_error(404)
       return
+
+    # Read the rest of the HTTP response.
+    while True:
+      data = response.read(4096)
+      response.raw_data.append(data)
+      if len(data) == 0:
+        break
 
     archived_http_response = httparchive.ArchivedHttpResponse(
         response.status,
@@ -138,6 +172,7 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
     self._assert_archive_file_writable()
     self.http_archive = httparchive.HttpArchive()
     try:
+      RecordHandler.protocol_version = "HTTP/1.1"
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
     except Exception, e:
       logging.critical('Could not start HTTPServer on port %d: %s', port, e)
@@ -169,6 +204,7 @@ class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
     logging.info('Loaded %d responses from %s',
                  len(self.http_archive), http_archive_filename)
     try:
+      ReplayHandler.protocol_version = "HTTP/1.1"
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
     except Exception, e:
       logging.critical('Could not start HTTPServer on port %d: %s', port, e)
