@@ -75,11 +75,6 @@ class PlatformSettings(object):
       # Distribute the delay across the uplink and downlink bandwidths evenly.
       delay_ms = str(int(delay_ms) / 2)
 
-      # TODO(mbelshe):  DNS shaping disabled for now.  Our DNS server has
-      #                 no cache, so we repeatedly send network DNS requests
-      #                 to our server.  Traffic shaping with every connect
-      #                 is not realistic.
-
       # Configure DNS shaping.
       self._ipfw([
           'pipe', dns_pipe,
