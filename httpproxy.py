@@ -75,20 +75,35 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def send_archived_http_response(self, response):
     try:
       # We need to set the server name before we start the response.
+      # Take a scan through the response headers here
+      use_chunked = False
+      has_content_length = False
       server_name = "WebPageReplay"
       for header, value in response.headers:
         if header == "server":
           server_name = value
+        if header == "transfer-encoding":
+          use_chunked = True
+        if header == "content-length":
+          has_content_length = True
       self.server_version = server_name
       self.sys_version = ""
 
+      if response.version == 10:
+        self.protocol_version = "HTTP/1.0"
+
+      # If we don't have chunked encoding and there is no content length,
+      # we need to manually compute the content-length.
+      if not use_chunked and not has_content_length:
+        content_length = 0
+        for item in response.response_data:
+          content_length += len(item)
+        response.headers.append(("content-length", str(content_length)))
+
       self.send_response(response.status, response.reason)
-      use_chunked = False
       # TODO(mbelshe): This is lame - each write is a packet!
       for header, value in response.headers:
         skip_header = False
-        if header == "transfer-encoding":
-          use_chunked = True
         if header == "server":
           skip_header = True
         if skip_header == False:
@@ -102,6 +117,10 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.wfile.write(item)
         if use_chunked:
           self.wfile.write("\r\n")
+
+      # TODO(mbelshe): This connection close doesn't seem to work.
+      if response.version == 10:
+        self.connection.close()
 
     except Exception, e:
       logging.error("Error sending response for %s/%s: %s",
@@ -136,6 +155,7 @@ class RecordHandler(HttpArchiveHandler):
         break
 
     archived_http_response = httparchive.ArchivedHttpResponse(
+        response.version,
         response.status,
         response.reason,
         response.getheaders(),

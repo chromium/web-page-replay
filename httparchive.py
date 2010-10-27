@@ -75,7 +75,8 @@ class ArchivedHttpRequest(object):
 
 
 class ArchivedHttpResponse(object):
-  def __init__(self, status, reason, headers, response_data):
+  def __init__(self, version, status, reason, headers, response_data):
+    self.version = version
     self.status = status
     self.reason = reason
     self.headers = headers
