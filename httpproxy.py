@@ -117,10 +117,11 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.wfile.write(item)
         if use_chunked:
           self.wfile.write("\r\n")
+      self.wfile.flush()
 
       # TODO(mbelshe): This connection close doesn't seem to work.
       if response.version == 10:
-        self.connection.close()
+        self.close_connection = 1
 
     except Exception, e:
       logging.error("Error sending response for %s/%s: %s",
@@ -168,6 +169,9 @@ class RecordHandler(HttpArchiveHandler):
 
 
 class ReplayHandler(HttpArchiveHandler):
+  # Since we do lots of small "wfile.write() calls, turn on buffering.
+  wbufsize = -1
+
   def do_GET(self):
     request = self.get_archived_http_request()
     if request in self.server.http_archive:
@@ -191,6 +195,12 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
 
     self._assert_archive_file_writable()
     self.http_archive = httparchive.HttpArchive()
+
+    # Increase the listen queue size (default is 5).  Since we're intercepting
+    # many domains through this single server, it is quite possible to get
+    # more than 5 concurrent connection requests.
+    self.request_queue_size = 128
+
     try:
       RecordHandler.protocol_version = "HTTP/1.1"
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
@@ -223,6 +233,12 @@ class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
     self.http_archive = httparchive.HttpArchive.Create(http_archive_filename)
     logging.info('Loaded %d responses from %s',
                  len(self.http_archive), http_archive_filename)
+
+    # Increase the listen queue size (default is 5).  Since we're intercepting
+    # many domains through this single server, it is quite possible to get
+    # more than 5 concurrent connection requests.
+    self.request_queue_size = 128
+
     try:
       ReplayHandler.protocol_version = "HTTP/1.1"
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
