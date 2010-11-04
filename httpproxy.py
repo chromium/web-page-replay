@@ -109,7 +109,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         if skip_header == False:
           self.send_header(header, value)
       self.end_headers()
-      
+
       for item in response.response_data:
         if use_chunked:
           self.wfile.write(str(hex(len(item)))[2:])

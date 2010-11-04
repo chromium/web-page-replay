@@ -43,6 +43,7 @@ import httpproxy
 import logging
 import optparse
 import platformsettings
+import replayspdyserver
 import socket
 import sys
 import threading
@@ -56,6 +57,11 @@ if sys.version < '2.6':
 
 
 def main(options, replay_file):
+  # Verify correct flags are passed in.
+  if options.spdy and options.record:
+    logging.critical('--spdy and --record can\'t be used together.')
+    return
+
   platform_settings = platformsettings.get_platform_settings()
   try:
     dns_server = dnsproxy.DnsProxyServer(
@@ -77,16 +83,20 @@ def main(options, replay_file):
     # "taskset" could be used to assign each process to specific CPU/core.
     # Of course, only bother with this if the processing speed is an issue.
     # Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
-    http_server = None
+    server = None
     if options.record:
-      http_server = httpproxy.RecordHttpProxyServer(
+      server = httpproxy.RecordHttpProxyServer(
           replay_file, options.deterministic_script, dns_server.real_dns_lookup)
+    elif options.spdy:
+      if options.deterministic_script:
+        logging.warning('--deterministic_script will be ingored for spdy.')
+      server = replayspdyserver.ReplaySpdyServer(replay_file)
     else:
-      http_server = httpproxy.ReplayHttpProxyServer(
+      server = httpproxy.ReplayHttpProxyServer(
           replay_file, options.deterministic_script)
-    http_thread = threading.Thread(target=http_server.serve_forever)
-    http_thread.setDaemon(True)
-    http_thread.start()
+    thread = threading.Thread(target=server.serve_forever)
+    thread.setDaemon(True)
+    thread.start()
 
     if not options.record:
       platform_settings.set_traffic_shaping(
@@ -106,8 +116,8 @@ def main(options, replay_file):
   finally:
     logging.info('Shutting down.')
     dns_server.cleanup()
-    if http_server:
-      http_server.cleanup()
+    if server:
+      server.cleanup()
     if not options.record:
       platform_settings.restore_traffic_shaping()
 
@@ -128,6 +138,10 @@ if __name__ == '__main__':
       description=description,
       epilog='http://code.google.com/p/web-page-replay/')
 
+
+  option_parser.add_option('-s', '--spdy', default=False,
+      action='store_true',
+      help='Use spdy to replay relay_file.')
   option_parser.add_option('-r', '--record', default=False,
       action='store_true',
       help='Download real responses and record them to replay_file')
