@@ -43,7 +43,6 @@ import httpproxy
 import logging
 import optparse
 import platformsettings
-import replayspdyserver
 import socket
 import sys
 import threading
@@ -88,6 +87,10 @@ def main(options, replay_file):
       server = httpproxy.RecordHttpProxyServer(
           replay_file, options.deterministic_script, dns_server.real_dns_lookup)
     elif options.spdy:
+      # Delay the import of replayspdyserver. Otherwise, the loggings in
+      # thirdparty/nbhttp will conflict with the settings in replay.py and
+      # as a result, no info and debug logs will be printed out.
+      import replayspdyserver
       if options.deterministic_script:
         logging.warning('--deterministic_script will be ingored for spdy.')
       server = replayspdyserver.ReplaySpdyServer(replay_file)
@@ -204,5 +207,6 @@ if __name__ == '__main__':
     fh = logging.FileHandler(options.log_file)
     fh.setLevel(log_level)
     logging.getLogger('').addHandler(fh)
+
 
   sys.exit(main(options, args[0]))
