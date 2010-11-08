@@ -218,7 +218,10 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
              "Need permissions to write archive file"
 
   def cleanup(self):
-    self.shutdown()
+    try:
+      self.shutdown()
+    except KeyboardInterrupt, e:
+      pass
     logging.info('Stopped Record HTTP server')
     self.http_archive.Persist(self.archive_filename)
     logging.info('Saved %d responses to %s',
@@ -248,5 +251,8 @@ class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
     logging.info('Replaying on %s:%s...', host, port)
 
   def cleanup(self):
-    self.shutdown()
+    try:
+      self.shutdown()
+    except KeyboardInterrupt, e:
+      pass
     logging.info('Stopped HTTP server')
