@@ -49,6 +49,7 @@ class PlatformSettings(object):
     self.pipe_set = '5'         # We configure our rules on IPFW set #5.
 
   def set_traffic_shaping(self,
+                          do_dns_shaping = False,
                           up_bandwidth = '0',
                           down_bandwidth = '0',
                           delay_ms = '0',
@@ -76,19 +77,20 @@ class PlatformSettings(object):
       delay_ms = str(int(delay_ms) / 2)
 
       # Configure DNS shaping.
-      self._ipfw([
-          'pipe', dns_pipe,
-          'config',
-          'bw', '0',
-          'delay', delay_ms,
-          'plr', packet_loss_rate
-      ])
-      self._ipfw(['add', self.pipe_set,
-                  'pipe', dns_pipe,
-                  'udp',
-                  'from', 'any',
-                  'to', '127.0.0.1',
-                  'dst-port', '53'])
+      if do_dns_shaping:
+        self._ipfw([
+            'pipe', dns_pipe,
+            'config',
+            'bw', '0',
+            'delay', delay_ms,
+            'plr', packet_loss_rate
+        ])
+        self._ipfw(['add', self.pipe_set,
+                    'pipe', dns_pipe,
+                    'udp',
+                    'from', 'any',
+                    'to', '127.0.0.1',
+                    'dst-port', '53'])
 
       # Configure upload shaping.
       self._ipfw([

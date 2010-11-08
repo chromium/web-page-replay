@@ -54,6 +54,19 @@ if sys.version < '2.6':
   print 'Need Python 2.6 or greater.'
   sys.exit(1)
 
+def RunDNSServer():
+  try:
+    dns_server = dnsproxy.DnsProxyServer(
+        is_private_passthrough=options.dns_private_passthrough)
+    dns_thread = threading.Thread(target=dns_server.serve_forever)
+    dns_thread.setDaemon(True)
+    dns_thread.start()
+    return dns_server
+  except dnsproxy.PermissionDenied, e:
+    logging.critical('Unable to bind to DNS port.\n%s' % e)
+  except platformsettings.PlatformSettingsError, e:
+    logging.critical('Unable to change primary DNS server.\n%s' % e)
+  return None
 
 def main(options, replay_file):
   # Verify correct flags are passed in.
@@ -62,18 +75,10 @@ def main(options, replay_file):
     return
 
   platform_settings = platformsettings.get_platform_settings()
-  try:
-    dns_server = dnsproxy.DnsProxyServer(
-        is_private_passthrough=options.dns_private_passthrough)
-  except dnsproxy.PermissionDenied, e:
-    logging.critical('Unable to bind to DNS port.\n%s' % e)
-    return
-  except platformsettings.PlatformSettingsError, e:
-    logging.critical('Unable to change primary DNS server.\n%s' % e)
-    return
-  dns_thread = threading.Thread(target=dns_server.serve_forever)
-  dns_thread.setDaemon(True)
-  dns_thread.start()
+
+  dns_server = None
+  if not options.skip_dns_server:
+    dns_server = RunDNSServer()
 
   try:
     # TODO: Because of python's Global Interpreter Lock (GIL), the threads
@@ -102,7 +107,7 @@ def main(options, replay_file):
 
     if not options.record:
       platform_settings.set_traffic_shaping(
-          options.up, options.down, options.delay_ms, options.packet_loss_rate)
+          not options.skip_dns_server, options.up, options.down, options.delay_ms, options.packet_loss_rate)
 
     start = time.time()
     while not options.time_limit or time.time() - start < options.time_limit:
@@ -117,7 +122,8 @@ def main(options, replay_file):
     print traceback.format_exc()
   finally:
     logging.info('Shutting down.')
-    dns_server.cleanup()
+    if dns_server:
+      dns_server.cleanup()
     if server:
       server.cleanup()
     if not options.record:
@@ -192,6 +198,9 @@ if __name__ == '__main__':
       help='Don\'t forward DNS requests that resolve to private network '
            'addresses. CAUTION: With the option important services like '
            'Kerberos will resolve to the HTTP proxy address.')
+  network_group.add_option('-x', '--skip_dns_server', default=False,
+      action='store_true',
+      help='Do not intercept DNS queries.')
 
   option_parser.add_option_group(network_group)
 
