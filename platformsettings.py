@@ -123,7 +123,7 @@ class PlatformSettings(object):
       logging.info('Started shaping traffic')
       self.is_traffic_shaping = True
     except Exception, e:
-      logging.critical("Traffic Shaping Exception ", e)
+      logging.critical("Traffic Shaping Exception: %s ", e)
       raise TrafficShapingError()
 
   def restore_traffic_shaping(self):
