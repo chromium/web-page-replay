@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import daemonserver
 import logging
 import httparchive
 import os
@@ -27,8 +28,10 @@ CONTENT_LENGTH = 'content-length'
 STATUS = 'status'
 VERSION = 'version'
 
-class ReplaySpdyServer:
-  def __init__(self, http_archive_filename, host='127.0.0.1', port=80):
+class ReplaySpdyServer(daemonserver.DaemonServer):
+  def __init__(
+      self, http_archive_filename, use_deterministic_script, real_dns_lookup,
+      host='localhost', port=80):
     #TODO(lzheng): figure out how to get the log level from main.
     self.log = logging.getLogger('ReplaySpdyServer')
     self.log.setLevel(logging.INFO)

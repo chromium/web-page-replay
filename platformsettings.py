@@ -37,108 +37,9 @@ class DnsUpdateError(PlatformSettingsError):
   pass
 
 
-class TrafficShapingError(PlatformSettingsError):
-  """Raised when unable to shape traffic."""
-  pass
-
-
 class PlatformSettings(object):
   def __init__(self):
     self.original_primary_dns = None
-    self.is_traffic_shaping = False
-    self.pipe_set = '5'         # We configure our rules on IPFW set #5.
-
-  def set_traffic_shaping(self,
-                          shape_dns,
-                          up_bandwidth = '0',
-                          down_bandwidth = '0',
-                          delay_ms = '0',
-                          packet_loss_rate = '0'):
-    """Start shaping traffic.
-
-    Args:
-      shape_dns: Iff true, delay_ms and packet_loss_rate will also apply to DNS
-           traffic.
-      up_bandwidth: Upload bandwidth
-      down_bandwidth: Download bandwidth
-           Bandwidths measured in [K|M]{bit/s|Byte/s}. '0' means unlimited.
-      delay_ms: Propagation delay in milliseconds. '0' means no delay.
-      packet_loss_rate: Packet loss rate in range [0..1]. '0' means no loss.
-    """
-    if self.is_traffic_shaping:
-      self.restore_traffic_shaping()
-    if up_bandwidth == '0' and down_bandwidth == '0' and \
-       delay_ms == '0' and packet_loss_rate == '0':
-      return
-    try:
-      upload_pipe = '1'      # The IPFW pipe for upload rules.
-      download_pipe = '2'    # The IPFW pipe for download rules.
-      dns_pipe = '3'         # The IPFW pipe for DNS.
-
-      # Distribute the delay across the uplink and downlink bandwidths evenly.
-      delay_ms = str(int(delay_ms) / 2)
-
-      # Configure DNS shaping.
-      if shape_dns:
-        self._ipfw([
-            'pipe', dns_pipe,
-            'config',
-            'bw', '0',
-            'delay', delay_ms,
-            'plr', packet_loss_rate
-        ])
-        self._ipfw(['add', self.pipe_set,
-                    'pipe', dns_pipe,
-                    'udp',
-                    'from', 'any',
-                    'to', '127.0.0.1',
-                    'dst-port', '53'])
-
-      # Configure upload shaping.
-      self._ipfw([
-          'pipe', upload_pipe,
-          'config',
-          'bw', up_bandwidth,
-          'delay', delay_ms,
-          'plr', packet_loss_rate,
-          'queue', '4000000'
-      ])
-      self._ipfw(['add', self.pipe_set,
-                  'pipe', upload_pipe,
-                  'out',
-                  'dst-port', '80'
-      ])
-
-      # Configure download shaping.
-      self._ipfw([
-          'pipe', download_pipe,
-          'config',
-          'bw', down_bandwidth,
-          'delay', delay_ms,
-          'plr', packet_loss_rate,
-          'queue', '4000000'
-      ])
-      self._ipfw(['add', self.pipe_set,
-                  'pipe', download_pipe,
-                  'in',
-                  'src-port', '80'
-      ])
-
-      logging.info('Started shaping traffic')
-      self.is_traffic_shaping = True
-    except Exception, e:
-      logging.critical("Traffic Shaping Exception: %s ", e)
-      raise TrafficShapingError()
-
-  def restore_traffic_shaping(self):
-    if not self.is_traffic_shaping:
-      return
-    try:
-      # Delete pipe 
-      self._ipfw(['delete', self.pipe_set])
-      logging.info('Stopped shaping traffic')
-    except:
-      raise TrafficShapingError()
 
   def get_primary_dns(self):
     raise NotImplementedError()
@@ -152,12 +53,12 @@ class PlatformSettings(object):
     self.set_primary_dns(self.original_primary_dns)
     self.original_primary_dns = None
 
-  def _ipfw(self, args):
+  def ipfw(self, args):
     raise NotImplementedError()
 
 
 class PosixPlatformSettings(PlatformSettings):
-  def _ipfw(self, args):
+  def ipfw(self, args):
     subprocess.check_call(['ipfw'] + args)
 
 
@@ -308,7 +209,7 @@ Next
 
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
-  def _ipfw(self, args):
+  def ipfw(self, args):
     subprocess.check_call([r'third_party\ipfw_win32\ipfw.exe'] + args)
 
 
@@ -324,4 +225,4 @@ def get_platform_settings():
       return WindowsXpPlatformSettings()
     else:
       return WindowsPlatformSettings()
-  raise NotImplementedError('Sorry, %s %s is not supported.', (system, release))
+  raise NotImplementedError('Sorry %s %s is not supported.' % (system, release))

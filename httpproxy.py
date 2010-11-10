@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import BaseHTTPServer
+import daemonserver
 import httparchive
 import httplib
 import logging
@@ -185,7 +186,8 @@ class ReplayHandler(HttpArchiveHandler):
 # TODO: Need to start up on both 80 for http and 443 for https.
 
 class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
-                            BaseHTTPServer.HTTPServer):
+                            BaseHTTPServer.HTTPServer,
+                            daemonserver.DaemonServer):
   def __init__(
       self, http_archive_filename, use_deterministic_script, real_dns_lookup,
       host='localhost', port=80):
@@ -229,9 +231,11 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
 
 
 class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
-                            BaseHTTPServer.HTTPServer):
-  def __init__(self, http_archive_filename, use_deterministic_script,
-               host='localhost', port=80):
+                            BaseHTTPServer.HTTPServer,
+                            daemonserver.DaemonServer):
+  def __init__(
+      self, http_archive_filename, use_deterministic_script, real_dns_lookup,
+      host='localhost', port=80):
     self.use_deterministic_script = use_deterministic_script
     self.http_archive = httparchive.HttpArchive.Create(http_archive_filename)
     logging.info('Loaded %d responses from %s',

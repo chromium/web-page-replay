@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import daemonserver
 import errno
 import logging
 import platformsettings
@@ -23,10 +24,8 @@ import third_party
 import dns.resolver
 import ipaddr
 
-class DnsProxyError(Exception):
-  pass
 
-class PermissionDenied(DnsProxyError):
+class DnsProxyException(Exception):
   pass
 
 
@@ -127,13 +126,13 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
     return packet
 
 
-class DnsProxyServer(SocketServer.ThreadingUDPServer):
-  def __init__(self, host='127.0.0.1', port=53, platform_settings=None,
-               is_private_passthrough=True):
+class DnsProxyServer(SocketServer.ThreadingUDPServer,
+                     daemonserver.DaemonServer):
+  def __init__(self, forward, private_passthrough, host='127.0.0.1', port=53):
+    platform_settings = platformsettings.get_platform_settings()
     self.host = host
-    if not platform_settings:
-      platform_settings = platformsettings.get_platform_settings()
-    self.is_private_passthrough = is_private_passthrough
+    self.forward = forward
+    self.is_private_passthrough = private_passthrough
     self.real_dns_lookup = RealDnsLookup(
         name_servers=[platform_settings.get_primary_dns()])
     self.restore_primary_dns = platform_settings.restore_primary_dns
@@ -142,12 +141,15 @@ class DnsProxyServer(SocketServer.ThreadingUDPServer):
           self, (host, port), UdpDnsHandler)
     except socket.error, (error_number, msg):
       if error_number == errno.EACCES:
-        raise PermissionDenied
+        raise DnsProxyException(
+            'Unable to bind DNS server on (%s:%s)' % (host, port))
       raise
     logging.info('Started DNS server on (%s:%s)...', host, port)
-    platform_settings.set_primary_dns(host)
+    if self.forward:
+      platform_settings.set_primary_dns(host)
 
   def cleanup(self):
-    self.restore_primary_dns()
+    if self.forward:
+      self.restore_primary_dns()
     self.shutdown()
     logging.info('Shutdown DNS server')

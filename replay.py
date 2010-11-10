@@ -42,12 +42,12 @@ import dnsproxy
 import httpproxy
 import logging
 import optparse
-import platformsettings
 import socket
 import sys
 import threading
 import time
 import traceback
+import trafficshaper
 
 
 if sys.version < '2.6':
@@ -55,75 +55,40 @@ if sys.version < '2.6':
   sys.exit(1)
 
 
-def RunDNSServer():
-  try:
-    dns_server = dnsproxy.DnsProxyServer(
-        is_private_passthrough=options.dns_private_passthrough)
-    dns_thread = threading.Thread(target=dns_server.serve_forever)
-    dns_thread.setDaemon(True)
-    dns_thread.start()
-    return dns_server
-  except dnsproxy.PermissionDenied, e:
-    logging.critical('Unable to bind to DNS port.\n%s' % e)
-  except platformsettings.PlatformSettingsError, e:
-    logging.critical('Unable to change primary DNS server.\n%s' % e)
-  return None
-
-
 def main(options, replay_file):
-  platform_settings = platformsettings.get_platform_settings()
-
-  dns_server = None
-  if options.dns_forwarding:
-    dns_server = RunDNSServer()
+  if options.record:
+    replay_server_class = httpproxy.RecordHttpProxyServer
+  elif options.spdy:
+    # TODO(lzheng): move this import to the front of the file once
+    # nbhttp moves its logging config in server.py into main.
+    import replayspdyserver
+    replay_server_class = replayspdyserver.ReplaySpdyServer
+  else:
+    replay_server_class = httpproxy.ReplayHttpProxyServer
 
   try:
-    # TODO: Because of python's Global Interpreter Lock (GIL), the threads
-    # will run on the same CPU. Consider using processes instead because
-    # the components do not need to communicate with each other. On Linux,
-    # "taskset" could be used to assign each process to specific CPU/core.
-    # Of course, only bother with this if the processing speed is an issue.
-    # Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
-    server = None
-    if options.record:
-      server = httpproxy.RecordHttpProxyServer(
-          replay_file, options.deterministic_script, dns_server.real_dns_lookup)
-    elif options.spdy:
-      # TODO(lzheng): move this import to the front of the file once
-      # nbhttp moves its logging config in server.py into main.
-      import replayspdyserver
-      server = replayspdyserver.ReplaySpdyServer(replay_file)
-    else:
-      server = httpproxy.ReplayHttpProxyServer(
-          replay_file, options.deterministic_script)
-    thread = threading.Thread(target=server.serve_forever)
-    thread.setDaemon(True)
-    thread.start()
-
-    if not options.record:
-      platform_settings.set_traffic_shaping(
-          options.dns_forwarding,
-          options.up, options.down, options.delay_ms, options.packet_loss_rate)
-
-    start = time.time()
-    while not options.time_limit or time.time() - start < options.time_limit:
-      time.sleep(1)
-  except IOError, (error_number, msg):
-    logging.critical('Cannot open file: %s: %s', replay_file, msg)
-  except platformsettings.TrafficShapingError:
-    logging.critical('Unable to shape traffic.')
+    with dnsproxy.DnsProxyServer(options.dns_forwarding,
+                                 options.dns_private_passthrough) as dns_server:
+      with replay_server_class(replay_file,
+                               options.deterministic_script,
+                               dns_server.real_dns_lookup):
+        with trafficshaper.TrafficShaper(options.dns_forwarding,
+                                         options.up,
+                                         options.down,
+                                         options.delay_ms,
+                                         options.packet_loss_rate):
+          start = time.time()
+          while (not options.time_limit or
+                 time.time() - start < options.time_limit):
+            time.sleep(1)
   except KeyboardInterrupt:
-    pass
+    logging.info('Shutting down.')
+  except dnsproxy.DnsProxyException, e:
+    logging.critical(e)
+  except trafficshaper.TrafficShaperException, e:
+    logging.critical(e)
   except:
     print traceback.format_exc()
-  finally:
-    logging.info('Shutting down.')
-    if dns_server:
-      dns_server.cleanup()
-    if server:
-      server.cleanup()
-    if not options.record:
-      platform_settings.restore_traffic_shaping()
 
 
 if __name__ == '__main__':
