@@ -184,19 +184,19 @@ if __name__ == '__main__':
   harness_group = optparse.OptionGroup(option_parser,
       'Replay Harness Options',
       'These advanced options configure various aspects of the replay harness')
-  option_parser.add_option('-n', '--no-deterministic_script', default=True,
+  harness_group.add_option('-n', '--no-deterministic_script', default=True,
       action='store_false',
       dest='deterministic_script',
       help=('Don\'t inject JavaScript which makes sources of entropy such as '
             'Date() and Math.random() deterministic. CAUTION: With this option '
             'many web pages will not replay properly.'))
-  option_parser.add_option('-P', '--no-dns_private_passthrough', default=True,
+  harness_group.add_option('-P', '--no-dns_private_passthrough', default=True,
       action='store_false',
       dest='dns_private_passthrough',
       help='Don\'t forward DNS requests that resolve to private network '
            'addresses. CAUTION: With this option important services like '
            'Kerberos will resolve to the HTTP proxy address.')
-  option_parser.add_option('-x', '--no-dns_forwarding', default=True,
+  harness_group.add_option('-x', '--no-dns_forwarding', default=True,
       action='store_false',
       dest='dns_forwarding',
       help='Don\'t forward DNS requests to the local replay server.'
