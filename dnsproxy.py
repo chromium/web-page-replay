@@ -19,6 +19,7 @@ import logging
 import platformsettings
 import socket
 import SocketServer
+import threading
 
 import third_party
 import dns.resolver
@@ -33,11 +34,14 @@ class RealDnsLookup(object):
   def __init__(self, name_servers=None):
     self.resolver = dns.resolver.get_default_resolver()
     self.resolver.nameservers = name_servers or ['8.8.8.8']
-    self._cache = {}
+    self.dns_cache_lock = threading.Lock()
+    self.dns_cache = {}
 
   def __call__(self, hostname):
     try:
-      ip = self._cache.get(hostname);
+      self.dns_cache_lock.acquire()
+      ip = self.dns_cache.get(hostname);
+      self.dns_cache_lock.release()
       if ip:
         logging.debug('_real_dns_lookup(%s) cache hit! -> %s', hostname, ip)
         return ip
@@ -51,11 +55,17 @@ class RealDnsLookup(object):
       # TODO: should these exceptions be handled at the next level up?
       logging.debug('_real_dns_lookup(%s) -> None (NXDOMAIN)', hostname)
       return None
+    except dns.resolver.Timeout:
+      # TODO: should these exceptions be handled at the next level up?
+      logging.debug('_real_dns_lookup(%s) -> None (Timeout)', hostname)
+      return None
     ip = None
     if answers:
       ip = str(answers[0])
     logging.debug('_real_dns_lookup(%s) -> %s', hostname, ip)
-    self._cache[hostname] = ip
+    self.dns_cache_lock.acquire()
+    self.dns_cache[hostname] = ip
+    self.dns_cache_lock.release()
     return ip
 
 
@@ -85,7 +95,8 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
     ip = self.server.host
     if self.server.is_private_passthrough:
       real_ip = self.server.real_dns_lookup(self.domain)
-      if real_ip and ipaddr.IPv4Address(real_ip).is_private:
+      is_private = (real_ip and ipaddr.IPv4Address(real_ip).is_private)
+      if real_ip and is_private:
         ip = real_ip
     if ip == self.server.host:
       logging.debug('dnsproxy: handle(%s) -> %s', self.domain, self.server.host)
