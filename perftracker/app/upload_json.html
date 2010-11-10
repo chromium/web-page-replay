@@ -1,0 +1,94 @@
+<html>
+  <title>Manual JSON Upload</title>
+
+  <script>
+  function XHRPost(url, data, callback) {
+    var self = this;
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+    xhr.send(data);
+
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState == 4) {
+        callback(xhr.responseText);
+      }
+    }
+  }
+
+  function TestResultSubmitter() {
+    var raw_json_data = document.getElementById("json").value;
+    var download_bandwidth_kbps = document.getElementsByName("download_bandwidth_kbps")[0].value;
+    var upload_bandwidth_kbps = document.getElementsByName("upload_bandwidth_kbps")[0].value;
+    var round_trip_time = document.getElementsByName("round_trip_time")[0].value;
+    var packet_loss_rate = document.getElementsByName("packet_loss_rate")[0].value;
+    var notes  = document.getElementsByName("notes")[0].value;
+
+    var json_data = JSON.parse(raw_json_data);
+
+    // Post a single result
+    function PostResult(test_id, obj, index) {
+      var iterations = obj.iterations;
+      var data = "";
+      data += "test_id=" + test_id;
+      data += "&url=" + obj.url;
+      data += "&using_spdy=" + (obj.viaSpdy ? "CHECKED" : "");
+      data += "&start_load_time=" + obj.startLoadResults[index];
+      data += "&commit_load_time=" + obj.commitLoadResults[index];
+      data += "&doc_load_time=" + obj.docLoadResults[index];
+      data += "&paint_time=" + obj.paintResults[index];
+      data += "&total_time=" + obj.totalResults[index];
+      data += "&num_requests=" + Math.floor(obj.requests / iterations);
+      data += "&num_connects=" + Math.floor(obj.connects / iterations);
+      data += "&num_sessions=" + Math.floor(obj.spdySessions / iterations);
+      data += "&read_bytes_kb=" + Math.floor(obj.readKB / iterations);
+      data += "&write_bytes_kb=" + Math.floor(obj.writeKB / iterations);
+
+      new XHRPost("/create_test_result", data, function() {});
+    }
+
+    this.test_created_callback = function (result) {
+      // TODO(mbelshe): verify the result is a valid test_id?
+
+      // Iterate the test results in the JSON
+      for (var i = 0; i < json_data.data.length; i++) {
+        var obj = json_data.data[i];
+        for (var j = 0; j < obj.iterations; j++) {
+          PostResult(result, obj, j);
+        }
+      }
+    }
+
+    this.start = function() {
+      var data = "";
+      data += "download_bandwidth_kbps=" + download_bandwidth_kbps;
+      data += "&upload_bandwidth_kbps=" + upload_bandwidth_kbps;
+      data += "&round_trip_time=" + round_trip_time;
+      data += "&packet_loss_rate=" + packet_loss_rate;
+      data += "&notes=" + notes;
+
+      var test_create = new XHRPost("/create_test_suite", data, this.test_created_callback);
+    }
+
+  }
+
+  function upload() {
+    var submitter = new TestResultSubmitter();
+    submitter.start();
+  }
+  </script>
+
+  <body>
+    <form onsubmit="upload(); return false;">
+      <div>Download speed:<input name="download_bandwidth_kbps" type="text" value=""></div>
+      <div>Upload Speed:<input name="upload_bandwidth_kbps" type="text" value=""></div>
+      <div>RTT:<input name="round_trip_time" type="text" value=""></div>
+      <div>Pkt Loss:<input name="packet_loss_rate" type="text" value=""></div>
+
+      <div>Notes:<textarea name="notes" rows="3" cols="60"></textarea></div>
+   
+      <div>JSON Data:<textarea id="json" name="json" rows="3" cols="60"></textarea></div>
+      <div><input type="submit" value="Submit" onclick="upload(); return false;"></div>
+    </form>
+  </body>
+</html>

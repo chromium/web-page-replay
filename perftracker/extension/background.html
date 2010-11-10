@@ -1,0 +1,462 @@
+<script type="text/javascript" src="server.js"></script>
+
+<script>
+// Configuration and results are stored globally.
+window.iterations = 10;
+window.interval = 200;
+window.clearConnections = true;
+window.clearCache = true;
+window.enableSpdy = false;
+window.windowId = 0;
+window.submitter;
+
+// This is to be provided by the benchmark starter
+window.benchmarkConfiguration = {};
+
+// Constant StatCounter Names
+var kTCPReadBytes = "tcp.read_bytes";
+var kTCPWriteBytes = "tcp.write_bytes";
+var kRequestCount = "HttpNetworkTransaction.Count";
+var kConnectCount = "tcp.connect";
+var kSpdySessionCount = "spdy.sessions";
+
+// The list of currently running benchmarks
+var benchmarks = new Array();
+var benchmarkIndex = 0;
+var benchmarkWindow = 0;
+
+// Close all open tabs
+function closeAllTabs() {
+  chrome.tabs.getAllInWindow(null, function(tabs) {
+    tabs.forEach(function(tab) {
+      chrome.tabs.remove(tab.id);
+    });
+  });
+}
+
+function addBenchmark(benchmark) {
+  benchmarks.push(benchmark);
+  benchmarkIndex = 0;  // Reset the counter when adding benchmarks.
+}
+
+// Array Remove - By John Resig (MIT Licensed)
+Array.prototype.remove = function(from, to) {
+  var rest = this.slice((to || from) + 1 || this.length);
+  this.length = from < 0 ? this.length + from : from;
+  return this.push.apply(this, rest);
+};
+
+function removeBenchmark(benchmark) {
+  var index;
+  for (var index = 0; index < benchmarks.length; ++index) {
+    if (benchmarks[index] == benchmark) {
+      break;
+    }
+  }
+  benchmarks.remove(index);
+
+  // Preserve index ordering when removing from the list.
+  if (index <= benchmarkIndex) {
+    benchmarkIndex--;  // Note:  it is okay to drop to -1 here.
+  }
+}
+
+function benchmarkStillRunning() {
+  for (var index = 0; index < benchmarks.length; ++index) {
+    if (benchmarks[index].isRunning()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function findBenchmark(url) {
+  for (var index = 0; index < benchmarks.length; ++index) {
+    // One common redirection case: if the url ends without a slash and refers
+    // to a directory, it actually would be redirected to the correct one 
+    // (with a slash). In this case, the url returned by the JS and the one
+    // stored locally do not match. 
+    if ((benchmarks[index].url() == url) || 
+        (benchmarks[index].url() + '/' == url)) {
+      return benchmarks[index];
+    }
+  }
+  return undefined;
+}
+
+function currentBenchmark() {
+  return benchmarks[benchmarkIndex];
+}
+
+function nextBenchmark() {
+  benchmarkIndex = (benchmarkIndex + 1) % benchmarks.length;
+  return benchmarks[benchmarkIndex];
+}
+
+function Benchmark(url) {
+  var runCount_ = 0;
+  var count_;
+  var totalTime_;
+  var me_ = this;
+  var current_;
+  var initialRequestCount_;
+  var initialReadBytes_;
+  var initialWriteBytes_;
+
+  console.log("Benchmark testing url: " + url);
+  runCount_ = window.iterations;
+  count_ = 0;
+  totalTime_ = 0;
+  current_ = {};
+  current_.url = url;
+  current_.results = new Array();
+  current_.iterations = 0;
+  current_.viaSpdy = false;
+  current_.startLoadResults = new Array();  // times to start
+  current_.commitLoadResults = new Array();  // times to commit
+  current_.docLoadResults = new Array();  // times to docload
+  current_.paintResults = new Array();    // times to paint
+  current_.totalResults = new Array();    // times to complete load
+  current_.KbytesRead = new Array();
+  current_.KbytesWritten = new Array();
+  current_.readbpsResults = new Array();
+  current_.writebpsResults = new Array(); 
+  current_.requests = new Array();
+  current_.connects = new Array();
+  current_.spdySessions = new Array();
+
+  // Add this benchmark to the list of benchmarks running.
+  addBenchmark(this);
+
+  // Is the benchmark currently in progress.
+  this.isRunning = function() {
+    return runCount_ > 0;
+  }
+
+  // The url which this benchmark is running.
+  this.url = function() { return current_.url; }
+
+  // Called when the test run completes.
+  this.finish = function() {
+    console.log("running finish for: " + me_.url());
+    if (runCount_ == 0) {
+      removeBenchmark(this);
+    }
+
+    // If we're the last benchmark, close the window.
+    if (benchmarks.length == 0) {
+      console.log("removing benchmark window: " + benchmarkWindow.id);
+      chrome.tabs.remove(benchmarkWindow.id);
+      benchmarkWindow = 0;
+      closeAllTabs();
+    } else {
+      // Move on to next benchmarked pages.
+      setTimeout(me_.runPage, 100);
+    }
+  }
+
+  // Called before starting a page load.
+  this.pageStart = function() {
+    initialReadBytes_ = chrome.benchmarking.counter(kTCPReadBytes);
+    initialWriteBytes_ = chrome.benchmarking.counter(kTCPWriteBytes);
+    initialRequestCount_ = chrome.benchmarking.counter(kRequestCount);
+    initialConnectCount_ = chrome.benchmarking.counter(kConnectCount);
+    initialSpdySessionCount_ = chrome.benchmarking.counter(kSpdySessionCount);
+  }
+
+  this.openNextPage = function() {
+    console.log("openNextPage called");
+    var benchmark = nextBenchmark();
+    benchmark.pageStart();
+    chrome.tabs.create({"url": benchmark.url(),"selected": true},
+                       function(tab) {
+                         benchmarkWindow = tab;
+                         console.log("created benchmark window: " + benchmarkWindow.id);
+                         // script.js only executes on tested pages
+                         // not the ones opened by the user.
+                         chrome.tabs.executeScript(tab.id, {file: "script.js"});
+                         console.log("should have injected?: " + benchmarkWindow.id);
+                        });
+  }
+
+  this.prepareToOpenPage = function() {
+    console.log("prepareToOpenPage called");
+    // After the previous page is closed, this function will apply
+    // any settings needed to prepare for opening a new page.
+    // Note: the previous page must be closed, otherwie, the cache
+    // clearing and connection clearing may not be thorough.
+
+    if (window.clearCache) {
+      chrome.benchmarking.clearCache();
+    }
+
+    if (window.clearConnections) {
+      chrome.benchmarking.closeConnections();
+    }
+
+    if (window.enableSpdy) {
+      chrome.benchmarking.enableSpdy(true);
+    } else {
+      chrome.benchmarking.enableSpdy(false);
+    }
+
+    // Go back to the browser so that tasks can run.
+    setTimeout(me_.openNextPage, window.interval);
+  }
+
+  this.closePage = function() {
+    console.log("closing benchmark window: " + benchmarkWindow.id);
+    var tab_id = benchmarkWindow.id;
+    benchmarkWindow = 0;
+    chrome.tabs.remove(tab_id, function() {
+      me_.prepareToOpenPage();
+    });
+  }
+
+  // Run a single page in the benchmark
+  this.runPage = function() {
+    if (benchmarkWindow) {
+      console.log("runpage should close window: " + benchmarkWindow.id);
+      // To avoid the error "Error during tabs.remove: No tab with id xx"
+      // while debugging, due to user manually closing the benchmark tab.  
+      chrome.tabs.getAllInWindow(null, function(all) {
+        console.log("enumerating " + all.length + " windows");
+        for (var i = 0; i < all.length; i++) {
+          if (all[i].id == benchmarkWindow.id) {
+             console.log("found it");
+             me_.closePage();
+             return;
+          }; 
+        };
+        console.log("runpage missed");
+        me_.prepareToOpenPage();
+      });
+    } else {
+      me_.prepareToOpenPage();
+    }
+  }
+
+  // Called when a page finishes loading.
+  this.pageFinished = function(load_times) {
+   
+     // Make sure the content can be fetched via spdy if it is enabled.
+    if (window.enableSpdy && !load_times.wasFetchedViaSpdy) {
+      alert("Can not fetch current url via spdy.\n" +
+            "Ending current test.");
+      runCount_ = 0;  // Stop running this test.
+      me_.finish();
+      return;
+    }
+
+    // If last fetch was via spdy, current fetch should use spdy too. Same
+    // for vise versa.
+    if (current_.iterations > 0 &&
+        current_.viaSpdy != load_times.wasFetchedViaSpdy) {
+      alert("Error: viaSpdy for current fetch is different from last fetch!\n" +
+            "Ending current test.");
+      runCount_ = 0;  // Stop running this test.
+      me_.finish();
+      return;
+    }
+ 
+    var requested = load_times.requestTime;
+    var started = load_times.startLoadTime;
+    var startLoadTime =
+        Math.round((load_times.startLoadTime - requested) * 1000.0);
+    var commitLoadTime =
+        Math.round((load_times.commitLoadTime - started) * 1000.0);
+    var docLoadTime =
+        Math.round((load_times.finishDocumentLoadTime - started) * 1000.0);
+    var paintTime =
+        Math.round((load_times.firstPaintTime - started) * 1000.0);
+    var totalTime =
+        Math.round((load_times.finishLoadTime - started) * 1000.0);
+    var firstPaintAfterLoadTime =
+        Math.round((load_times.firstPaintAfterLoadTime - started) * 1000.0);
+
+    if (paintTime < 0) {
+      // If the user navigates away from the test while it is running,
+      // paint may not occur.  Also, some lightweight pages, such as the
+      // google home page, never trigger a paint measurement via the chrome
+      // page load timer.
+      // In this case, the time-to-first paint is effectively the same as the
+      // time to onLoad().
+      paintTime = totalTime;
+    }
+
+    // For our toolbar counters
+    totalTime_ += totalTime;
+    count_++;
+
+    current_.viaSpdy = load_times.wasFetchedViaSpdy;
+    current_.iterations++;
+
+    // Record the individual result
+    var result = {};
+    result.url = current_.url;
+    result.viaSpdy = load_times.wasFetchedViaSpdy;
+    result.startLoadTime = startLoadTime;
+    result.commitLoadTime = commitLoadTime;
+    result.docLoadTime = docLoadTime;
+    result.paintTime = paintTime;
+    result.totalTime = totalTime;
+    var bytesRead = chrome.benchmarking.counter(kTCPReadBytes) -
+                                                initialReadBytes_;
+    var bytesWrite = chrome.benchmarking.counter(kTCPWriteBytes) - 
+                                                 initialWriteBytes_;
+    result.readKB = bytesRead / 1024;
+    result.writeKB = bytesWrite / 1024;
+    result.requests = chrome.benchmarking.counter(kRequestCount) -
+                       initialRequestCount_;
+    result.connects = chrome.benchmarking.counter(kConnectCount) -
+                       initialConnectCount_;
+    result.spdySessions = chrome.benchmarking.counter(kSpdySessionCount) -
+                           initialSpdySessionCount_;
+
+
+    // Record the aggregate result.
+    current_.viaSpdy = load_times.wasFetchedViaSpdy;
+    current_.iterations++;
+    current_.startLoadResults.push(startLoadTime);
+    current_.commitLoadResults.push(commitLoadTime);
+    current_.docLoadResults.push(docLoadTime);
+    current_.paintResults.push(paintTime);
+    current_.totalResults.push(totalTime);
+    current_.KbytesRead.push(bytesRead / 1024);
+    current_.KbytesWritten.push(bytesWrite / 1024);
+    current_.requests.push(chrome.benchmarking.counter(kRequestCount) -
+                         initialRequestCount_);
+    current_.connects.push(chrome.benchmarking.counter(kConnectCount) -
+                         initialConnectCount_);
+    current_.spdySessions.push(chrome.benchmarking.counter(kSpdySessionCount) -
+                         initialSpdySessionCount_);
+
+    // Submit the result.
+    window.submitter.PostResult(result, function() {
+      console.log("Posted result");
+      runCount_--;
+      if (runCount_ == 0) {
+        window.submitter.PostRollup(current_, function() {
+          console.log("Posted rollup");
+          me_.finish();
+        });
+      } else {
+        me_.finish();
+      }
+    });
+  }
+}
+
+var last_heartbeat = new Date();
+var kHeartbeatCheckIntervalMs = 2000;  // Check every 2s.
+var kHeartbeatTimeoutMs = 10000;   // After 10s, assume the page is hosed.
+
+setInterval(function() {
+  var interval = new Date() - last_heartbeat;
+  console.log("Heartbeat check: " + interval);
+  if (interval > kHeartbeatTimeoutMs) {
+    var current_benchmark = currentBenchmark();
+    console.log("Page is taking too long.  Killing it: " + current_benchmark.url());
+    console.log("benchmarkIndex: " + benchmarkIndex);
+    console.log("num benchmarks: " + benchmarks.length);
+    current_benchmark.runCount_ = 0;
+    current_benchmark.finish();
+    last_heartbeat = new Date();  // reset the timer.
+  }
+}, kHeartbeatCheckIntervalMs);
+
+chrome.extension.onConnect.addListener(function(port) {
+  port.onMessage.addListener(function(data) {
+    if (data.message == "start") {
+      window.benchmarkConfiguration = data.benchmark;
+      window.submitter = new TestResultSubmitter(benchmarkConfiguration);
+      window.submitter.CreateTest(function() { run(); });
+      return;
+    }
+
+    if (data.message == "heartbeat") {
+      var timestamp = new Date();
+      console.log("Received heartbeat: " + (timestamp - last_heartbeat));
+      last_heartbeat = timestamp;
+    }
+
+    if (data.message == "load") {
+      var benchmark = findBenchmark(data.url);
+      if (benchmark == undefined && benchmarkStillRunning()) {
+        alert("Error: Loaded url(" + data.url + ") is not the same as what " +
+              "you set in url box. This could happen if the request is " +
+              "redirected. Please use the redirected url for testing.");
+        // Stop the test here.
+        benchmarks = [];
+      }
+      if (benchmark != undefined && benchmark.isRunning()) {
+        benchmark.pageFinished(data.values);
+      }
+    }
+  });
+});
+
+function run() {
+  window.iterations = benchmarkConfiguration.iterations;
+  window.enableSpdy = benchmarkConfiguration.use_spdy;
+
+  if (window.clearCache) {
+    // Show a warning if we will try to clear the cache between runs
+    // but will also be reusing the same WebKit instance (i.e. Chrome
+    // is in single-process mode) because the WebKit cache might not get
+    // completely cleared between runs.
+    if (chrome.benchmarking.isSingleProcess()) {
+      alert("Warning: the WebKit cache may not be cleared correctly " +
+            "between runs because Chrome is running in single-process mode.");
+    }
+  }
+
+  benchmarks = [];
+  var urls = benchmarkConfiguration.urls;
+  for (var i = 0; i < urls.length; i++) {
+    // Remove extra space at the beginning or end of a url.
+    urls[i] = removeSpace(urls[i]);
+
+    // Alert about and ignore blank page which does not get loaded. 
+    if (urls[i] == "about:blank") {
+      alert("blank page loaded!");
+    } else if (!checkScheme(urls[i])) {
+      // Alert about url that is not in scheme http:// or https://.
+      alert(urls[i] + " does not start with http:// or https://.");
+    } else {  
+      var benchmark = new Benchmark(urls[i]);
+    }
+  }
+  benchmarks[0].runPage();
+}
+
+// Remove extra whitespace in the beginning or end of a url string.
+function removeSpace(url) {
+  var tempUrl = url;
+  while (tempUrl.charAt(tempUrl.length-1) == " ") {
+    tempUrl = tempUrl.substring(0, tempUrl.length-1);
+  };
+  while (tempUrl.charAt(0) == " ") {
+    tempUrl = tempUrl.substring(1, tempUrl.length);
+  };
+  return tempUrl;
+}
+
+// Check whether a Url starts with http:// or https://.
+function checkScheme(url) {
+  var httpStr = "http://";
+  var httpsStr = "https://";
+  var urlSubStr1 = url.substring(0, httpStr.length);
+  var urlSubStr2 = url.substring(0, httpsStr.length);
+  
+  if ( (urlSubStr1 == httpStr) || (urlSubStr2 == httpsStr) ) {
+    return true;
+  } 
+  return false; 
+}
+
+// Run at startup
+chrome.windows.getCurrent(function(currentWindow) {
+  window.windowId = currentWindow.id;
+});
+</script>

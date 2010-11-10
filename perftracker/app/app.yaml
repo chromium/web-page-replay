@@ -1,0 +1,27 @@
+application: perftracker
+version: 3
+runtime: python
+api_version: 1
+default_expiration: "1d"
+
+builtins:
+- datastore_admin: on
+
+handlers:
+- url: /
+  static_files: main.html
+  upload: main.html
+- url: /suite
+  static_files: suite.html
+  upload: suite.html
+- url: /rollup
+  static_files: rollup.html
+  upload: rollup.html
+- url: /scripts
+  static_dir: scripts
+- url: /styles
+  static_dir: styles
+- url: /jst
+  static_dir: jst
+- url: /.*
+  script: main.py

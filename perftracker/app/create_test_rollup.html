@@ -1,0 +1,34 @@
+<html>
+  <title>Test Rollup Upload</title>
+
+  <body>
+    <form action="/test_rollup" method="post">
+      <div>Test Id:
+        <select name="test_id">
+          {% for test in tests %}
+          <option value="{{test.key}}">{{ test.date }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>URL:<input name="url" type="text" value="http://"></div>
+
+      <div>Iterations:<input name="iterations" type="text"></div>
+
+      <div>Using SPDY:<input name="using_spdy" type="checkbox" value="CHECKED"></div>
+      <div>Start Load Time:<input name="start_load_time" type="text" value=""></div>
+      <div>Commit load Time:<input name="commit_load_time" type="text" value=""></div>
+      <div>Doc Load Time:<input name="doc_load_time" type="text" value=""></div>
+      <div>Paint Time:<input name="paint_time" type="text" value=""></div>
+      <div>Total Time:<input name="total_time" type="text" value=""></div>
+      <div>Total Time Stderr:<input name="total_time_stddev" type="text" value=""></div>
+      <div>Num Requests:<input name="num_requests" type="text" value=""></div>
+      <div>Num Connects:<input name="num_connects" type="text" value=""></div>
+      <div>Num Sessions:<input name="num_sessions" type="text" value=""></div>
+      <div>Read Kbps:<input name="read_bytes_kb" type="text" value=""></div>
+      <div>Write Kbps:<input name="write_bytes_kb" type="text" value=""></div>
+   
+      <div><input type="submit" value="Create Test Rollup"></div>
+    </form>
+  </body>
+</html>

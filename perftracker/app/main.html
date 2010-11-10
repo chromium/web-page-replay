@@ -1,0 +1,183 @@
+<html>
+  <head>
+  <title>Chromium Perf Tracker</title>
+  <link rel="stylesheet" href="styles/style.css">
+  <script src="scripts/util.js"></script>
+  <script src="jst/util.js" type="text/javascript"></script>
+  <script src="jst/jsevalcontext.js" type="text/javascript"></script>
+  <script src="jst/jstemplate.js" type="text/javascript"></script>
+  </head>
+
+  <body onLoad="loadData()">
+    <h1><div id="header">Chromium Page Tracker Summary</div></h1>
+
+    <script>
+    // Initialize the select filter data
+    var data = {};
+    data.platforms = [];
+    data.versions = [];
+    data.download_bandwidths = [];
+    data.upload_bandwidths = [];
+    data.round_trip_times = [];
+    data.packet_loss_rates = [];
+    data.urls = [];
+
+    // We create set of filters on the page for drilling into the
+    // data.  We do this by looking at all the values we've seen.
+    function loadQueryFieldData() {
+      for (var i = 0; i < data.results.length; ++i) {
+         var obj = data.results[i];
+         data.platforms.push_unique(obj.platform);
+         data.versions.push_unique(obj.version);
+         data.download_bandwidths.push_unique(obj.download_bandwidth_kbps);
+         data.upload_bandwidths.push_unique(obj.upload_bandwidth_kbps);
+         data.round_trip_times.push_unique(obj.round_trip_time_ms);
+         data.packet_loss_rates.push_unique(obj.packet_loss_rate);
+         data.urls.push_unique(obj.url);
+      }
+      data.urls.sort();
+      data.round_trip_times.sort();
+    }
+
+    // Utility function to grab the value of a select element.
+    function selectValue(id) {
+      var elt = document.getElementById(id);
+      return elt[elt.selectedIndex];
+    }
+
+    // Given the current set of filters, construct the URL appropriately.
+    function applyFilterToUrl(url, name) {
+      var val = selectValue(name).value;
+      if (val != undefined && val.length > 0) {
+        url += "&" + name + "=" + val;
+      }
+      return url;
+    }
+
+    // Sets the selected index to the right index for |value|, or 0.
+    //function setSelectedIndex(id, queryString) {
+    //  var elt = document.getElementById(id);
+    //  elt.selectedIndex = 0;
+    //  var value = queryString[id];
+    //  if (value == undefined || value.length == "") {
+    //    return;
+    //  }
+    //  var options = elt.options;
+    //  for (var i = 0; i < options.length; i++) {
+    //    if (options[i].value == value) {
+    //      elt.selectedIndex = i;
+    //      return;
+    //    }
+    //  }
+    //}
+
+    // Given a URL, make sure the filters are selected properly.
+    //function applyUrlToFilters() {
+    //  var queryString = location.queryString();
+    //  setSelectedIndex("rtt_filter", queryString)
+    //  setSelectedIndex("url_filter", queryString)
+    //}
+
+    function loadData() {
+      var url = "/json?type=rollup";
+      url = applyFilterToUrl(url, "rtt_filter");
+      url = applyFilterToUrl(url, "url_filter");
+
+      new XHRGet(url, function(result) {
+        data.results = JSON.parse(result);
+        loadQueryFieldData(data);
+        var context = new JsEvalContext(data);
+        var template = document.getElementById("template");
+        jstProcess(context, template);
+        //applyUrlToFilters();
+      });
+    }
+
+    function filterChanged() {
+      loadData();
+    }
+    </script>
+
+    <div id="template">
+      <div id="filter">
+      <table class="sortable">
+        <tr>
+          <td>Platform</td>
+          <td>Version</td>
+          <td>Download</td>
+          <td>Upload</td>
+          <td>RTT</td>
+          <td>PktLoss</td>
+          <td>URL</td>
+        </tr>
+        <tr>
+        <td>
+          <select id="platform_filter" onchange="filterChanged()">
+            <option selected></option>
+            <option jsselect="platforms" jscontent="$this"></option>
+          </select>
+        </td>
+        <td>
+          <select id="version_filter" onchange="filterChanged()">
+            <option selected></option>
+            <option jsselect="versions" jscontent="$this"></option>
+          </select>
+        </td>
+        <td><select id="download_filter" onchange="filterChanged()">
+            <option selected></option>
+            <option jsselect="download_bandwidths" jscontent="$this"></option>
+          </select>
+        </td>
+        <td>
+            <select id="upload_filter" onchange="filterChanged()">
+            <option selected></option>
+            <option jsselect="upload_bandwidths" jscontent="$this"></option>
+          </select>
+        </td>
+        <td>
+            <select id="rtt_filter" onchange="filterChanged()">
+            <option selected></option>
+            <option jsselect="round_trip_times" jscontent="$this"></option>
+          </select>
+        </td>
+        <td>
+            <select id="pkt_loss_rate_filter" onchange="filterChanged()">
+            <option selected></option>
+            <option jsselect="packet_loss_rates" jscontent="$this"></option>
+          </select>
+        </td>
+        <td>
+            <select id="url_filter" onchange="filterChanged()">
+            <option selected></option>
+            <option jsselect="urls" jscontent="$this"></option>
+          </select>
+        </td>
+        </tr>
+      </div>
+
+      <table class="sortable">
+      <tr>
+        <th>Date</th>
+        <th>URL</th>
+        <th>Iterations</th>
+        <th>Start</th>
+        <th>Commit</th>
+        <th>Doc</th>
+        <th>Paint</th>
+        <th>PLT</th>
+        <th>stddev</th>
+      </tr>
+        <tr jsselect="results">
+        <td><span jseval="$val = '/test_rollup?id=' + suite + '&url=' + $this.url"></span><a jsvalues="href:$val" jscontent="date"></a></td>
+        <td><span jscontent="url"></span></td>
+        <td class="righttext" jscontent="iterations"></td>
+        <td class="righttext" jscontent="start_load_time"></td>
+        <td class="righttext" jscontent="commit_load_time"></td>
+        <td class="righttext" jscontent="doc_load_time"></td>
+        <td class="righttext" jscontent="paint_time"></td>
+        <td class="righttext" jscontent="total_time"></td>
+        <td class="righttext" jseval="val = total_time_stddev.toFixed(1)" jscontent="val"></td>
+      </table>
+    </div>
+  </body>
+</html>
