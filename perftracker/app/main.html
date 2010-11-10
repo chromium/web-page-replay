@@ -166,6 +166,8 @@
         <th>Paint</th>
         <th>PLT</th>
         <th>stddev</th>
+        <th>stderr</th>
+        <th>ci</th>
       </tr>
         <tr jsselect="results">
         <td><span jseval="$val = '/test_rollup?id=' + suite + '&url=' + $this.url"></span><a jsvalues="href:$val" jscontent="date"></a></td>
@@ -177,6 +179,8 @@
         <td class="righttext" jscontent="paint_time"></td>
         <td class="righttext" jscontent="total_time"></td>
         <td class="righttext" jseval="val = total_time_stddev.toFixed(1)" jscontent="val"></td>
+        <td class="righttext" jseval="$stderr = stderr(total_time_stddev, iterations).toFixed(1)" jscontent="$stderr"></td>
+        <td class="righttext" jseval="$ci = ci($stderr).toFixed(1); $lo=total_time - $ci; $hi=total_time + parseInt($ci); val=$lo + ' - ' + $hi" jscontent="val"></td>
       </table>
     </div>
   </body>

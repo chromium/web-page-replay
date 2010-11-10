@@ -59,18 +59,13 @@ function XHRGet(url, callback) {
   }
 }
 
-// Round a number to the 1's place.
-function formatNumber(str) {
-  str += '';
-  if (str == '0') {
-    return 'N/A ';
-  }
-  var x = str.split('.');
-  var x1 = x[0];
-  var x2 = x.length > 1 ? '.' + x[1] : '';
-  var regex = /(\d+)(\d{3})/;
-  while (regex.test(x1)) {
-    x1 = x1.replace(regex, '$1' + ',' + '$2');
-  }
-  return x1;
+// Given a stddev and a sample count, compute the stderr
+function stderr(stddev, sample_count) {
+  return stddev / Math.sqrt(sample_count);
 }
+
+// Given a stderr, compute the confidence interval
+function ci(stderr) {
+  return 1.96 * stderr;
+}
+
