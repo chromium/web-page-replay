@@ -49,7 +49,7 @@ class PlatformSettings(object):
     self.pipe_set = '5'         # We configure our rules on IPFW set #5.
 
   def set_traffic_shaping(self,
-                          do_dns_shaping = False,
+                          shape_dns,
                           up_bandwidth = '0',
                           down_bandwidth = '0',
                           delay_ms = '0',
@@ -57,6 +57,8 @@ class PlatformSettings(object):
     """Start shaping traffic.
 
     Args:
+      shape_dns: Iff true, delay_ms and packet_loss_rate will also apply to DNS
+           traffic.
       up_bandwidth: Upload bandwidth
       down_bandwidth: Download bandwidth
            Bandwidths measured in [K|M]{bit/s|Byte/s}. '0' means unlimited.
@@ -77,7 +79,7 @@ class PlatformSettings(object):
       delay_ms = str(int(delay_ms) / 2)
 
       # Configure DNS shaping.
-      if do_dns_shaping:
+      if shape_dns:
         self._ipfw([
             'pipe', dns_pipe,
             'config',

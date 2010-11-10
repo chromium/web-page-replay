@@ -54,6 +54,7 @@ if sys.version < '2.6':
   print 'Need Python 2.6 or greater.'
   sys.exit(1)
 
+
 def RunDNSServer():
   try:
     dns_server = dnsproxy.DnsProxyServer(
@@ -68,16 +69,12 @@ def RunDNSServer():
     logging.critical('Unable to change primary DNS server.\n%s' % e)
   return None
 
-def main(options, replay_file):
-  # Verify correct flags are passed in.
-  if options.spdy and options.record:
-    logging.critical('--spdy and --record can\'t be used together.')
-    return
 
+def main(options, replay_file):
   platform_settings = platformsettings.get_platform_settings()
 
   dns_server = None
-  if not options.skip_dns_server:
+  if options.dns_forwarding:
     dns_server = RunDNSServer()
 
   try:
@@ -95,8 +92,6 @@ def main(options, replay_file):
       # TODO(lzheng): move this import to the front of the file once
       # nbhttp moves its logging config in server.py into main.
       import replayspdyserver
-      if options.deterministic_script:
-        logging.warning('--deterministic_script will be ingored for spdy.')
       server = replayspdyserver.ReplaySpdyServer(replay_file)
     else:
       server = httpproxy.ReplayHttpProxyServer(
@@ -107,7 +102,8 @@ def main(options, replay_file):
 
     if not options.record:
       platform_settings.set_traffic_shaping(
-          not options.skip_dns_server, options.up, options.down, options.delay_ms, options.packet_loss_rate)
+          options.dns_forwarding,
+          options.up, options.down, options.delay_ms, options.packet_loss_rate)
 
     start = time.time()
     while not options.time_limit or time.time() - start < options.time_limit:
@@ -131,8 +127,6 @@ def main(options, replay_file):
 
 
 if __name__ == '__main__':
-  log_levels = ('debug', 'info', 'warning', 'error', 'critical')
-
   class PlainHelpFormatter(optparse.IndentedHelpFormatter):
     def format_description(self, description):
       if description:
@@ -146,23 +140,16 @@ if __name__ == '__main__':
       description=description,
       epilog='http://code.google.com/p/web-page-replay/')
 
-
   option_parser.add_option('-s', '--spdy', default=False,
       action='store_true',
       help='Use spdy to replay relay_file.')
   option_parser.add_option('-r', '--record', default=False,
       action='store_true',
       help='Download real responses and record them to replay_file')
-  option_parser.add_option('-n', '--no-deterministic_script', default=True,
-      action='store_false',
-      dest='deterministic_script',
-      help=('Don\'t inject JavaScript which makes sources of entropy such as '
-            'Date() and Math.random() deterministic. CAUTION: With this option '
-            'many web pages will not replay properly.'))
   option_parser.add_option('-l', '--log_level', default='debug',
       action='store',
       type='choice',
-      choices=log_levels,
+      choices=('debug', 'info', 'warning', 'error', 'critical'),
       help='Minimum verbosity level to log')
   option_parser.add_option('-f', '--log_file', default=None,
       action='store',
@@ -192,22 +179,32 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Packet loss rate in range [0..1]. Zero means no loss.')
-  network_group.add_option('-P', '--no-dns_private_passthrough', default=True,
+  option_parser.add_option_group(network_group)
+
+  harness_group = optparse.OptionGroup(option_parser,
+      'Replay Harness Options',
+      'These advanced options configure various aspects of the replay harness')
+  option_parser.add_option('-n', '--no-deterministic_script', default=True,
+      action='store_false',
+      dest='deterministic_script',
+      help=('Don\'t inject JavaScript which makes sources of entropy such as '
+            'Date() and Math.random() deterministic. CAUTION: With this option '
+            'many web pages will not replay properly.'))
+  option_parser.add_option('-P', '--no-dns_private_passthrough', default=True,
       action='store_false',
       dest='dns_private_passthrough',
       help='Don\'t forward DNS requests that resolve to private network '
-           'addresses. CAUTION: With the option important services like '
+           'addresses. CAUTION: With this option important services like '
            'Kerberos will resolve to the HTTP proxy address.')
-  network_group.add_option('-x', '--skip_dns_server', default=False,
-      action='store_true',
-      help='Do not intercept DNS queries.')
-
-  option_parser.add_option_group(network_group)
+  option_parser.add_option('-x', '--no-dns_forwarding', default=True,
+      action='store_false',
+      dest='dns_forwarding',
+      help='Don\'t forward DNS requests to the local replay server.'
+           'CAUTION: With this option an external mechanism must be used to '
+           'forward traffic to the replay server.')
+  option_parser.add_option_group(harness_group)
 
   options, args = option_parser.parse_args()
-
-  if len(args) != 1:
-    option_parser.error('Must specify a replay_file')
 
   log_level = logging.__dict__[options.log_level.upper()]
   logging.basicConfig(level=log_level,
@@ -217,5 +214,26 @@ if __name__ == '__main__':
     fh = logging.FileHandler(options.log_file)
     fh.setLevel(log_level)
     logging.getLogger('').addHandler(fh)
+
+  if len(args) != 1:
+    option_parser.error('Must specify a replay_file')
+
+  if options.record:
+    if options.up != '0':
+      option_parser.error('Option --up cannot be used with --record.')
+    if options.down != '0':
+      option_parser.error('Option --down cannot be used with --record.')
+    if options.delay_ms != '0':
+      option_parser.error('Option --delay_ms cannot be used with --record.')
+    if options.packet_loss_rate != '0':
+      option_parser.error(
+          'Option --packet_loss_rate cannot be used with --record.')
+    if options.spdy:
+      option_parser.error('Option --spdy cannot be used with --record.')
+
+  if options.spdy and options.deterministic_script:
+    logging.warning(
+        'Option --deterministic-_script is ignored with --spdy.'
+        'See http://code.google.com/p/web-page-replay/issues/detail?id=10')
 
   sys.exit(main(options, args[0]))
