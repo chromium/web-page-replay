@@ -276,10 +276,6 @@ function Benchmark(url) {
       return;
     }
 
-    if (load_times.startLoadTime < load_times.requestTime) {
-      load_times.startLoadTime = load_times.requestTime;
-    }
- 
     var requested = load_times.requestTime;
     var started = load_times.startLoadTime;
     var startLoadTime =
@@ -295,11 +291,18 @@ function Benchmark(url) {
     var firstPaintAfterLoadTime =
         Math.round((load_times.firstPaintAfterLoadTime - started) * 1000.0);
 
+    // NOTE(mbelshe): Sometimes we get 0 for these timers from 0 loadTimes().
+    //     We need to not record big negative values for these cases.
+    if (startLoadTime < 0) {
+      startLoadTime = 0;
+    }
+    if (commitLoadTime < 0) {
+      commitLoadTime = 0;
+    }
+    if (docLoadTime < 0) {
+      docLoadTime = 0;
+    }
     if (paintTime < 0) {
-      // If the user navigates away from the test while it is running,
-      // paint may not occur.  Also, some lightweight pages, such as the
-      // google home page, never trigger a paint measurement via the chrome
-      // page load timer.
       // In this case, the time-to-first paint is effectively the same as the
       // time to onLoad().
       paintTime = totalTime;
