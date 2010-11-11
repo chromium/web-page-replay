@@ -48,9 +48,10 @@ class GqlEncoder(simplejson.JSONEncoder):
        output = {} 
        for field, value in properties: 
          if isinstance(value, db.ReferenceProperty):
-           output[field] = str(getattr(obj, "key")())
+           output[field] = str(getattr(getattr(obj, field), "key")())
          else:
            output[field] = getattr(obj, field) 
+       output['key'] = str(getattr(obj, "key")())
        return output 
 
      elif isinstance(obj, datetime.datetime): 

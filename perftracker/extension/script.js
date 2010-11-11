@@ -56,7 +56,7 @@ function sendTimesToExtension() {
   // We're still waiting.  Check again in a little bit.
   bytes_read = new_bytes_read;
   var id = window.setTimeout(sendTimesToExtension, 200);
-  console.log("will try again in 500ms. timer is: " + id)
+  console.log("will try again in 200ms. timer is: " + id)
 
   // Send a heartbeat to the extension.
   benchmarkExtensionPort.postMessage({message: 'heartbeat',

@@ -9,14 +9,11 @@ builtins:
 
 handlers:
 - url: /
-  static_files: main.html
-  upload: main.html
-- url: /suite
-  static_files: suite.html
-  upload: suite.html
-- url: /rollup
-  static_files: rollup.html
-  upload: rollup.html
+  static_files: templates/search.html
+  upload: templates/search.html
+- url: /do_(.*)
+  static_files: templates/\1.html
+  upload: templates/(.*).html
 - url: /scripts
   static_dir: scripts
 - url: /styles

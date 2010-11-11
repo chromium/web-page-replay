@@ -55,3 +55,15 @@ table.sortable {
 table.sortable:not([class*='filtered']) tr:nth-child(even) td:not([class*='filtered']) {
   background: #eff3ff;
 }
+
+div.scorebox {
+  border: 1px solid black;
+  width: 200px;
+  float: right;
+  margin-top: 25;
+  margin-right: 200px;
+  background-color: eeeeff;
+  font-size: 300%;
+  text-align: center;
+  vertical-align: middle;
+}

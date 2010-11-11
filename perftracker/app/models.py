@@ -19,23 +19,40 @@
 
 from google.appengine.ext import db
 
-# This is a group of TestResult
-class TestSuite(db.Model):
+# A TestSet is a set of tests conducted over one or many URLs.
+# The test setup and configuration is constant across all URLs in the TestSet.
+class TestSet(db.Model):
     user = db.UserProperty()
     date = db.DateTimeProperty(auto_now_add=True)
     notes = db.StringProperty(multiline=True)
-
     version = db.StringProperty(indexed=True)
     platform = db.StringProperty()
     cmdline = db.StringProperty()
-
     download_bandwidth_kbps = db.IntegerProperty(indexed=True)
     upload_bandwidth_kbps = db.IntegerProperty(indexed=True)
     round_trip_time_ms = db.IntegerProperty(indexed=True)
     packet_loss_rate  = db.IntegerProperty(indexed=True)
+    using_spdy = db.BooleanProperty()
 
+    # These fields are summary data for the TestSet.
+    # When the TestSet is created, these fields are blank.
+    # When the TestSet finishes running, these fields will be updated.
+    iterations = db.IntegerProperty()
+    url_count = db.IntegerProperty()
+    start_load_time = db.IntegerProperty()
+    commit_load_time = db.IntegerProperty()
+    doc_load_time = db.IntegerProperty()
+    paint_time = db.IntegerProperty()
+    total_time = db.IntegerProperty()
+    num_requests = db.IntegerProperty()
+    num_connects = db.IntegerProperty()
+    num_sessions = db.IntegerProperty()
+    read_bytes_kb = db.IntegerProperty()
+    write_bytes_kb = db.IntegerProperty()
+
+# A TestResult is an individual test result for an individual URL.
 class TestResult(db.Model):
-    suite = db.ReferenceProperty(TestSuite, required=True, indexed=True)
+    set = db.ReferenceProperty(TestSet, required=True, indexed=True, collection_name="results")
     url = db.StringProperty(required=True, indexed=True)
     using_spdy = db.BooleanProperty()
     start_load_time = db.IntegerProperty()
@@ -49,17 +66,12 @@ class TestResult(db.Model):
     read_bytes_kb = db.IntegerProperty()
     write_bytes_kb = db.IntegerProperty()
 
-# This is the output of a test which we most frequently query.
-class TestRollup(db.Model):
-    suite = db.ReferenceProperty(TestSuite, required=True, indexed=True, collection_name="rollups")
+# A TestSummary is the aggregate result for a set of TestResults for
+# a single URL.
+class TestSummary(db.Model):
+    set = db.ReferenceProperty(TestSet, required=True, indexed=True, collection_name="summaries")
     date = db.DateTimeProperty(auto_now_add=True)
     url = db.StringProperty(required=True, indexed=True)
-    version = db.StringProperty(indexed=True)
-    platform = db.StringProperty()
-    download_bandwidth_kbps = db.IntegerProperty(indexed=True)
-    upload_bandwidth_kbps = db.IntegerProperty(indexed=True)
-    round_trip_time_ms = db.IntegerProperty(indexed=True)
-    packet_loss_rate  = db.IntegerProperty(indexed=True)
     iterations = db.IntegerProperty()
     using_spdy = db.BooleanProperty()
     start_load_time = db.IntegerProperty()

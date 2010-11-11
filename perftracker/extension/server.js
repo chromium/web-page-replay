@@ -15,9 +15,9 @@
 // Functions for uploading to the server
 
 // These are the URLs used by the backend for posting data
-var kServerPostSuiteUrl = "test_suite";
-var kServerPostResultUrl = "test_result";
-var kServerPostRollupUrl = "test_rollup";
+var kServerPostSetUrl = "set";
+var kServerPostResultUrl = "result";
+var kServerPostSummaryUrl = "summary";
 
 // BrowserDetect is thanks to www.quirksmode.org/js/detect.html
 var BrowserDetect = {
@@ -212,8 +212,8 @@ function TestResultSubmitter(config) {
 
     self.AppEngineLogin(function() {
       create_test_started = true;
-      var data = "";
-      data += "download_bandwidth_kbps=" + config.download_bandwidth_kbps;
+      var data = "cmd=create";
+      data += "&download_bandwidth_kbps=" + config.download_bandwidth_kbps;
       data += "&upload_bandwidth_kbps=" + config.upload_bandwidth_kbps;
       data += "&round_trip_time_ms=" + config.round_trip_time_ms;
       data += "&packet_loss_rate=" + config.packet_loss_rate;
@@ -221,8 +221,9 @@ function TestResultSubmitter(config) {
       data += "&version=" + BrowserDetect.browser + " " + BrowserDetect.version;
       data += "&platform=" + BrowserDetect.OS;
       data += "&cmdline=" + config.cmdline;
+      data += "&using_spdy=" + config.use_spdy;
 
-      url = config.server_url + kServerPostSuiteUrl
+      url = config.server_url + kServerPostSetUrl;
 
       user_callback = callback;
       new XHRPost(url, data, function(result) {
@@ -235,7 +236,7 @@ function TestResultSubmitter(config) {
   // Post a single result
   this.PostResult = function (result, callback) {
     var data = "";
-    data += "test_id=" + test_id;
+    data += "set_id=" + test_id;
     data += "&url=" + result.url;
     data += "&using_spdy=" + (result.viaSpdy ? "CHECKED" : "");
     data += "&start_load_time=" + result.startLoadTime;
@@ -254,8 +255,8 @@ function TestResultSubmitter(config) {
     new XHRPost(url, data, function(result) { user_callback(result); });
   }
 
-  // Post the rollup of a set of data
-  this.PostRollup = function(data, callback) {
+  // Post the rollup summary of a set of data
+  this.PostSummary = function(data, callback) {
     var result = {};
     result.iterations = data.totalResults.length;
     result.url = data.url;
@@ -275,15 +276,7 @@ function TestResultSubmitter(config) {
     result.writeKB = Array.avg(data.KbytesWritten);
 
     var data = "";
-    data += "test_id=" + test_id;
-
-    data += "&download_bandwidth_kbps=" + config.download_bandwidth_kbps;
-    data += "&upload_bandwidth_kbps=" + config.upload_bandwidth_kbps;
-    data += "&round_trip_time_ms=" + config.round_trip_time_ms;
-    data += "&packet_loss_rate=" + config.packet_loss_rate;
-    data += "&version=" + BrowserDetect.browser + " " + BrowserDetect.version;
-    data += "&platform=" + BrowserDetect.OS;
-
+    data += "set_id=" + test_id;
     data += "&url=" + result.url;
     data += "&iterations=" + result.iterations;
     data += "&using_spdy=" + (result.viaSpdy ? "CHECKED" : "");
@@ -299,10 +292,47 @@ function TestResultSubmitter(config) {
     data += "&read_bytes_kb=" + Math.floor(result.readKB);
     data += "&write_bytes_kb=" + Math.floor(result.writeKB);
 
-    console.log("DATA ROLLUP IS: " + data);
-
-    url = config.server_url + kServerPostRollupUrl;
+    url = config.server_url + kServerPostSummaryUrl;
     user_callback = callback;
     new XHRPost(url, data, function(result) { user_callback(result); });
   }
+
+  // Update the set with its summary data
+  this.UpdateSetSummary = function(data, callback) {
+    var result = {};
+    result.iterations = data.iterations / data.benchmarkCount;
+    result.url_count = data.benchmarkCount;
+    result.start_load_time = data.startLoadTime / data.iterations;
+    result.commit_load_time = data.commitLoadTime / data.iterations;
+    result.doc_load_time = data.docLoadTime / data.iterations;
+    result.paint_time = data.paintTime / data.iterations;
+    result.total_time = data.totalTime / data.iterations;
+    result.total_time_stddev = 0;
+    result.connects = data.connects / data.iterations;
+    result.sessions = data.spdySessions / data.iterations;
+    result.requests = data.requests / data.iterations;
+    result.readKB = data.KbytesRead / data.iterations;
+    result.writeKB = data.KbytesWritten / data.iterations;
+
+    var data = "cmd=update";
+    data += "&set_id=" + test_id;
+    data += "&iterations=" + result.iterations;
+    data += "&url_count=" + result.url_count;
+    data += "&start_load_time=" + Math.floor(result.start_load_time);
+    data += "&commit_load_time=" + Math.floor(result.commit_load_time);
+    data += "&doc_load_time=" + Math.floor(result.doc_load_time);
+    data += "&paint_time=" + Math.floor(result.paint_time);
+    data += "&total_time=" + Math.floor(result.total_time);
+    data += "&total_time_stddev=" + result.total_time_stddev;
+    data += "&num_connects=" + Math.floor(result.connects);
+    data += "&num_sessions=" + Math.floor(result.sessions);
+    data += "&num_requests=" + Math.floor(result.requests);
+    data += "&read_bytes_kb=" + Math.floor(result.readKB);
+    data += "&write_bytes_kb=" + Math.floor(result.writeKB);
+
+    url = config.server_url + kServerPostSetUrl;
+    user_callback = callback;
+    new XHRPost(url, data, function(result) { user_callback(result); });
+  }
+
 }

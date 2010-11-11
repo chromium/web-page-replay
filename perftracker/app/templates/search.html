@@ -9,7 +9,7 @@
   </head>
 
   <body onLoad="loadData()">
-    <h1><div id="header">Chromium Page Tracker Summary</div></h1>
+    <h1><div id="header">Chromium Page Tracker TestSets</div></h1>
 
     <script>
     // Initialize the select filter data
@@ -47,6 +47,7 @@
 
     // Given the current set of filters, construct the URL appropriately.
     function applyFilterToUrl(url, name) {
+      console.log("applyFilterToUrl - " + url + "," + name)
       var val = selectValue(name).value;
       if (val != undefined && val.length > 0) {
         url += "&" + name + "=" + val;
@@ -54,34 +55,14 @@
       return url;
     }
 
-    // Sets the selected index to the right index for |value|, or 0.
-    //function setSelectedIndex(id, queryString) {
-    //  var elt = document.getElementById(id);
-    //  elt.selectedIndex = 0;
-    //  var value = queryString[id];
-    //  if (value == undefined || value.length == "") {
-    //    return;
-    //  }
-    //  var options = elt.options;
-    //  for (var i = 0; i < options.length; i++) {
-    //    if (options[i].value == value) {
-    //      elt.selectedIndex = i;
-    //      return;
-    //    }
-    //  }
-    //}
-
-    // Given a URL, make sure the filters are selected properly.
-    //function applyUrlToFilters() {
-    //  var queryString = location.queryString();
-    //  setSelectedIndex("rtt_filter", queryString)
-    //  setSelectedIndex("url_filter", queryString)
-    //}
-
     function loadData() {
-      var url = "/json?type=rollup";
+      var url = "/json?type=set_search";
       url = applyFilterToUrl(url, "rtt_filter");
-      url = applyFilterToUrl(url, "url_filter");
+      url = applyFilterToUrl(url, "download_filter");
+      url = applyFilterToUrl(url, "upload_filter");
+      url = applyFilterToUrl(url, "pkt_loss_rate_filter");
+      url = applyFilterToUrl(url, "platform_filter");
+      url = applyFilterToUrl(url, "version_filter");
 
       new XHRGet(url, function(result) {
         data.results = JSON.parse(result);
@@ -89,7 +70,6 @@
         var context = new JsEvalContext(data);
         var template = document.getElementById("template");
         jstProcess(context, template);
-        //applyUrlToFilters();
       });
     }
 
@@ -108,7 +88,6 @@
           <td>Upload</td>
           <td>RTT</td>
           <td>PktLoss</td>
-          <td>URL</td>
         </tr>
         <tr>
         <td>
@@ -146,41 +125,35 @@
             <option jsselect="packet_loss_rates" jscontent="$this"></option>
           </select>
         </td>
-        <td>
-            <select id="url_filter" onchange="filterChanged()">
-            <option selected></option>
-            <option jsselect="urls" jscontent="$this"></option>
-          </select>
-        </td>
         </tr>
       </div>
 
       <table class="sortable">
       <tr>
         <th>Date</th>
-        <th>URL</th>
+        <th>Network</th>
+        <th>URLs</th>
         <th>Iterations</th>
         <th>Start</th>
         <th>Commit</th>
         <th>Doc</th>
         <th>Paint</th>
         <th>PLT</th>
-        <th>stddev</th>
-        <th>stderr</th>
-        <th>ci</th>
       </tr>
         <tr jsselect="results">
-        <td><span jseval="$val = '/test_rollup?id=' + suite + '&url=' + $this.url"></span><a jsvalues="href:$val" jscontent="date"></a></td>
-        <td><span jscontent="url"></span></td>
+        <td><span jseval="$val = '/do_view_set?id=' + key"></span><a jsvalues="href:$val" jscontent="date"></a></td>
+        <td><span jscontent="download_bandwidth_kbps"></span>Kbps/
+            <span jscontent="upload_bandwidth_kbps"></span>Kbps/
+            <span jscontent="round_trip_time_ms"></span>ms/
+            <span jscontent="packet_loss_rate"></span>%
+        </td>
+        <td><span jscontent="url_count"></span></td>
         <td class="righttext" jscontent="iterations"></td>
         <td class="righttext" jscontent="start_load_time"></td>
         <td class="righttext" jscontent="commit_load_time"></td>
         <td class="righttext" jscontent="doc_load_time"></td>
         <td class="righttext" jscontent="paint_time"></td>
         <td class="righttext" jscontent="total_time"></td>
-        <td class="righttext" jseval="val = total_time_stddev.toFixed(1)" jscontent="val"></td>
-        <td class="righttext" jseval="$stderr = stderr(total_time_stddev, iterations).toFixed(1)" jscontent="$stderr"></td>
-        <td class="righttext" jseval="$ci = ci($stderr).toFixed(1); $lo=total_time - $ci; $hi=total_time + parseInt($ci); val=$lo + ' - ' + $hi" jscontent="val"></td>
       </table>
     </div>
   </body>

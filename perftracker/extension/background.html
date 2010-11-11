@@ -37,6 +37,7 @@ function closeAllTabs() {
 function addBenchmark(benchmark) {
   benchmarks.push(benchmark);
   benchmarkIndex = 0;  // Reset the counter when adding benchmarks.
+  global_counter.benchmarkCount++;
 }
 
 // Array Remove - By John Resig (MIT Licensed)
@@ -93,10 +94,22 @@ function nextBenchmark() {
   return benchmarks[benchmarkIndex];
 }
 
+global_counter = {}
+global_counter.benchmarkCount = 0;
+global_counter.iterations = 0;
+global_counter.startLoadTime = 0;
+global_counter.commitLoadTime = 0;
+global_counter.docLoadTime = 0;
+global_counter.paintTime = 0;
+global_counter.totalTime = 0;
+global_counter.KbytesRead = 0;
+global_counter.KbytesWritten = 0;
+global_counter.requests = 0;
+global_counter.connects = 0;
+global_counter.spdySessions = 0;
+
 function Benchmark(url) {
   var runCount_ = 0;
-  var count_;
-  var totalTime_;
   var me_ = this;
   var current_;
   var initialRequestCount_;
@@ -105,8 +118,6 @@ function Benchmark(url) {
 
   console.log("Benchmark testing url: " + url);
   runCount_ = window.iterations;
-  count_ = 0;
-  totalTime_ = 0;
   current_ = {};
   current_.url = url;
   current_.results = new Array();
@@ -139,16 +150,22 @@ function Benchmark(url) {
   // Called when the test run completes.
   this.finish = function() {
     console.log("running finish for: " + me_.url());
-    if (runCount_ == 0) {
+    if (!me_.isRunning()) {
       removeBenchmark(this);
     }
 
     // If we're the last benchmark, close the window.
     if (benchmarks.length == 0) {
       console.log("removing benchmark window: " + benchmarkWindow.id);
-      chrome.tabs.remove(benchmarkWindow.id);
-      benchmarkWindow = 0;
-      closeAllTabs();
+      window.submitter.UpdateSetSummary(global_counter, function() {
+        console.log("Posted set summary");
+        chrome.tabs.remove(benchmarkWindow.id);
+        console.log("I love printf debugging");
+        benchmarkWindow = 0;
+        console.log("I love printf debugging2");
+        closeAllTabs();
+        console.log("I love printf debugging3");
+      });
     } else {
       // Move on to next benchmarked pages.
       setTimeout(me_.runPage, 100);
@@ -238,8 +255,8 @@ function Benchmark(url) {
 
   // Called when a page finishes loading.
   this.pageFinished = function(load_times) {
-   
-     // Make sure the content can be fetched via spdy if it is enabled.
+    console.log("pageFinished");
+    // Make sure the content can be fetched via spdy if it is enabled.
     if (window.enableSpdy && !load_times.wasFetchedViaSpdy) {
       alert("Can not fetch current url via spdy.\n" +
             "Ending current test.");
@@ -257,6 +274,10 @@ function Benchmark(url) {
       runCount_ = 0;  // Stop running this test.
       me_.finish();
       return;
+    }
+
+    if (load_times.startLoadTime < load_times.requestTime) {
+      load_times.startLoadTime = load_times.requestTime;
     }
  
     var requested = load_times.requestTime;
@@ -284,10 +305,6 @@ function Benchmark(url) {
       paintTime = totalTime;
     }
 
-    // For our toolbar counters
-    totalTime_ += totalTime;
-    count_++;
-
     current_.viaSpdy = load_times.wasFetchedViaSpdy;
     current_.iterations++;
 
@@ -314,7 +331,7 @@ function Benchmark(url) {
                            initialSpdySessionCount_;
 
 
-    // Record the aggregate result.
+    // Record the aggregate result for this URL.
     current_.viaSpdy = load_times.wasFetchedViaSpdy;
     current_.iterations++;
     current_.startLoadResults.push(startLoadTime);
@@ -331,13 +348,29 @@ function Benchmark(url) {
     current_.spdySessions.push(chrome.benchmarking.counter(kSpdySessionCount) -
                          initialSpdySessionCount_);
 
+    // Record the aggregate result globally.
+    global_counter.iterations++;
+    global_counter.startLoadTime += startLoadTime;
+    global_counter.commitLoadTime += commitLoadTime;
+    global_counter.docLoadTime += docLoadTime;
+    global_counter.paintTime += paintTime;
+    global_counter.totalTime += totalTime;
+    global_counter.KbytesRead += (bytesRead / 1024);
+    global_counter.KbytesWritten += (bytesWrite / 1024);
+    global_counter.requests += (chrome.benchmarking.counter(kRequestCount) -
+                         initialRequestCount_);
+    global_counter.connects += (chrome.benchmarking.counter(kConnectCount) -
+                         initialConnectCount_);
+    global_counter.spdySessions += (chrome.benchmarking.counter(kSpdySessionCount) -
+                         initialSpdySessionCount_);
+
     // Submit the result.
     window.submitter.PostResult(result, function() {
       console.log("Posted result");
       runCount_--;
-      if (runCount_ == 0) {
-        window.submitter.PostRollup(current_, function() {
-          console.log("Posted rollup");
+      if (!me_.isRunning()) {
+        window.submitter.PostSummary(current_, function() {
+          console.log("Posted summary");
           me_.finish();
         });
       } else {
@@ -356,9 +389,9 @@ setInterval(function() {
   console.log("Heartbeat check: " + interval);
   if (interval > kHeartbeatTimeoutMs) {
     var current_benchmark = currentBenchmark();
-    console.log("Page is taking too long.  Killing it: " + current_benchmark.url());
     console.log("benchmarkIndex: " + benchmarkIndex);
     console.log("num benchmarks: " + benchmarks.length);
+    console.log("Page is taking too long.  Killing it: " + current_benchmark.url());
     current_benchmark.runCount_ = 0;
     current_benchmark.finish();
     last_heartbeat = new Date();  // reset the timer.
@@ -389,8 +422,11 @@ chrome.extension.onConnect.addListener(function(port) {
         // Stop the test here.
         benchmarks = [];
       }
+      console.log("got load for " + data.url);
       if (benchmark != undefined && benchmark.isRunning()) {
         benchmark.pageFinished(data.values);
+      } else {
+        console.log("hmmmm.... benchmark not running!");
       }
     }
   });

@@ -23,7 +23,90 @@ from google.appengine.ext.webapp import template
 from google.appengine.ext.webapp.util import run_wsgi_app
 from google.appengine.ext import db
 
+# Applies statistics uploaded via the request to the object.
+def ApplyStatisticsData(request, obj):
+    obj.using_spdy = bool(request.get('using_spdy')=="CHECKED")
+    obj.start_load_time = int(request.get('start_load_time'))
+    obj.commit_load_time = int(request.get('commit_load_time'))
+    obj.doc_load_time = int(request.get('doc_load_time'))
+    obj.paint_time = int(request.get('paint_time'))
+    obj.total_time = int(request.get('total_time'))
+    obj.num_requests = int(request.get('num_requests'))
+    obj.num_connects = int(request.get('num_connects'))
+    obj.num_sessions = int(request.get('num_sessions'))
+    obj.read_bytes_kb = int(request.get('read_bytes_kb'))
+    obj.write_bytes_kb = int(request.get('write_bytes_kb'))
+
 class JSONDataPage(webapp.RequestHandler):
+    # Do a search for TestSets
+    def do_set_search(self):
+        query = models.TestSet.all();
+        query.order("-date")
+
+        # Apply filters.
+        if self.request.get("rtt_filter"):
+            query.filter("round_trip_time_ms =", int(self.request.get("rtt_filter")))
+        if self.request.get("download_filter"):
+            query.filter("download_bandwidth_kbps =", int(self.request.get("download_filter")))
+        if self.request.get("upload_filter"):
+            query.filter("upload_bandwidth_kbps =", int(self.request.get("upload_filter")))
+        if self.request.get("pkt_loss_rate_filter"):
+            query.filter("packet_loss_rate =", int(self.request.get("pkt_loss_rate_filter")))
+        if self.request.get("platform_filter"):
+            query.filter("platform =", int(self.request.get("platform_filter")))
+        if self.request.get("version_vilter"):
+            query.filter("version =", int(self.request.get("version_vilter")))
+        if self.request.get("set_id"):
+            test_set = models.TestSet.get(db.Key(self.request.get("set_id")))
+            results = test_set.summaries
+
+        results = query.fetch(250)
+        self.response.out.write(json.encode(results))
+    
+    # Lookup a specific TestSet
+    def do_set(self):
+        set_id = self.request.get("id")
+        if not set_id:
+            self.response.out.write("Error")
+            return
+        test_set = models.TestSet.get(db.Key(set_id))
+
+        # We do manual coalescing of multiple data structures
+        # into a single json blob.
+        output = "{ \"obj\":" + json.encode(test_set);
+        output += ", \"summaries\": ["; 
+        first = True
+        for summary in test_set.summaries:
+            if not first:
+              output += ","
+            first = False
+            output += json.encode(summary)
+        output += "] }"
+        self.response.out.write(output);
+
+    # Lookup a specific TestSummary
+    def do_summary(self):
+        set_id = self.request.get("id")
+        if not set_id:
+            self.response.out.write("Error")
+            return
+        test_summary = models.TestSummary.get(db.Key(set_id))
+        output = "{ \"obj\":" + json.encode(test_summary);
+        output += ", \"results\": ["; 
+
+        test_set = models.TestSet.get(test_summary.set.key())
+        test_results = test_set.results
+        test_results.filter("url =", test_summary.url)
+
+        first = True
+        for test_result in test_results:
+            if not first:
+              output += ","
+            first = False
+            output += json.encode(test_result)
+        output += "] }"
+        self.response.out.write(output);
+
     def get(self):
         if not users.get_current_user():
             self.response.out.write("[{}]")
@@ -35,207 +118,115 @@ class JSONDataPage(webapp.RequestHandler):
             return
 
         # Do a query for the appropriate resource type.
-        if resource_type == "rollup":
-            query = models.TestRollup.all();
+        if resource_type == "summary":
+            self.do_summary()
+            return
         elif resource_type == "result":
-            query = models.TestResult.all();
-        elif resource_type == "suite":
-            query = models.TestSuite.all();
-        else:
-            self.response.out.write("[{}]")
+            # TODO(mbelshe): implement me!
+            return
+        elif resource_type == "set":
+            self.do_set()
+            return
+        elif resource_type == "set_search":
+            self.do_set_search()
             return
 
-        query.order("-date")
-
-        # Apply filters.
-        if self.request.get("url_filter"):
-            query.filter("url =", self.request.get("url_filter"))
-        if self.request.get("rtt_filter"):
-            query.filter("round_trip_time_ms =", int(self.request.get("rtt_filter")))
-        if self.request.get("suite_id"):
-            my_test = models.TestSuite.get(db.Key(self.request.get("suite_id")))
-            results = my_test.rollups
-            #query = models.TestRollup.gql("WHERE suite=:1 ORDER by url", self.request.get("suite_id"))
-            #query.filter("suite =", self.request.get("suite_id"))
-
-        results = query.fetch(100)
-
-        self.response.out.write(json.encode(results))
+        self.response.out.write("[{}]")
 
 # Create an entry in the store for a new test.
-class TestSuitePage(webapp.RequestHandler):
-    def get(self):
-        if not users.get_current_user():
-            self.redirect(users.create_login_url(self.request.uri))
-            return
-
-        my_key = self.request.get('id')
-        if not my_key:
-            self.response.out.write("Could not find test suite")
-            return
-
-        my_test = models.TestSuite.get(db.Key(my_key))
-        if not my_test:
-            self.response.out.write("Could not find test suite")
-            return
-
-        test_result_query = models.TestResult.gql("WHERE suite=:1 ORDER by url", my_test.key())
-        test_results = test_result_query.fetch(1000);
-
-        template_values = {"suite": my_test,
-                           "test_results": test_results}
-
-        path = os.path.join(os.path.dirname(__file__), 'view_test_suite.html')
-        self.response.out.write(template.render(path, template_values))
-
+class UploadTestSet(webapp.RequestHandler):
     def post(self):
         user = users.get_current_user()
+        # TODO(mbelshe): the dev server doesn't properly handle logins?
         #if not user:
         #    self.redirect(users.create_login_url(self.request.uri))
         #    return
 
-        test_suite = models.TestSuite(user=user)
-        test_suite.notes = self.request.get('notes')
-        test_suite.cmdline  = self.request.get('cmdline')
-        test_suite.version  = self.request.get('version')
-        test_suite.platform  = self.request.get('platform')
-        test_suite.download_bandwidth_kbps = int(self.request.get('download_bandwidth_kbps'))
-        test_suite.upload_bandwidth_kbps = int(self.request.get('upload_bandwidth_kbps'))
-        test_suite.round_trip_time_ms = int(self.request.get('round_trip_time_ms'))
-        test_suite.packet_loss_rate  = int(self.request.get('packet_loss_rate'))
-        key = test_suite.put()
-        self.response.out.write(key)
+        cmd = self.request.get("cmd");
+        if not cmd:
+            self.response.out.write("Error")
+            return
+   
+        if cmd == "create":
+            test_set = models.TestSet(user=user)
+            test_set.notes = self.request.get('notes')
+            test_set.cmdline  = self.request.get('cmdline')
+            test_set.version  = self.request.get('version')
+            test_set.platform  = self.request.get('platform')
+            test_set.download_bandwidth_kbps = int(self.request.get('download_bandwidth_kbps'))
+            test_set.upload_bandwidth_kbps = int(self.request.get('upload_bandwidth_kbps'))
+            test_set.round_trip_time_ms = int(self.request.get('round_trip_time_ms'))
+            test_set.packet_loss_rate  = int(self.request.get('packet_loss_rate'))
+            key = test_set.put()
+            self.response.out.write(key)
 
+        elif cmd == "update":
+            set_id = self.request.get("set_id")
+            if not set_id:
+                self.response.out.write("Error")
+                return
+            test_set = models.TestSet.get(db.Key(set_id))
+            if not test_set:
+                self.response.out.write("Error")
+                return
+            ApplyStatisticsData(self.request, test_set)
+            test_set.iterations = int(self.request.get('iterations'))
+            test_set.url_count = int(self.request.get('url_count'))
+            key = test_set.put()
+            self.response.out.write(key)
 
 # Create an entry in the store for a new test run.
-class TestResultPage(webapp.RequestHandler):
-    def get(self):
-        if not users.get_current_user():
-            self.redirect(users.create_login_url(self.request.uri))
-            return
-
-        recent_suites = models.TestSuite.all().order('-date');
-        template_values = { "tests" : recent_suites }
-        path = os.path.join(os.path.dirname(__file__), 'create_test_result.html')
-        self.response.out.write(template.render(path, template_values))
-
+class UploadTestResult(webapp.RequestHandler):
     def post(self):
         user = users.get_current_user()
+        # TODO(mbelshe): the dev server doesn't properly handle logins?
         #if not user:
         #    self.redirect(users.create_login_url(self.request.uri))
         #    return
 
-        my_key = self.request.get('test_id')
-        my_test = models.TestSuite.get(db.Key(my_key))
-        if not my_test:
+        set_id = self.request.get('set_id')
+        if not set_id:
+            self.response.out.write("Missing set_id")
+            return
+        test_set = models.TestSet.get(db.Key(set_id))
+        if not test_set:
             self.response.out.write("Could not find test")
             return
         my_url = self.request.get('url');
 
-        test_result = models.TestResult(suite=my_test, url=my_url)
-        test_result.using_spdy = bool(self.request.get('using_spdy')=="CHECKED")
-        test_result.start_load_time = int(self.request.get('start_load_time'))
-        test_result.commit_load_time = int(self.request.get('commit_load_time'))
-        test_result.doc_load_time = int(self.request.get('doc_load_time'))
-        test_result.paint_time = int(self.request.get('paint_time'))
-        test_result.total_time = int(self.request.get('total_time'))
-        test_result.num_requests = int(self.request.get('num_requests'))
-        test_result.num_connects = int(self.request.get('num_connects'))
-        test_result.num_sessions = int(self.request.get('num_sessions'))
-        test_result.read_bytes_kb = int(self.request.get('read_bytes_kb'))
-        test_result.write_bytes_kb = int(self.request.get('write_bytes_kb'))
+        test_result = models.TestResult(set=test_set, url=my_url)
+        ApplyStatisticsData(self.request, test_result)
         key = test_result.put()
         self.response.out.write(key)
 
-class TestRollupPage(webapp.RequestHandler):
-    def get(self):
-        if not users.get_current_user():
-            self.redirect(users.create_login_url(self.request.uri))
-            return
-
-        my_key = self.request.get('id')
-        if not my_key:
-            self.response.out.write("Could not find test rollup.")
-            return
-
-        my_rollup = models.TestRollup.get(db.Key(my_key))
-        if not my_rollup:
-            self.response.out.write("Could not find test rollup.")
-            return
-
-        my_suite = models.TestSuite.get(my_rollup.suite.key())
-        if not my_rollup:
-            self.response.out.write("Could not find test suite for rollup.")
-            return
-
-        test_result_query = models.TestResult.gql("WHERE suite=:1 AND url=:2", my_suite.key(), my_rollup.url)
-        test_results = test_result_query.fetch(1000);
-
-        if self.request.get("format") == "json":
-           self.response.out.write(serializers.serialize('json', test_results))
-           return
-
-        # Do the HTML
-        template_values = {"rollup": my_rollup,
-                           "test_results": test_results}
-        path = os.path.join(os.path.dirname(__file__), 'view_test_rollup.html')
-        self.response.out.write(template.render(path, template_values))
-        return
-
+class UploadTestSummary(webapp.RequestHandler):
     def post(self):
         user = users.get_current_user()
+        # TODO(mbelshe): the dev server doesn't properly handle logins?
         #if not user:
         #    self.redirect(users.create_login_url(self.request.uri))
         #    return
 
-        my_key = self.request.get('test_id')
-        my_test = models.TestSuite.get(db.Key(my_key))
-        if not my_test:
+        set_id = self.request.get('set_id')
+        test_set = models.TestSet.get(db.Key(set_id))
+        if not test_set:
             self.response.out.write("Could not find test")
             return
         my_url = self.request.get('url');
 
-        test_rollup = models.TestRollup(suite=my_test, url=my_url)
-        test_rollup.download_bandwidth_kbps = my_test.download_bandwidth_kbps
-        test_rollup.upload_bandwidth_kbps = my_test.upload_bandwidth_kbps
-        test_rollup.round_trip_time_ms = my_test.round_trip_time_ms
-        test_rollup.packet_loss_rate  = my_test.packet_loss_rate
-
-        test_rollup.iterations = int(self.request.get('iterations'))
-        test_rollup.version = self.request.get('platform')
-        test_rollup.platform = self.request.get('version')
-
-        test_rollup.using_spdy = bool(self.request.get('using_spdy')=="CHECKED")
-        test_rollup.start_load_time = int(self.request.get('start_load_time'))
-        test_rollup.commit_load_time = int(self.request.get('commit_load_time'))
-        test_rollup.doc_load_time = int(self.request.get('doc_load_time'))
-        test_rollup.paint_time = int(self.request.get('paint_time'))
-        test_rollup.total_time = int(self.request.get('total_time'))
-        test_rollup.total_time_stddev = float(self.request.get('total_time_stddev'))
-        test_rollup.num_requests = int(self.request.get('num_requests'))
-        test_rollup.num_connects = int(self.request.get('num_connects'))
-        test_rollup.num_sessions = int(self.request.get('num_sessions'))
-        test_rollup.read_bytes_kb = int(self.request.get('read_bytes_kb'))
-        test_rollup.write_bytes_kb = int(self.request.get('write_bytes_kb'))
-        key = test_rollup.put()
+        test_summary = models.TestSummary(set=test_set, url=my_url)
+        ApplyStatisticsData(self.request, test_summary)
+        test_summary.iterations = int(self.request.get('iterations'))
+        test_summary.total_time_stddev = float(self.request.get('total_time_stddev'))
+        key = test_summary.put()
         self.response.out.write(key)
-
-class UploadJSON(webapp.RequestHandler):
-    def get(self):
-        if not users.get_current_user():
-            self.redirect(users.create_login_url(self.request.uri))
-            return
-
-        path = os.path.join(os.path.dirname(__file__), 'upload_json.html')
-        self.response.out.write(template.render(path, None))
 
 application = webapp.WSGIApplication(
                                      [
-                                      ('/test_suite', TestSuitePage),
-                                      ('/test_result', TestResultPage),
-                                      ('/test_rollup', TestRollupPage),
+                                      ('/set', UploadTestSet),
+                                      ('/result', UploadTestResult),
+                                      ('/summary', UploadTestSummary),
                                       ('/json', JSONDataPage),
-                                      ('/upload_json', UploadJSON)
                                      ],
                                      debug=True)
 
