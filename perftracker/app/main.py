@@ -53,9 +53,9 @@ class JSONDataPage(webapp.RequestHandler):
         if self.request.get("pkt_loss_rate_filter"):
             query.filter("packet_loss_rate =", int(self.request.get("pkt_loss_rate_filter")))
         if self.request.get("platform_filter"):
-            query.filter("platform =", int(self.request.get("platform_filter")))
-        if self.request.get("version_vilter"):
-            query.filter("version =", int(self.request.get("version_vilter")))
+            query.filter("platform =", self.request.get("platform_filter"))
+        if self.request.get("version_filter"):
+            query.filter("version =", self.request.get("version_filter"))
         if self.request.get("set_id"):
             test_set = models.TestSet.get(db.Key(self.request.get("set_id")))
             results = test_set.summaries
