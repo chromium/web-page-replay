@@ -59,6 +59,7 @@ class TrafficShaper(object):
       upload_pipe = '1'      # The IPFW pipe for upload rules.
       download_pipe = '2'    # The IPFW pipe for download rules.
       dns_pipe = '3'         # The IPFW pipe for DNS.
+      queue_size = '4MBytes'
 
       # Distribute the delay across the uplink and downlink bandwidths evenly.
       self.delay_ms = str(int(self.delay_ms) / 2)
@@ -70,7 +71,8 @@ class TrafficShaper(object):
             'config',
             'bw', '0',
             'delay', self.delay_ms,
-            'plr', self.packet_loss_rate
+            'plr', self.packet_loss_rate,
+            'queue', queue_size
         ])
         self.platformsettings.ipfw([
             'add', self.pipe_set,
@@ -88,7 +90,7 @@ class TrafficShaper(object):
           'bw', self.up_bandwidth,
           'delay', self.delay_ms,
           'plr', self.packet_loss_rate,
-          'queue', '4000000'
+          'queue', queue_size
       ])
       self.platformsettings.ipfw([
           'add', self.pipe_set,
@@ -104,9 +106,9 @@ class TrafficShaper(object):
           'bw', self.down_bandwidth,
           'delay', self.delay_ms,
           'plr', self.packet_loss_rate,
-          'queue', '4000000'
+          'queue', queue_size
       ])
-      self._ipfw([
+      self.platformsettings.ipfw([
           'add', self.pipe_set,
           'pipe', download_pipe,
           'in',
