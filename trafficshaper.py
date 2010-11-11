@@ -61,10 +61,10 @@ class TrafficShaper(object):
       dns_pipe = '3'         # The IPFW pipe for DNS.
 
       # Distribute the delay across the uplink and downlink bandwidths evenly.
-      delay_ms = str(int(delay_ms) / 2)
+      self.delay_ms = str(int(self.delay_ms) / 2)
 
       # Configure DNS shaping.
-      if shape_dns:
+      if self.shape_dns:
         self.platformsettings.ipfw([
             'pipe', dns_pipe,
             'config',
