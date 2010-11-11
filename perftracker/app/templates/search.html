@@ -47,10 +47,12 @@
 
     // Given the current set of filters, construct the URL appropriately.
     function applyFilterToUrl(url, name) {
-      console.log("applyFilterToUrl - " + url + "," + name)
-      var val = selectValue(name).value;
-      if (val != undefined && val.length > 0) {
-        url += "&" + name + "=" + val;
+      var selected_value = selectValue(name)
+      if (selected_value != undefined) {
+        var val = selectValue(name).value;
+        if (val != undefined && val.length > 0) {
+          url += "&" + name + "=" + val;
+        }
       }
       return url;
     }

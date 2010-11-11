@@ -1,0 +1,92 @@
+indexes:
+- kind: TestResult
+  properties:
+  - name: suite
+  - name: url
+
+- kind: TestResult
+  properties:
+  - name: test
+  - name: url
+
+- kind: TestSet
+  properties:
+  - name: download_bandwidth_kbps
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: download_bandwidth_kbps
+  - name: version
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: round_trip_time_ms
+  - name: version
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: download_bandwidth_kbps
+  - name: round_trip_time_ms
+  - name: upload_bandwidth_kbps
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: download_bandwidth_kbps
+  - name: round_trip_time_ms
+  - name: upload_bandwidth_kbps
+  - name: version
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: download_bandwidth_kbps
+  - name: upload_bandwidth_kbps
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: download_bandwidth_kbps
+  - name: upload_bandwidth_kbps
+  - name: version
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: round_trip_time_ms
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: upload_bandwidth_kbps
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: url
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: version
+  - name: date
+    direction: desc
+
+- kind: TestSummary
+  properties:
+  - name: url
+  - name: date
+    direction: desc

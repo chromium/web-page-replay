@@ -38,7 +38,7 @@
       </div>
       <table class="sortable">
       <tr><td>Id</td> <td jscontent="key"></td></tr>
-      <tr><td>User</td> <td jscontent="user"></td></tr>
+      <tr><td>User</td> <td jscontent="user.email"></td></tr>
       <tr><td>Date</td> <td jscontent="date"></td></tr>
       <tr><td>Notes</td> <td jscontent="notes"></td></tr>
       <tr><td>Version</td> <td jscontent="version"></td></tr>
@@ -86,7 +86,7 @@
         <td class="righttext" jscontent="total_time"></td>
         <td class="righttext" jseval="val = total_time_stddev.toFixed(1)" jscontent="val"></td>
         <td class="righttext" jseval="$stderr = stderr(total_time_stddev, iterations).toFixed(1)" jscontent="$stderr"></td>
-        <td class="righttext" jseval="$ci = ci($stderr).toFixed(1); $lo=total_time - $ci; $hi=total_time + parseInt($ci); val=$lo + ' - ' + $hi" jscontent="val"></td>
+        <td class="righttext" jseval="$ci = ci($stderr); $lo=total_time - $ci; $hi=total_time + $ci; val=$lo.toFixed(1) + ' - ' + $hi.toFixed(1)" jscontent="val"></td>
       </table>
     </div>
   </body>

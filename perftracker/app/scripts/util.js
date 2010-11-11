@@ -54,6 +54,9 @@ function XHRGet(url, callback) {
 
   xhr.onreadystatechange = function() {
     if (xhr.readyState == 4) {
+      if (xhr.status != 200) {
+        alert("Error: could not download (" + url + "): " + xhr.status);
+      }
       callback(xhr.responseText);
     }
   }

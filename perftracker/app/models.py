@@ -26,13 +26,13 @@ class TestSet(db.Model):
     date = db.DateTimeProperty(auto_now_add=True)
     notes = db.StringProperty(multiline=True)
     version = db.StringProperty(indexed=True)
-    platform = db.StringProperty()
+    platform = db.StringProperty(indexed=True)
     cmdline = db.StringProperty()
     download_bandwidth_kbps = db.IntegerProperty(indexed=True)
     upload_bandwidth_kbps = db.IntegerProperty(indexed=True)
     round_trip_time_ms = db.IntegerProperty(indexed=True)
     packet_loss_rate  = db.IntegerProperty(indexed=True)
-    using_spdy = db.BooleanProperty()
+    using_spdy = db.BooleanProperty(indexed=True)
 
     # These fields are summary data for the TestSet.
     # When the TestSet is created, these fields are blank.

@@ -810,9 +810,9 @@ JstProcessor.prototype.jstContent_ = function(context, template, content) {
   // by HTML escaping and assignment to innerHTML, but that was even
   // slower.
   // NOTE(mbelshe): Modified to avoid printing 'null'
-  //var value = STRING_empty + context.jsexec(content, template);
-  var value = context.jsexec(content, template);
-  if (value == null) {
+  var value = STRING_empty + context.jsexec(content, template);
+  //var value = context.jsexec(content, template);
+  if (value == "null") {
     value = STRING_empty;
   }
   // Prevent flicker when refreshing a template and the value doesn't
