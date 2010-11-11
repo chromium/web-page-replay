@@ -160,11 +160,8 @@ function Benchmark(url) {
       window.submitter.UpdateSetSummary(global_counter, function() {
         console.log("Posted set summary");
         chrome.tabs.remove(benchmarkWindow.id);
-        console.log("I love printf debugging");
         benchmarkWindow = 0;
-        console.log("I love printf debugging2");
         closeAllTabs();
-        console.log("I love printf debugging3");
       });
     } else {
       // Move on to next benchmarked pages.

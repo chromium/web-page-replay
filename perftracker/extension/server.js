@@ -169,6 +169,9 @@ function XHRGet(url, callback) {
 
   xhr.onreadystatechange = function() {
     if (xhr.readyState == 4) {
+      if (xhr.status != 200)  {
+        console.log("XHR error getting url " + url + ", error: " + xhr.status);
+      }
       callback(xhr.responseText);
     }
   }
@@ -183,6 +186,9 @@ function XHRPost(url, data, callback) {
 
   xhr.onreadystatechange = function() {
     if (xhr.readyState == 4) {
+      if (xhr.status != 200)  {
+        console.log("XHR error posting url " + url + ", error: " + xhr.status);
+      }
       callback(xhr.responseText);
     }
   }
@@ -307,7 +313,6 @@ function TestResultSubmitter(config) {
     result.doc_load_time = data.docLoadTime / data.iterations;
     result.paint_time = data.paintTime / data.iterations;
     result.total_time = data.totalTime / data.iterations;
-    result.total_time_stddev = 0;
     result.connects = data.connects / data.iterations;
     result.sessions = data.spdySessions / data.iterations;
     result.requests = data.requests / data.iterations;
@@ -323,7 +328,6 @@ function TestResultSubmitter(config) {
     data += "&doc_load_time=" + Math.floor(result.doc_load_time);
     data += "&paint_time=" + Math.floor(result.paint_time);
     data += "&total_time=" + Math.floor(result.total_time);
-    data += "&total_time_stddev=" + result.total_time_stddev;
     data += "&num_connects=" + Math.floor(result.connects);
     data += "&num_sessions=" + Math.floor(result.sessions);
     data += "&num_requests=" + Math.floor(result.requests);
