@@ -274,6 +274,9 @@ function Benchmark(url) {
     }
 
     var requested = load_times.requestTime;
+    if (requested == 0) {
+      requsted = load_times.startLoadTime;
+    }
     var started = load_times.startLoadTime;
     var startLoadTime =
         Math.round((load_times.startLoadTime - requested) * 1000.0);
