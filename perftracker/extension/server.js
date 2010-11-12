@@ -143,7 +143,7 @@ Array.avg = function(array) {
     sum = sum - min - max;
     count -= 2;
   }
-  return sum / count;
+  return Math.round(sum / count);
 }
 
 // Compute the standard deviation of an array
@@ -194,6 +194,21 @@ function XHRPost(url, data, callback) {
   }
 }
 
+function copy(obj) {
+  var copy = {};
+  for (var prop in obj)
+    copy[prop] = obj[prop];
+  return copy;
+}
+
+function jsonToPostData(json) {
+  var post_data = [];
+  for (var prop in json) {
+    post_data.push(prop + "=" + encodeURIComponent(json[prop]));
+  }
+  return post_data.join("&");
+}
+
 // Submits a set of test runs up to the server.
 function TestResultSubmitter(config) {
   var self = this;
@@ -218,22 +233,15 @@ function TestResultSubmitter(config) {
 
     self.AppEngineLogin(function() {
       create_test_started = true;
-      var data = "cmd=create";
-      data += "&download_bandwidth_kbps=" + config.download_bandwidth_kbps;
-      data += "&upload_bandwidth_kbps=" + config.upload_bandwidth_kbps;
-      data += "&round_trip_time_ms=" + config.round_trip_time_ms;
-      data += "&packet_loss_rate=" + config.packet_loss_rate;
-      data += "&notes=" + config.notes;
-      data += "&version=" + BrowserDetect.browser + " " + BrowserDetect.version;
-      data += "&platform=" + BrowserDetect.OS;
-      data += "&client_hostname=" + config.client_hostname;
-      data += "&cmdline=" + config.cmdline;
-      data += "&using_spdy=" + config.use_spdy;
+      var data = copy(config);
+      data["cmd"] = "create";
+      data["version"] = BrowserDetect.browser + " " + BrowserDetect.version;
+      data["platform"] = BrowserDetect.OS;
 
       url = config.server_url + kServerPostSetUrl;
 
       user_callback = callback;
-      new XHRPost(url, data, function(result) {
+      new XHRPost(url, jsonToPostData(data), function(result) {
         test_id = result;
         user_callback(result);
       });
@@ -242,102 +250,60 @@ function TestResultSubmitter(config) {
 
   // Post a single result
   this.PostResult = function (result, callback) {
-    var data = "";
-    data += "set_id=" + test_id;
-    data += "&url=" + result.url;
-    data += "&using_spdy=" + (result.viaSpdy ? "CHECKED" : "");
-    data += "&start_load_time=" + result.startLoadTime;
-    data += "&commit_load_time=" + result.commitLoadTime;
-    data += "&doc_load_time=" + result.docLoadTime;
-    data += "&paint_time=" + result.paintTime;
-    data += "&total_time=" + result.totalTime;
-    data += "&num_requests=" + result.requests;
-    data += "&num_connects=" + result.connects;
-    data += "&num_sessions=" + result.spdySessions;
-    data += "&read_bytes_kb=" + Math.floor(result.readKB);
-    data += "&write_bytes_kb=" + Math.floor(result.writeKB);
+    var data = copy(result);
+    data["set_id"] = test_id;
+    // TODO: This is an artifact of the presentation. It should not be
+    // stored in the DB this way.
+    data["using_spdy"] = (result.using_spdy ? "CHECKED" : "");
 
     url = config.server_url + kServerPostResultUrl;
     user_callback = callback;
-    new XHRPost(url, data, function(result) { user_callback(result); });
+    new XHRPost(url, jsonToPostData(data),
+		function(result) { user_callback(result); });
   }
 
   // Post the rollup summary of a set of data
   this.PostSummary = function(data, callback) {
-    var result = {};
-    result.iterations = data.totalResults.length;
-    result.url = data.url;
-    result.using_spdy = data.using_spdy;
-
-    result.using_spdy = data.using_spdy;
-    result.start_load_time = Array.avg(data.startLoadResults);
-    result.commit_load_time = Array.avg(data.commitLoadResults);
-    result.doc_load_time = Array.avg(data.docLoadResults);
-    result.paint_time = Array.avg(data.paintResults);
-    result.total_time = Array.avg(data.totalResults);
-    result.total_time_stddev = Array.stddev(data.totalResults);
-    result.connects = Array.avg(data.connects);
-    result.sessions = Array.avg(data.spdySessions);
-    result.requests = Array.avg(data.requests);
-    result.readKB = Array.avg(data.KbytesRead);
-    result.writeKB = Array.avg(data.KbytesWritten);
-
-    var data = "";
-    data += "set_id=" + test_id;
-    data += "&url=" + result.url;
-    data += "&iterations=" + result.iterations;
-    data += "&using_spdy=" + (result.viaSpdy ? "CHECKED" : "");
-    data += "&start_load_time=" + Math.floor(result.start_load_time);
-    data += "&commit_load_time=" + Math.floor(result.commit_load_time);
-    data += "&doc_load_time=" + Math.floor(result.doc_load_time);
-    data += "&paint_time=" + Math.floor(result.paint_time);
-    data += "&total_time=" + Math.floor(result.total_time);
-    data += "&total_time_stddev=" + result.total_time_stddev;
-    data += "&num_connects=" + Math.floor(result.connects);
-    data += "&num_sessions=" + Math.floor(result.sessions);
-    data += "&num_requests=" + Math.floor(result.requests);
-    data += "&read_bytes_kb=" + Math.floor(result.readKB);
-    data += "&write_bytes_kb=" + Math.floor(result.writeKB);
+    var result = copy(data);
+    // Average everything except the special properties.
+    for (var prop in result) {
+      if (prop == "iterations") {
+        result.iterations = data.iterations / data.total_time.length;
+        continue;
+      }
+      if (prop == "url" || prop == "using_spdy")
+	continue;
+      result[prop] = Array.avg(result[prop]);
+    }
+    result["set_id"] = test_id
+    result["total_time_stddev"] = Array.stddev(data.total_time);
 
     url = config.server_url + kServerPostSummaryUrl;
     user_callback = callback;
-    new XHRPost(url, data, function(result) { user_callback(result); });
+    new XHRPost(url, jsonToPostData(result),
+		function(result) { user_callback(result); });
   }
 
   // Update the set with its summary data
   this.UpdateSetSummary = function(data, callback) {
-    var result = {};
-    result.iterations = data.iterations / data.benchmarkCount;
-    result.url_count = data.benchmarkCount;
-    result.start_load_time = data.startLoadTime / data.iterations;
-    result.commit_load_time = data.commitLoadTime / data.iterations;
-    result.doc_load_time = data.docLoadTime / data.iterations;
-    result.paint_time = data.paintTime / data.iterations;
-    result.total_time = data.totalTime / data.iterations;
-    result.connects = data.connects / data.iterations;
-    result.sessions = data.spdySessions / data.iterations;
-    result.requests = data.requests / data.iterations;
-    result.readKB = data.KbytesRead / data.iterations;
-    result.writeKB = data.KbytesWritten / data.iterations;
-
-    var data = "cmd=update";
-    data += "&set_id=" + test_id;
-    data += "&iterations=" + result.iterations;
-    data += "&url_count=" + result.url_count;
-    data += "&start_load_time=" + Math.floor(result.start_load_time);
-    data += "&commit_load_time=" + Math.floor(result.commit_load_time);
-    data += "&doc_load_time=" + Math.floor(result.doc_load_time);
-    data += "&paint_time=" + Math.floor(result.paint_time);
-    data += "&total_time=" + Math.floor(result.total_time);
-    data += "&num_connects=" + Math.floor(result.connects);
-    data += "&num_sessions=" + Math.floor(result.sessions);
-    data += "&num_requests=" + Math.floor(result.requests);
-    data += "&read_bytes_kb=" + Math.floor(result.readKB);
-    data += "&write_bytes_kb=" + Math.floor(result.writeKB);
+    var result = copy(data);
+    // Divide everything by iterations except the special properties.
+    for (var prop in result) {
+      if (prop == "iterations") {
+	result.iterations = data.iterations / data.url_count;
+	continue;
+      }
+      if (prop == "url_count")
+	continue;
+      result[prop] = Math.round(result[prop] / data.iterations);
+    }
+    result["cmd"] = "update";
+    result["set_id"] = test_id;
 
     url = config.server_url + kServerPostSetUrl;
     user_callback = callback;
-    new XHRPost(url, data, function(result) { user_callback(result); });
+    new XHRPost(url, jsonToPostData(result),
+		function(result) { user_callback(result); });
   }
 
 }

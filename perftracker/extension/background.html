@@ -36,7 +36,7 @@ function closeAllTabs() {
 
 function addBenchmark(benchmark) {
   benchmarks.push(benchmark);
-  global_counter.benchmarkCount++;
+  global_counter.url_count++;
 }
 
 // Array Remove - By John Resig (MIT Licensed)
@@ -102,18 +102,19 @@ function nextBenchmark() {
 }
 
 global_counter = {}
-global_counter.benchmarkCount = 0;
+global_counter.url_count = 0;
 global_counter.iterations = 0;
-global_counter.startLoadTime = 0;
-global_counter.commitLoadTime = 0;
-global_counter.docLoadTime = 0;
-global_counter.paintTime = 0;
-global_counter.totalTime = 0;
-global_counter.KbytesRead = 0;
-global_counter.KbytesWritten = 0;
-global_counter.requests = 0;
-global_counter.connects = 0;
-global_counter.spdySessions = 0;
+global_counter.start_load_time = 0;
+global_counter.commit_load_time = 0;
+global_counter.doc_load_time = 0;
+global_counter.paint_time = 0;
+global_counter.total_time = 0;
+global_counter.last_load_time = 0;
+global_counter.read_bytes_kb = 0;
+global_counter.write_bytes_kb = 0;
+global_counter.num_requests = 0;
+global_counter.num_connects = 0;
+global_counter.num_sessions = 0;
 
 function Benchmark(url) {
   var runCount_ = 0;
@@ -128,21 +129,19 @@ function Benchmark(url) {
   runCount_ = window.iterations;
   current_ = {};
   current_.url = url;
-  current_.results = new Array();
+  current_.results = [];
   current_.iterations = 0;
-  current_.viaSpdy = false;
-  current_.startLoadResults = new Array();  // times to start
-  current_.commitLoadResults = new Array();  // times to commit
-  current_.docLoadResults = new Array();  // times to docload
-  current_.paintResults = new Array();    // times to paint
-  current_.totalResults = new Array();    // times to complete load
-  current_.KbytesRead = new Array();
-  current_.KbytesWritten = new Array();
-  current_.readbpsResults = new Array();
-  current_.writebpsResults = new Array(); 
-  current_.requests = new Array();
-  current_.connects = new Array();
-  current_.spdySessions = new Array();
+  current_.using_spdy = false;
+  current_.start_load_time = [];  // times to start
+  current_.commit_load_time = [];  // times to commit
+  current_.doc_load_time = [];  // times to docload
+  current_.paint_time = [];    // times to paint
+  current_.total_time = [];    // times to complete load
+  current_.read_bytes_kb = [];
+  current_.write_bytes_kb = [];
+  current_.num_requests = [];
+  current_.num_connects = [];
+  current_.num_sessions = [];
 
   // Add this benchmark to the list of benchmarks running.
   addBenchmark(this);
@@ -281,7 +280,7 @@ function Benchmark(url) {
     // If last fetch was via spdy, current fetch should use spdy too. Same
     // for vise versa.
     if (current_.iterations > 0 &&
-        current_.viaSpdy != load_times.wasFetchedViaSpdy) {
+        current_.using_spdy != load_times.wasFetchedViaSpdy) {
       alert("Error: viaSpdy for current fetch is different from last fetch!\n" +
             "Ending current test.");
       runCount_ = 0;  // Stop running this test.
@@ -304,6 +303,7 @@ function Benchmark(url) {
         Math.round((load_times.firstPaintTime - started) * 1000.0);
     var totalTime =
         Math.round((load_times.finishLoadTime - started) * 1000.0);
+    var lastLoadTime = 42;  // TODO(tonyg)
     var firstPaintAfterLoadTime =
         Math.round((load_times.firstPaintAfterLoadTime - started) * 1000.0);
 
@@ -324,63 +324,64 @@ function Benchmark(url) {
       paintTime = totalTime;
     }
 
-    current_.viaSpdy = load_times.wasFetchedViaSpdy;
+    current_.using_spdy = load_times.wasFetchedViaSpdy;
     current_.iterations++;
 
     // Record the individual result
     var result = {};
     result.url = current_.url;
-    result.viaSpdy = load_times.wasFetchedViaSpdy;
-    result.startLoadTime = startLoadTime;
-    result.commitLoadTime = commitLoadTime;
-    result.docLoadTime = docLoadTime;
-    result.paintTime = paintTime;
-    result.totalTime = totalTime;
+    result.using_spdy = load_times.wasFetchedViaSpdy;
+    result.start_load_time = startLoadTime;
+    result.commit_load_time = commitLoadTime;
+    result.doc_load_time = docLoadTime;
+    result.paint_time = paintTime;
+    result.total_time = totalTime;
+    result.last_load_time = lastLoadTime;
     var bytesRead = chrome.benchmarking.counter(kTCPReadBytes) -
                                                 initialReadBytes_;
     var bytesWrite = chrome.benchmarking.counter(kTCPWriteBytes) - 
                                                  initialWriteBytes_;
-    result.readKB = bytesRead / 1024;
-    result.writeKB = bytesWrite / 1024;
-    result.requests = chrome.benchmarking.counter(kRequestCount) -
-                       initialRequestCount_;
-    result.connects = chrome.benchmarking.counter(kConnectCount) -
-                       initialConnectCount_;
-    result.spdySessions = chrome.benchmarking.counter(kSpdySessionCount) -
-                           initialSpdySessionCount_;
+    result.read_bytes_kb = bytesRead / 1024;
+    result.write_bytes_kb = bytesWrite / 1024;
+    result.num_requests = chrome.benchmarking.counter(kRequestCount) -
+        initialRequestCount_;
+    result.num_connects = chrome.benchmarking.counter(kConnectCount) -
+        initialConnectCount_;
+    result.num_sessions = chrome.benchmarking.counter(kSpdySessionCount) -
+        initialSpdySessionCount_;
 
 
     // Record the aggregate result for this URL.
-    current_.viaSpdy = load_times.wasFetchedViaSpdy;
+    current_.using_spdy = load_times.wasFetchedViaSpdy;
     current_.iterations++;
-    current_.startLoadResults.push(startLoadTime);
-    current_.commitLoadResults.push(commitLoadTime);
-    current_.docLoadResults.push(docLoadTime);
-    current_.paintResults.push(paintTime);
-    current_.totalResults.push(totalTime);
-    current_.KbytesRead.push(bytesRead / 1024);
-    current_.KbytesWritten.push(bytesWrite / 1024);
-    current_.requests.push(chrome.benchmarking.counter(kRequestCount) -
-                         initialRequestCount_);
-    current_.connects.push(chrome.benchmarking.counter(kConnectCount) -
-                         initialConnectCount_);
-    current_.spdySessions.push(chrome.benchmarking.counter(kSpdySessionCount) -
-                         initialSpdySessionCount_);
+    current_.start_load_time.push(startLoadTime);
+    current_.commit_load_time.push(commitLoadTime);
+    current_.doc_load_time.push(docLoadTime);
+    current_.paint_time.push(paintTime);
+    current_.total_time.push(totalTime);
+    current_.read_bytes_kb.push(bytesRead / 1024);
+    current_.write_bytes_kb.push(bytesWrite / 1024);
+    current_.num_requests.push(chrome.benchmarking.counter(kRequestCount) -
+        initialRequestCount_);
+    current_.num_connects.push(chrome.benchmarking.counter(kConnectCount) -
+        initialConnectCount_);
+    current_.num_sessions.push(chrome.benchmarking.counter(kSpdySessionCount) -
+        initialSpdySessionCount_);
 
     // Record the aggregate result globally.
     global_counter.iterations++;
-    global_counter.startLoadTime += startLoadTime;
-    global_counter.commitLoadTime += commitLoadTime;
-    global_counter.docLoadTime += docLoadTime;
-    global_counter.paintTime += paintTime;
-    global_counter.totalTime += totalTime;
-    global_counter.KbytesRead += (bytesRead / 1024);
-    global_counter.KbytesWritten += (bytesWrite / 1024);
-    global_counter.requests += (chrome.benchmarking.counter(kRequestCount) -
+    global_counter.start_load_time += startLoadTime;
+    global_counter.commit_load_time += commitLoadTime;
+    global_counter.doc_load_time += docLoadTime;
+    global_counter.paint_time += paintTime;
+    global_counter.total_time += totalTime;
+    global_counter.read_bytes_kb += (bytesRead / 1024);
+    global_counter.write_bytes_kb += (bytesWrite / 1024);
+    global_counter.num_requests += (chrome.benchmarking.counter(kRequestCount) -
                          initialRequestCount_);
-    global_counter.connects += (chrome.benchmarking.counter(kConnectCount) -
+    global_counter.num_connects += (chrome.benchmarking.counter(kConnectCount) -
                          initialConnectCount_);
-    global_counter.spdySessions += (chrome.benchmarking.counter(kSpdySessionCount) -
+    global_counter.num_sessions += (chrome.benchmarking.counter(kSpdySessionCount) -
                          initialSpdySessionCount_);
 
     // Submit the result.

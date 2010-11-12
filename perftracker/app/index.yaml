@@ -38,6 +38,16 @@ indexes:
   - name: platform
   - name: round_trip_time_ms
   - name: upload_bandwidth_kbps
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: download_bandwidth_kbps
+  - name: packet_loss_rate
+  - name: platform
+  - name: round_trip_time_ms
+  - name: upload_bandwidth_kbps
   - name: version
   - name: date
     direction: desc
