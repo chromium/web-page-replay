@@ -107,6 +107,34 @@ class JSONDataPage(webapp.RequestHandler):
         output += "] }"
         self.response.out.write(output);
 
+    # Lookup the distinct values in the TestSet data, for use in filtering.
+    # TODO(mbelshe):  Put this into memcache.
+    def do_filters(self):
+      platforms = set()
+      versions = set()
+      download_bandwidths = set()
+      upload_bandwidths = set()
+      round_trip_times = set()
+      packet_loss_rates = set()
+
+      query = models.TestSet.all()
+      for item in query:
+          platforms.add(item.platform)
+          versions.add(item.version)
+          download_bandwidths.add(item.download_bandwidth_kbps)
+          upload_bandwidths.add(item.upload_bandwidth_kbps)
+          round_trip_times.add(item.round_trip_time_ms)
+          packet_loss_rates.add(item.packet_loss_rate)
+
+      filters = {}
+      filters["platforms"] = sorted(platforms)
+      filters["versions"] = sorted(versions)
+      filters["download_bandwidths"] = sorted(download_bandwidths)
+      filters["upload_bandwidths"] = sorted(upload_bandwidths)
+      filters["round_trip_times"] = sorted(round_trip_times)
+      filters["packet_loss_rates"] = sorted(packet_loss_rates)
+      self.response.out.write(json.encode(filters))
+
     def get(self):
         if not users.get_current_user():
             self.response.out.write("[{}]")
@@ -129,6 +157,9 @@ class JSONDataPage(webapp.RequestHandler):
             return
         elif resource_type == "set_search":
             self.do_set_search()
+            return
+        elif resource_type == "filters":
+            self.do_filters()
             return
 
         self.response.out.write("[{}]")
