@@ -20,7 +20,7 @@
 // benchmark stalls.
 var benchmarkExtensionUrl = window.location.toString();
 var heartbeatCount = 0;
-var heartbeatInterval = 200;
+var heartbeatInterval = 1000;
 var windowLoad = 0;
 var lastElementLoad = 0;
 var latestLoad = 0;
@@ -40,7 +40,19 @@ var checkForLastLoad = function() {
                                         url: benchmarkExtensionUrl,
                                         values: loadTimes });
   }
-}
+};
+
+var onWindowFinished = function(e) {
+  windowLoad = new Date();
+  latestLoad = windowLoad;
+  console.log("Window loaded at " + windowLoad);
+  setTimeout(checkForLastLoad, heartbeatInterval);
+};
+
+var onElementFinished = function(e) {
+  lastElementLoad = new Date();
+  console.log("Element loaded at " + lastElementLoad);
+};
 
 var registerListeners = function() {
   if (window.parent != window) {
@@ -51,20 +63,10 @@ var registerListeners = function() {
   // TODO(tonyg): We may also want to list for abort and error here.
 
   // Called when the window loads.
-  // Set a timeout to check for subresource loads.
-  window.addEventListener('load', function(e) {
-    windowLoad = new Date();
-    latestLoad = windowLoad;
-    console.log("Window loaded at " + windowLoad);
-    setTimeout(checkForLastLoad, heartbeatInterval);
-  }, true);
+  window.addEventListener('load', onWindowFinished, true);
 
   // Called each time a subresource loads.
-  // Each time we see one, we check again.
-  document.addEventListener('load', function(e) {
-    lastElementLoad = new Date();
-    console.log("Element loaded at " + lastElementLoad);
-  }, true);
-}
+  document.addEventListener('load', onElementFinished, true);
+};
 
 registerListeners();
