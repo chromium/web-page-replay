@@ -27,14 +27,14 @@ var latestLoad = 0;
 
 var checkForLastLoad = function() {
   var benchmarkExtensionPort = chrome.extension.connect();
-  if (lastElementLoad > latestLoad) {
+  var loadTimes = chrome.loadTimes();
+  if (lastElementLoad > latestLoad || !loadTimes.finishLoadTime) {
     latestLoad = lastElementLoad;
     benchmarkExtensionPort.postMessage({message: 'heartbeat',
                                         count: heartbeatCount});
     heartbeatCount++;
     setTimeout(checkForLastLoad, heartbeatInterval);
   } else {
-    var loadTimes = chrome.loadTimes();
     loadTimes.lastLoadTime = latestLoad / 1000.0;
     benchmarkExtensionPort.postMessage({message: 'load',
                                         url: benchmarkExtensionUrl,
@@ -48,6 +48,8 @@ var registerListeners = function() {
     return;
   }
   
+  // TODO(tonyg): We may also want to list for abort and error here.
+
   // Called when the window loads.
   // Set a timeout to check for subresource loads.
   window.addEventListener('load', function(e) {
