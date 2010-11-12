@@ -94,6 +94,21 @@ def DoAppEngineLogin(username, password):
       return None
     return full_serv_uri
 
+
+# Clobber a tmp directory.  Be careful!
+def ClobberTmpDirectory(tmpdir):
+    # Do sanity checking so we don't clobber the wrong thing
+    if len(tmpdir) == 0 or not tmpdir.startswith("/tmp/"):
+        return
+
+    for root, dirs, files in os.walk(tmpdir, topdown=False):
+        for name in files:
+            os.remove(os.path.join(root, name))
+        for name in dirs:
+            os.rmdir(os.path.join(root, name))
+    os.rmdir(tmpdir)
+
+
 class TestInstance:
     def __init__(self, config, log_level):
         self.config = config
@@ -180,25 +195,30 @@ document.getElementById("json").innerHTML = raw_json;
     def RunChrome(self, chrome_cmdline):
         start_file_url = "file://" + self.filename
 
-        cmdline = [
-            runner_cfg.chrome_path,
-            "--host-resolver-rules=MAP * 127.0.0.1,EXCLUDE " + runner_cfg.benchmark_server, 
-            "--disable-background-networking",
-            "--enable-benchmarking",
-            "--enable-logging",
-            "--load-extension=" + perftracker_extension_path,
-            "--log-level=0",
-            "--no-first-run",
-            "--no-js-randomization",
-            "--user-data-dir=/tmp/foo",     # TODO(mbelshe) make dynamic
-        ]
-        if chrome_cmdline:
-          cmdline.extend(chrome_cmdline.split(" "))
-        cmdline.append(start_file_url)
+        profile_dir = tempfile.mkdtemp(prefix="chrome.profile.");
 
-        logging.debug("Starting chrome: %s", str(cmdline))
-        chrome = subprocess.Popen(cmdline)
-        chrome.wait();
+        try:
+            cmdline = [
+              runner_cfg.chrome_path,
+              "--host-resolver-rules=MAP * 127.0.0.1,EXCLUDE " + runner_cfg.benchmark_server, 
+              "--disable-background-networking",
+              "--enable-benchmarking",
+              "--enable-logging",
+              "--load-extension=" + perftracker_extension_path,
+              "--log-level=0",
+              "--no-first-run",
+              "--no-js-randomization",
+              "--user-data-dir=" + profile_dir,
+            ]
+            if chrome_cmdline:
+              cmdline.extend(chrome_cmdline.split(" "))
+            cmdline.append(start_file_url)
+  
+            logging.debug("Starting chrome: %s", str(cmdline))
+            chrome = subprocess.Popen(cmdline)
+            chrome.wait();
+        finally:
+            ClobberTmpDirectory(profile_dir)
 
     def RunTest(self, notes, chrome_cmdline):
         try:
