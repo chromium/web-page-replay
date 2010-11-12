@@ -32,6 +32,7 @@ def ApplyStatisticsData(request, obj):
     obj.doc_load_time = int(request.get('doc_load_time'))
     obj.paint_time = int(request.get('paint_time'))
     obj.total_time = int(request.get('total_time'))
+    obj.last_load_time = int(request.get('last_load_time'))
     obj.num_requests = int(request.get('num_requests'))
     obj.num_connects = int(request.get('num_connects'))
     obj.num_sessions = int(request.get('num_sessions'))

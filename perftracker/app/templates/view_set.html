@@ -59,6 +59,7 @@
       <tr><td>Doc Load Time</td><td jscontent="doc_load_time"></td></tr>
       <tr><td>Paint Time</td><td jscontent="paint_time"></td></tr>
       <tr><td>Total Time</td><td jscontent="total_time"></td></tr>
+      <tr><td>Last Load Time</td><td jscontent="last_load_time"></td></tr>
       </table>
       </div>
 
@@ -72,6 +73,7 @@
         <th>Doc</th>
         <th>Paint</th>
         <th>PLT</th>
+        <th>LLT</th>
         <th>stddev</th>
         <th>stderr</th>
         <th>ci</th>
@@ -85,6 +87,7 @@
         <td class="righttext" jscontent="doc_load_time"></td>
         <td class="righttext" jscontent="paint_time"></td>
         <td class="righttext" jscontent="total_time"></td>
+        <td class="righttext" jscontent="last_load_time"></td>
         <td class="righttext" jseval="val = total_time_stddev.toFixed(1)" jscontent="val"></td>
         <td class="righttext" jseval="$stderr = stderr(total_time_stddev, iterations).toFixed(1)" jscontent="$stderr"></td>
         <td class="righttext" jseval="$ci = ci($stderr); $lo=total_time - $ci; $hi=total_time + $ci; val=$lo.toFixed(1) + ' - ' + $hi.toFixed(1)" jscontent="val"></td>

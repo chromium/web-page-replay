@@ -137,6 +137,7 @@ function Benchmark(url) {
   current_.doc_load_time = [];  // times to docload
   current_.paint_time = [];    // times to paint
   current_.total_time = [];    // times to complete load
+  current_.last_load_time = [];
   current_.read_bytes_kb = [];
   current_.write_bytes_kb = [];
   current_.num_requests = [];
@@ -359,6 +360,7 @@ function Benchmark(url) {
     current_.doc_load_time.push(docLoadTime);
     current_.paint_time.push(paintTime);
     current_.total_time.push(totalTime);
+    current_.last_load_time.push(lastLoadTime);
     current_.read_bytes_kb.push(bytesRead / 1024);
     current_.write_bytes_kb.push(bytesWrite / 1024);
     current_.num_requests.push(chrome.benchmarking.counter(kRequestCount) -
@@ -375,6 +377,7 @@ function Benchmark(url) {
     global_counter.doc_load_time += docLoadTime;
     global_counter.paint_time += paintTime;
     global_counter.total_time += totalTime;
+    global_counter.last_load_time += lastLoadTime;
     global_counter.read_bytes_kb += (bytesRead / 1024);
     global_counter.write_bytes_kb += (bytesWrite / 1024);
     global_counter.num_requests += (chrome.benchmarking.counter(kRequestCount) -
