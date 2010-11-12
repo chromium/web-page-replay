@@ -198,6 +198,7 @@ class UploadTestSet(BaseRequestHandler):
             test_set.cmdline  = self.request.get('cmdline')
             test_set.version  = self.request.get('version')
             test_set.platform  = self.request.get('platform')
+            test_set.client_hostname  = self.request.get('client_hostname')
             test_set.download_bandwidth_kbps = int(self.request.get('download_bandwidth_kbps'))
             test_set.upload_bandwidth_kbps = int(self.request.get('upload_bandwidth_kbps'))
             test_set.round_trip_time_ms = int(self.request.get('round_trip_time_ms'))

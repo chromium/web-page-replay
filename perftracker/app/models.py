@@ -27,6 +27,7 @@ class TestSet(db.Model):
     notes = db.StringProperty(multiline=True)
     version = db.StringProperty(indexed=True)
     platform = db.StringProperty(indexed=True)
+    client_hostname = db.StringProperty(indexed=True)
     cmdline = db.StringProperty()
     download_bandwidth_kbps = db.IntegerProperty(indexed=True)
     upload_bandwidth_kbps = db.IntegerProperty(indexed=True)

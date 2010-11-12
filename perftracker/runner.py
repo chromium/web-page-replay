@@ -22,6 +22,7 @@ import getpass
 import logging
 import optparse
 import os
+import platform
 import subprocess
 import sys
 import tempfile
@@ -139,6 +140,7 @@ benchmark.user = "";  // XXXMB - fix me.
         writeln(f, "benchmark.cmdline = \"" + cmdline + "\";");
         writeln(f, "benchmark.server_url = \"" + runner_cfg.benchmark_server_url + "\";")
         writeln(f, "benchmark.server_login = \"" + options.login_url + "\";")
+        writeln(f, "benchmark.client_hostname = \"" + platform.node() + "\";")
         writeln(f, "benchmark.iterations = " + str(self.config["iterations"]) + ";")
         writeln(f, "benchmark.download_bandwidth_kbps = " + str(self.config["download_bandwidth_kbps"]) + ";")
         writeln(f, "benchmark.upload_bandwidth_kbps = " + str(self.config["upload_bandwidth_kbps"]) + ";")

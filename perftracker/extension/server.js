@@ -226,6 +226,7 @@ function TestResultSubmitter(config) {
       data += "&notes=" + config.notes;
       data += "&version=" + BrowserDetect.browser + " " + BrowserDetect.version;
       data += "&platform=" + BrowserDetect.OS;
+      data += "&client_hostname=" + config.client_hostname;
       data += "&cmdline=" + config.cmdline;
       data += "&using_spdy=" + config.use_spdy;
 
