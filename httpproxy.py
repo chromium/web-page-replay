@@ -22,6 +22,7 @@ import os
 import socket
 import SocketServer
 import subprocess
+import time
 
 
 class RealHttpRequest(object):
@@ -51,6 +52,13 @@ class RealHttpRequest(object):
 
 
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+  protocol_version = "HTTP/1.1"
+
+  # Make it match our logging format
+  def log_request(self, code='-', size='-'): pass
+  def log_error(self, format, *args): logging.error(format, *args)
+  def log_message(self, format, *args): logging.info(format, *args)
+
   def read_request_body(self):
     request_body = None
     length = int(self.headers.get('content-length', 0)) or None
@@ -170,20 +178,17 @@ class RecordHandler(HttpArchiveHandler):
 
 
 class ReplayHandler(HttpArchiveHandler):
-  # Since we do lots of small "wfile.write() calls, turn on buffering.
-  wbufsize = -1
-
   def do_GET(self):
+    start_time = time.time()
     request = self.get_archived_http_request()
     if request in self.server.http_archive:
       self.send_archived_http_response(self.server.http_archive[request])
-      logging.debug('Replayed: %s', request)
+      request_time_ms = (time.time() - start_time) * 1000.0;
+      logging.debug('Replayed: %s (%dms)', request, request_time_ms)
     else:
       self.send_error(404)
       logging.error('Could not replay: %s', request)
 
-
-# TODO: Need to start up on both 80 for http and 443 for https.
 
 class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
                             BaseHTTPServer.HTTPServer,
@@ -198,13 +203,7 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
     self._assert_archive_file_writable()
     self.http_archive = httparchive.HttpArchive()
 
-    # Increase the listen queue size (default is 5).  Since we're intercepting
-    # many domains through this single server, it is quite possible to get
-    # more than 5 concurrent connection requests.
-    self.request_queue_size = 128
-
     try:
-      RecordHandler.protocol_version = "HTTP/1.1"
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
     except Exception, e:
       logging.critical('Could not start HTTPServer on port %d: %s', port, e)
@@ -241,13 +240,7 @@ class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
     logging.info('Loaded %d responses from %s',
                  len(self.http_archive), http_archive_filename)
 
-    # Increase the listen queue size (default is 5).  Since we're intercepting
-    # many domains through this single server, it is quite possible to get
-    # more than 5 concurrent connection requests.
-    self.request_queue_size = 128
-
     try:
-      ReplayHandler.protocol_version = "HTTP/1.1"
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
     except Exception, e:
       logging.critical('Could not start HTTPServer on port %d: %s', port, e)
