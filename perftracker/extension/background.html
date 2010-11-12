@@ -115,6 +115,7 @@ function Benchmark(url) {
   var initialRequestCount_;
   var initialReadBytes_;
   var initialWriteBytes_;
+  var startTime_ = new Date();
 
   console.log("Benchmark testing url: " + url);
   runCount_ = window.iterations;
@@ -142,6 +143,10 @@ function Benchmark(url) {
   // Is the benchmark currently in progress.
   this.isRunning = function() {
     return runCount_ > 0;
+  }
+
+  this.startTime = function() {
+    return startTime_;
   }
 
   // The url which this benchmark is running.
@@ -176,6 +181,7 @@ function Benchmark(url) {
     initialRequestCount_ = chrome.benchmarking.counter(kRequestCount);
     initialConnectCount_ = chrome.benchmarking.counter(kConnectCount);
     initialSpdySessionCount_ = chrome.benchmarking.counter(kSpdySessionCount);
+    startTime_ = new Date();
   }
 
   this.openNextPage = function() {
@@ -388,10 +394,14 @@ var kHeartbeatCheckIntervalMs = 2000;  // Check every 2s.
 var kHeartbeatTimeoutMs = 10000;   // After 10s, assume the page is hosed.
 
 setInterval(function() {
-  var interval = new Date() - last_heartbeat;
+  var now = new Date();
+  var interval = now - last_heartbeat;
+  var current_benchmark = currentBenchmark();
+  var totalTime = now - current_benchmark.startTime();
   console.log("Heartbeat check: " + interval);
-  if (interval > kHeartbeatTimeoutMs) {
-    var current_benchmark = currentBenchmark();
+  console.log("Total time check: " + totalTime);
+  if (interval > kHeartbeatTimeoutMs ||
+      totalTime > (kHeartbeatTimeoutMs * 2)) {
     console.log("benchmarkIndex: " + benchmarkIndex);
     console.log("num benchmarks: " + benchmarks.length);
     console.log("Page is taking too long.  Killing it: " + current_benchmark.url());
