@@ -36,7 +36,6 @@ function closeAllTabs() {
 
 function addBenchmark(benchmark) {
   benchmarks.push(benchmark);
-  benchmarkIndex = 0;  // Reset the counter when adding benchmarks.
   global_counter.benchmarkCount++;
 }
 
@@ -49,6 +48,7 @@ Array.prototype.remove = function(from, to) {
 
 function removeBenchmark(benchmark) {
   var index;
+  console.log("Removing benchmark: " + benchmark.url());
   for (var index = 0; index < benchmarks.length; ++index) {
     if (benchmarks[index] == benchmark) {
       break;
@@ -57,8 +57,13 @@ function removeBenchmark(benchmark) {
   benchmarks.remove(index);
 
   // Preserve index ordering when removing from the list.
-  if (index <= benchmarkIndex) {
+  if (index < benchmarkIndex) {
     benchmarkIndex--;  // Note:  it is okay to drop to -1 here.
+  }
+
+  // Activate the new benchmark.
+  if (benchmarks.length > 0) {
+    currentBenchmark().activate()
   }
 }
 
@@ -91,7 +96,9 @@ function currentBenchmark() {
 
 function nextBenchmark() {
   benchmarkIndex = (benchmarkIndex + 1) % benchmarks.length;
-  return benchmarks[benchmarkIndex];
+  var benchmark = benchmarks[benchmarkIndex];
+  benchmark.activate();
+  return benchmark;
 }
 
 global_counter = {}
@@ -149,6 +156,10 @@ function Benchmark(url) {
     return startTime_;
   }
 
+  this.activate = function() {
+    startTime_ = new Date();
+  }
+
   // The url which this benchmark is running.
   this.url = function() { return current_.url; }
 
@@ -181,7 +192,6 @@ function Benchmark(url) {
     initialRequestCount_ = chrome.benchmarking.counter(kRequestCount);
     initialConnectCount_ = chrome.benchmarking.counter(kConnectCount);
     initialSpdySessionCount_ = chrome.benchmarking.counter(kSpdySessionCount);
-    startTime_ = new Date();
   }
 
   this.openNextPage = function() {
@@ -243,7 +253,7 @@ function Benchmark(url) {
         console.log("enumerating " + all.length + " windows");
         for (var i = 0; i < all.length; i++) {
           if (all[i].id == benchmarkWindow.id) {
-             console.log("found it");
+             console.log("found it: " + benchmarkWindow.id );
              me_.closePage();
              return;
           }; 
@@ -390,8 +400,8 @@ function Benchmark(url) {
 }
 
 var last_heartbeat = new Date();
-var kHeartbeatCheckIntervalMs = 2000;  // Check every 2s.
-var kHeartbeatTimeoutMs = 10000;   // After 10s, assume the page is hosed.
+var kHeartbeatCheckIntervalMs = 1000;  // Check every 1s.
+var kHeartbeatTimeoutMs = 20000;   // After 20s, assume the page is hosed.
 
 setInterval(function() {
   var now = new Date();
