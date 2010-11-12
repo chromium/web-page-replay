@@ -1,27 +1,9 @@
-Object.prototype.keys = function() {
-  var keys = [];
-  for (key in this) {
-    if (this.hasOwnProperty(key)) {
-      keys.push(key);
-    }
-  }
-  return keys;
-}
-
 Array.prototype.contains = function(obj) {
   var i = this.length;
   while (i--) {
     if (this[i] == obj) {
       return true;
     }
-  }
-  return false;
-}
-
-Array.prototype.push_unique = function(obj) {
-  if (!this.contains(obj)) {
-    this.push(obj);
-    return true;
   }
   return false;
 }

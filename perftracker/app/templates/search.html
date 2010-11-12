@@ -6,37 +6,25 @@
   <script src="jst/util.js" type="text/javascript"></script>
   <script src="jst/jsevalcontext.js" type="text/javascript"></script>
   <script src="jst/jstemplate.js" type="text/javascript"></script>
+  <script type="text/javascript" src="https://www.google.com/jsapi"></script>
   </head>
 
-  <body onLoad="loadData()">
+  <body onLoad="main()">
     <h1><div id="header">Chromium Page Tracker TestSets</div></h1>
 
     <script>
-    // Initialize the select filter data
-    var data = {};
-    data.platforms = [];
-    data.versions = [];
-    data.download_bandwidths = [];
-    data.upload_bandwidths = [];
-    data.round_trip_times = [];
-    data.packet_loss_rates = [];
-    data.urls = [];
+    data = {}
 
-    // We create set of filters on the page for drilling into the
-    // data.  We do this by looking at all the values we've seen.
-    function loadQueryFieldData() {
-      for (var i = 0; i < data.results.length; ++i) {
-         var obj = data.results[i];
-         data.platforms.push_unique(obj.platform);
-         data.versions.push_unique(obj.version);
-         data.download_bandwidths.push_unique(obj.download_bandwidth_kbps);
-         data.upload_bandwidths.push_unique(obj.upload_bandwidth_kbps);
-         data.round_trip_times.push_unique(obj.round_trip_time_ms);
-         data.packet_loss_rates.push_unique(obj.packet_loss_rate);
-         data.urls.push_unique(obj.url);
-      }
-      data.urls.sort();
-      data.round_trip_times.sort();
+    function loadFilters() {
+      // Fetch data for the filters.
+      var filter_data_url = "/json?type=filters";
+      new XHRGet(filter_data_url, function(result) {
+        data.filters = JSON.parse(result);
+        var context = JsEvalContext.create(data.filters);
+        var template = document.getElementById("filters_template");
+        jstProcess(context, template);
+        JsEvalContext.recycle(context);
+      });
     }
 
     // Utility function to grab the value of a select element.
@@ -68,20 +56,51 @@
 
       new XHRGet(url, function(result) {
         data.results = JSON.parse(result);
-        loadQueryFieldData(data);
-        var context = new JsEvalContext(data);
-        var template = document.getElementById("template");
+        var context = JsEvalContext.create(data);
+        var template = document.getElementById("data_template");
         jstProcess(context, template);
+        drawChart(data.results);
+        JsEvalContext.recycle(context);
       });
+    }
+
+    google.load('visualization', '1', {'packages':['annotatedtimeline']});
+
+    function drawChart(results) {
+      var graph_data = new google.visualization.DataTable();
+      graph_data.addColumn('date', 'Date');
+      graph_data.addColumn('number', 'PLT');
+      graph_data.addColumn('number', 'First Paint');
+
+      for (var i = 0; i < results.length; ++i) {
+        graph_data.addRow([new Date(results[i].date),
+                          results[i].total_time,
+                          results[i].paint_time, ]);
+      }
+
+      var chart_div = document.getElementById('chart_div');
+      if (graph_data.getNumberOfRows()) {
+        var chart = new google.visualization.AnnotatedTimeLine(chart_div);
+        chart.draw(graph_data, {displayAnnotations: true});
+      } else {
+        chart_div.innerHTML = "No data";
+      }
     }
 
     function filterChanged() {
       loadData();
     }
+
+    function main() {
+      loadData();
+      loadFilters();
+    }
+
     </script>
 
-    <div id="template">
-      <div id="filter">
+    <div id="filters_template">
+      <div id="filter" style="border:1px solid black">
+      Filters:
       <table class="sortable">
         <tr>
           <td>Platform</td>
@@ -128,8 +147,13 @@
           </select>
         </td>
         </tr>
+        </table>
       </div>
+    </div>
 
+    <div id='chart_div' style='width: 700px; height: 240px;'></div>
+
+    <div id="data_template">
       <table class="sortable">
       <tr>
         <th>Date</th>
