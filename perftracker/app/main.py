@@ -14,6 +14,7 @@
 
 import cgi
 import json
+import logging
 import models
 import os
 
@@ -23,8 +24,8 @@ from google.appengine.ext.webapp import template
 from google.appengine.ext.webapp.util import run_wsgi_app
 from google.appengine.ext import db
 
-# Applies statistics uploaded via the request to the object.
 def ApplyStatisticsData(request, obj):
+    """Applies statistics uploaded via the request to the object."""
     obj.using_spdy = bool(request.get('using_spdy')=="CHECKED")
     obj.start_load_time = int(request.get('start_load_time'))
     obj.commit_load_time = int(request.get('commit_load_time'))
@@ -37,10 +38,26 @@ def ApplyStatisticsData(request, obj):
     obj.read_bytes_kb = int(request.get('read_bytes_kb'))
     obj.write_bytes_kb = int(request.get('write_bytes_kb'))
 
-class JSONDataPage(webapp.RequestHandler):
-    # Do a search for TestSets
+
+class BaseRequestHandler(webapp.RequestHandler):
+
+    def send_error(self, format, *args):
+        """Send a fatal request error to the error log and response output."""
+        logging.error(format, *args)
+        self.response.out.write(format % args)
+
+    def send_json_error(self, format, *args):
+        """Send a fatal request error to the error log and json output."""
+        logging.error(format, *args)
+        json_error = {}
+        json_error.error = format % args
+        self.response.out.write(json.dumps(json_error))
+
+
+class JSONDataPage(BaseRequestHandler):
+    """Do a search for TestSets."""
     def do_set_search(self):
-        query = models.TestSet.all();
+        query = models.TestSet.all()
         query.order("-date")
 
         # Apply filters.
@@ -63,86 +80,82 @@ class JSONDataPage(webapp.RequestHandler):
         results = query.fetch(250)
         self.response.out.write(json.encode(results))
     
-    # Lookup a specific TestSet
     def do_set(self):
+        """Lookup a specific TestSet."""
         set_id = self.request.get("id")
         if not set_id:
-            self.response.out.write("Error")
+            self.send_json_error("Bad request, no id param")
             return
         test_set = models.TestSet.get(db.Key(set_id))
+        if not test_set:
+            self.send_json_error("Could not find id: ", id)
+            return
 
         # We do manual coalescing of multiple data structures
         # into a single json blob.
-        output = "{ \"obj\":" + json.encode(test_set);
-        output += ", \"summaries\": ["; 
-        first = True
-        for summary in test_set.summaries:
-            if not first:
-              output += ","
-            first = False
-            output += json.encode(summary)
-        output += "] }"
-        self.response.out.write(output);
+        json_output = {}
+        json_output.obj = test_set
+        json_output.summaries = test_set.summaries
+        self.response.out.write(json.dumps(json_output))
 
-    # Lookup a specific TestSummary
     def do_summary(self):
+        """ Lookup a specific TestSummary"""
         set_id = self.request.get("id")
         if not set_id:
-            self.response.out.write("Error")
+            self.send_json_error("Bad request, no id param")
             return
         test_summary = models.TestSummary.get(db.Key(set_id))
-        output = "{ \"obj\":" + json.encode(test_summary);
-        output += ", \"results\": ["; 
+        if not test_summary:
+            self.send_json_error("Could not find id: ", id)
+            return
 
+        json_output = {}
+        json_output.obj = test_summary
         test_set = models.TestSet.get(test_summary.set.key())
         test_results = test_set.results
         test_results.filter("url =", test_summary.url)
+        json_output.results = test_results
+        self.response.out.write(json.dumps(json_output))
 
-        first = True
-        for test_result in test_results:
-            if not first:
-              output += ","
-            first = False
-            output += json.encode(test_result)
-        output += "] }"
-        self.response.out.write(output);
-
-    # Lookup the distinct values in the TestSet data, for use in filtering.
-    # TODO(mbelshe):  Put this into memcache.
     def do_filters(self):
-      platforms = set()
-      versions = set()
-      download_bandwidths = set()
-      upload_bandwidths = set()
-      round_trip_times = set()
-      packet_loss_rates = set()
+        """Lookup the distinct values in the TestSet data, for use in filtering.
 
-      query = models.TestSet.all()
-      for item in query:
-          platforms.add(item.platform)
-          versions.add(item.version)
-          download_bandwidths.add(item.download_bandwidth_kbps)
-          upload_bandwidths.add(item.upload_bandwidth_kbps)
-          round_trip_times.add(item.round_trip_time_ms)
-          packet_loss_rates.add(item.packet_loss_rate)
+        TODO(mbelshe):  Put this into memcache.
+        """
+        platforms = set()
+        versions = set()
+        download_bandwidths = set()
+        upload_bandwidths = set()
+        round_trip_times = set()
+        packet_loss_rates = set()
 
-      filters = {}
-      filters["platforms"] = sorted(platforms)
-      filters["versions"] = sorted(versions)
-      filters["download_bandwidths"] = sorted(download_bandwidths)
-      filters["upload_bandwidths"] = sorted(upload_bandwidths)
-      filters["round_trip_times"] = sorted(round_trip_times)
-      filters["packet_loss_rates"] = sorted(packet_loss_rates)
-      self.response.out.write(json.encode(filters))
+        query = models.TestSet.all()
+        for item in query:
+            platforms.add(item.platform)
+            versions.add(item.version)
+            download_bandwidths.add(item.download_bandwidth_kbps)
+            upload_bandwidths.add(item.upload_bandwidth_kbps)
+            round_trip_times.add(item.round_trip_time_ms)
+            packet_loss_rates.add(item.packet_loss_rate)
+
+        filters = {}
+        filters["platforms"] = sorted(platforms)
+        filters["versions"] = sorted(versions)
+        filters["download_bandwidths"] = sorted(download_bandwidths)
+        filters["upload_bandwidths"] = sorted(upload_bandwidths)
+        filters["round_trip_times"] = sorted(round_trip_times)
+        filters["packet_loss_rates"] = sorted(packet_loss_rates)
+        self.response.out.write(json.encode(filters))
 
     def get(self):
-        if not users.get_current_user():
-            self.response.out.write("[{}]")
-            return
+        # TODO(mbelshe): the dev server doesn't properly handle logins?
+        #if not user:
+        #    self.redirect(users.create_login_url(self.request.uri))
+        #    return
 
         resource_type = self.request.get("type")
         if not resource_type:
-            self.response.out.write("[{}]")
+            self.send_json_error("Could not find type: ", type)
             return
 
         # Do a query for the appropriate resource type.
@@ -162,10 +175,11 @@ class JSONDataPage(webapp.RequestHandler):
             self.do_filters()
             return
 
-        self.response.out.write("[{}]")
+        self.response.out.write(json.dumps({}))
 
-# Create an entry in the store for a new test.
-class UploadTestSet(webapp.RequestHandler):
+
+class UploadTestSet(BaseRequestHandler):
+    """Create an entry in the store for a new test."""
     def post(self):
         user = users.get_current_user()
         # TODO(mbelshe): the dev server doesn't properly handle logins?
@@ -173,9 +187,9 @@ class UploadTestSet(webapp.RequestHandler):
         #    self.redirect(users.create_login_url(self.request.uri))
         #    return
 
-        cmd = self.request.get("cmd");
+        cmd = self.request.get("cmd")
         if not cmd:
-            self.response.out.write("Error")
+            self.send_error("Bad request, no cmd param")
             return
    
         if cmd == "create":
@@ -194,20 +208,22 @@ class UploadTestSet(webapp.RequestHandler):
         elif cmd == "update":
             set_id = self.request.get("set_id")
             if not set_id:
-                self.response.out.write("Error")
+                self.send_error("Bad request, no set_id param")
                 return
             test_set = models.TestSet.get(db.Key(set_id))
             if not test_set:
-                self.response.out.write("Error")
+                self.send_error("Could not find set_id: ", set_id)
                 return
             ApplyStatisticsData(self.request, test_set)
             test_set.iterations = int(self.request.get('iterations'))
             test_set.url_count = int(self.request.get('url_count'))
             key = test_set.put()
             self.response.out.write(key)
+        else:
+            self.send_error("Bad request, unknown cmd: %s", cmd)
 
-# Create an entry in the store for a new test run.
-class UploadTestResult(webapp.RequestHandler):
+class UploadTestResult(BaseRequestHandler):
+    """Create an entry in the store for a new test run."""
     def post(self):
         user = users.get_current_user()
         # TODO(mbelshe): the dev server doesn't properly handle logins?
@@ -217,20 +233,20 @@ class UploadTestResult(webapp.RequestHandler):
 
         set_id = self.request.get('set_id')
         if not set_id:
-            self.response.out.write("Missing set_id")
+            self.send_error("Bad request, no set_id param")
             return
         test_set = models.TestSet.get(db.Key(set_id))
         if not test_set:
-            self.response.out.write("Could not find test")
+            self.send_error("Could not find set_id: ", set_id)
             return
-        my_url = self.request.get('url');
+        my_url = self.request.get('url')
 
         test_result = models.TestResult(set=test_set, url=my_url)
         ApplyStatisticsData(self.request, test_result)
         key = test_result.put()
         self.response.out.write(key)
 
-class UploadTestSummary(webapp.RequestHandler):
+class UploadTestSummary(BaseRequestHandler):
     def post(self):
         user = users.get_current_user()
         # TODO(mbelshe): the dev server doesn't properly handle logins?
@@ -239,11 +255,14 @@ class UploadTestSummary(webapp.RequestHandler):
         #    return
 
         set_id = self.request.get('set_id')
+        if not set_id:
+            self.send_error("Bad request, no set_id param")
+            return
         test_set = models.TestSet.get(db.Key(set_id))
         if not test_set:
-            self.response.out.write("Could not find test")
+            self.send_error("Could not find set_id: ", set_id)
             return
-        my_url = self.request.get('url');
+        my_url = self.request.get('url')
 
         test_summary = models.TestSummary(set=test_set, url=my_url)
         ApplyStatisticsData(self.request, test_summary)
