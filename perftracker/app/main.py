@@ -50,8 +50,8 @@ class BaseRequestHandler(webapp.RequestHandler):
         """Send a fatal request error to the error log and json output."""
         logging.error(format, *args)
         json_error = {}
-        json_error.error = format % args
-        self.response.out.write(json.dumps(json_error))
+        json_error['error'] = format % args
+        self.response.out.write(json.encode(json_error))
 
 
 class JSONDataPage(BaseRequestHandler):
@@ -94,9 +94,9 @@ class JSONDataPage(BaseRequestHandler):
         # We do manual coalescing of multiple data structures
         # into a single json blob.
         json_output = {}
-        json_output.obj = test_set
-        json_output.summaries = test_set.summaries
-        self.response.out.write(json.dumps(json_output))
+        json_output['obj'] = test_set
+        json_output['summaries'] = [s for s in test_set.summaries]
+        self.response.out.write(json.encode(json_output))
 
     def do_summary(self):
         """ Lookup a specific TestSummary"""
@@ -110,12 +110,12 @@ class JSONDataPage(BaseRequestHandler):
             return
 
         json_output = {}
-        json_output.obj = test_summary
+        json_output['obj'] = test_summary
         test_set = models.TestSet.get(test_summary.set.key())
         test_results = test_set.results
         test_results.filter("url =", test_summary.url)
-        json_output.results = test_results
-        self.response.out.write(json.dumps(json_output))
+        json_output['results'] = [r for r in test_results]
+        self.response.out.write(json.encode(json_output))
 
     def do_filters(self):
         """Lookup the distinct values in the TestSet data, for use in filtering.
