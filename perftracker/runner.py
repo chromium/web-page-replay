@@ -175,7 +175,7 @@ document.getElementById("json").innerHTML = raw_json;
           "-d", str(self.config["download_bandwidth_kbps"]) + "KBit/s",
           "-u", str(self.config["upload_bandwidth_kbps"]) + "KBit/s",
           "-m", str(self.config["round_trip_time_ms"]),
-          "-p", str(self.config["packet_loss_rate"] / 100),
+          "-p", str(self.config["packet_loss_rate"] / 100.0),
           "-l", log_level,
           runner_cfg.replay_data_archive
         ]
