@@ -304,7 +304,8 @@ function Benchmark(url) {
         Math.round((load_times.firstPaintTime - started) * 1000.0);
     var totalTime =
         Math.round((load_times.finishLoadTime - started) * 1000.0);
-    var lastLoadTime = 42;  // TODO(tonyg)
+    var lastLoadTime =
+        Math.round((load_times.lastLoadTime - started) * 1000.0);
     var firstPaintAfterLoadTime =
         Math.round((load_times.firstPaintAfterLoadTime - started) * 1000.0);
 

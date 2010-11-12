@@ -5,7 +5,8 @@
   "background_page": "background.html",
   "content_scripts": [
     { "matches": ["file:///*startbenchmark.html"],
-      "js": ["start.js"]
+      "js": ["start.js"],
+      "run_at": "document_start"
     }
   ],
   "permissions": [
