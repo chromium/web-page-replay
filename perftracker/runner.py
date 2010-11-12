@@ -234,21 +234,25 @@ document.getElementById("json").innerHTML = raw_json;
         os.remove(self.filename)
 
 def main(options):
-    iterations = runner_cfg.configurations["iterations"]
-    for plr in runner_cfg.configurations["packet_loss_rates"]:
-        for network in runner_cfg.configurations["networks"]:
-            for rtt in runner_cfg.configurations["round_trip_times"]:
-                config = {
-                    "iterations"             : iterations,
-                    "download_bandwidth_kbps": network["download_bandwidth_kbps"],
-                    "upload_bandwidth_kbps"  : network["upload_bandwidth_kbps"],
-                    "round_trip_time_ms"     : rtt,
-                    "packet_loss_rate"       : plr,
-                    "use_spdy"               : False,
-                }
-                logging.debug("Running test configuration: %s", str(config))
-                test = TestInstance(config, options.log_level)
-                test.RunTest(options.notes, options.chrome_cmdline)
+    done = False
+    while not done:
+        iterations = runner_cfg.configurations["iterations"]
+        for plr in runner_cfg.configurations["packet_loss_rates"]:
+            for network in runner_cfg.configurations["networks"]:
+                for rtt in runner_cfg.configurations["round_trip_times"]:
+                    config = {
+                        "iterations"             : iterations,
+                        "download_bandwidth_kbps": network["download_bandwidth_kbps"],
+                        "upload_bandwidth_kbps"  : network["upload_bandwidth_kbps"],
+                        "round_trip_time_ms"     : rtt,
+                        "packet_loss_rate"       : plr,
+                        "use_spdy"               : False,
+                    }
+                    logging.debug("Running test configuration: %s", str(config))
+                    test = TestInstance(config, options.log_level)
+                    test.RunTest(options.notes, options.chrome_cmdline)
+        if not options.infinite:
+            done = True
 
 if __name__ == '__main__':
     log_levels = ('debug', 'info', 'warning', 'error', 'critical')
@@ -275,6 +279,9 @@ if __name__ == '__main__':
             action='store',
             type='string',
             help='Log file to use in addition to writting logs to stderr.')
+    option_parser.add_option('-i', '--infinite', default=False,
+            action='store_true',
+            help='Loop infinitely, repeating the test.')
     option_parser.add_option('-c', '--chrome_cmdline', default=None,
             action='store',
             type='string',
