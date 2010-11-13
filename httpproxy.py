@@ -57,9 +57,13 @@ class RealHttpRequest(object):
 
 
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+
   protocol_version = 'HTTP/1.1'
 
-  # Make it match our logging format
+  # Since we do lots of small wfile.write() calls, turn on buffering.
+  wbufsize = -1
+
+  # Make request handler logging match our logging format.
   def log_request(self, code='-', size='-'): pass
   def log_error(self, format, *args): logging.error(format, *args)
   def log_message(self, format, *args): logging.info(format, *args)
