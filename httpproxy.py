@@ -30,6 +30,11 @@ class RealHttpRequest(object):
     self._real_dns_lookup = real_dns_lookup
 
   def __call__(self, request, headers):
+    # TODO(tonyg): Strip sdch from the request headers because we can't
+    # guarantee that the dictionary will be recorded, so reply may not work.
+    if 'accept-encoding' in headers:
+      headers['accept-encoding'] = headers['accept-encoding'].replace('sdch', '')
+
     logging.debug('RealHttpRequest: %s %s', request.host, request.path)
     host_ip = self._real_dns_lookup(request.host)
     try:
@@ -52,7 +57,7 @@ class RealHttpRequest(object):
 
 
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
-  protocol_version = "HTTP/1.1"
+  protocol_version = 'HTTP/1.1'
 
   # Make it match our logging format
   def log_request(self, code='-', size='-'): pass
@@ -72,7 +77,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def get_archived_http_request(self):
     host = self.headers.get('host')
     if host == None:
-      logging.error("Request without host header")
+      logging.error('Request without host header')
       return None
 
     return httparchive.ArchivedHttpRequest(
@@ -87,19 +92,19 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       # Take a scan through the response headers here
       use_chunked = False
       has_content_length = False
-      server_name = "WebPageReplay"
+      server_name = 'WebPageReplay'
       for header, value in response.headers:
-        if header == "server":
+        if header == 'server':
           server_name = value
-        if header == "transfer-encoding":
+        if header == 'transfer-encoding':
           use_chunked = True
-        if header == "content-length":
+        if header == 'content-length':
           has_content_length = True
       self.server_version = server_name
-      self.sys_version = ""
+      self.sys_version = ''
 
       if response.version == 10:
-        self.protocol_version = "HTTP/1.0"
+        self.protocol_version = 'HTTP/1.0'
 
       # If we don't have chunked encoding and there is no content length,
       # we need to manually compute the content-length.
@@ -107,13 +112,13 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         content_length = 0
         for item in response.response_data:
           content_length += len(item)
-        response.headers.append(("content-length", str(content_length)))
+        response.headers.append(('content-length', str(content_length)))
 
       self.send_response(response.status, response.reason)
       # TODO(mbelshe): This is lame - each write is a packet!
       for header, value in response.headers:
         skip_header = False
-        if header == "server":
+        if header == 'server':
           skip_header = True
         if skip_header == False:
           self.send_header(header, value)
@@ -122,10 +127,10 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       for item in response.response_data:
         if use_chunked:
           self.wfile.write(str(hex(len(item)))[2:])
-          self.wfile.write("\r\n")
+          self.wfile.write('\r\n')
         self.wfile.write(item)
         if use_chunked:
-          self.wfile.write("\r\n")
+          self.wfile.write('\r\n')
       self.wfile.flush()
 
       # TODO(mbelshe): This connection close doesn't seem to work.
@@ -133,10 +138,10 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.close_connection = 1
 
     except Exception, e:
-      logging.error("Error sending response for %s/%s: %s",
-                       self.headers['host'],
-                       self.path,
-                       e)
+      logging.error('Error sending response for %s/%s: %s',
+                    self.headers['host'],
+                    self.path,
+                    e)
 
   def do_POST(self):
     self.do_GET()
@@ -212,11 +217,11 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
 
   def _assert_archive_file_writable(self):
     archive_dir = os.path.dirname(os.path.abspath(self.archive_filename))
-    assert os.path.exists(archive_dir), "Archive directory must exist."
+    assert os.path.exists(archive_dir), 'Archive directory must exist.'
     assert (os.access(self.archive_filename, os.W_OK) or
             (os.access(archive_dir, os.W_OK) and
              not os.path.exists(self.archive_filename))), \
-             "Need permissions to write archive file"
+             'Need permissions to write archive file'
 
   def cleanup(self):
     try:

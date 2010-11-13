@@ -107,9 +107,7 @@ class ArchivedHttpResponse(object):
       return
 
     # Concatenate the chunks so we can decompress it.
-    raw_data = ""
-    for item in self.response_data:
-      raw_data += item
+    raw_data = ''.join(self.response_data)
 
     is_gzipped = self.get_header('content-encoding') == 'gzip'
     if is_gzipped:
@@ -163,7 +161,7 @@ class ArchivedHttpResponse(object):
       len_raw_data = len(self.response_data[0])
     else:
       self.response_data.append(raw_data)
-    self.response_data.append("")    # append a null chunk
+    self.response_data.append('')    # append a null chunk
 
     if not self.get_header('transfer-encoding'):
       self.set_header('content-length', len_raw_data)

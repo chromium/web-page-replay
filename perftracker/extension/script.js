@@ -20,7 +20,7 @@
 // benchmark stalls.
 var benchmarkExtensionUrl = window.location.toString();
 var heartbeatCount = 0;
-var heartbeatInterval = 1000;
+var heartbeatInterval = 1000;  // TODO: Make this a function of window load time
 var windowLoad = 0;
 var lastElementLoad = 0;
 var latestLoad = 0;
@@ -45,13 +45,13 @@ var checkForLastLoad = function() {
 var onWindowFinished = function(e) {
   windowLoad = new Date();
   latestLoad = windowLoad;
-  console.log("Window loaded at " + windowLoad);
+  console.log("Window finished at " + windowLoad);
   setTimeout(checkForLastLoad, heartbeatInterval);
 };
 
 var onElementFinished = function(e) {
   lastElementLoad = new Date();
-  console.log("Element loaded at " + lastElementLoad);
+  console.log("Element finished at " + lastElementLoad);
 };
 
 var registerListeners = function() {
@@ -60,13 +60,12 @@ var registerListeners = function() {
     return;
   }
   
-  // TODO(tonyg): We may also want to list for abort and error here.
-
   // Called when the window loads.
   window.addEventListener('load', onWindowFinished, true);
 
   // Called each time a subresource loads.
   document.addEventListener('load', onElementFinished, true);
+  document.addEventListener('error', onElementFinished, true);
 };
 
 registerListeners();
