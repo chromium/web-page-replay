@@ -116,48 +116,50 @@ var BrowserDetect = {
 };
 BrowserDetect.init();
 
+// Returns the max value in the array.
 Array.max = function(array) {
-  return Math.max.apply( Math, array );
-}
-
-Array.min = function(array) {
-  return Math.min.apply( Math, array );
+  return Math.max.apply(Math, array);
 };
 
-// Compute the average of an array, removing the min/max.
-Array.avg = function(array) {
-  var count = array.length;
+// Returns the min value in the array.
+Array.min = function(array) {
+  return Math.min.apply(Math, array);
+};
+
+// Returns the sum of all values in the array.
+Array.sum = function(array) {
   var sum = 0;
-  var min = array[0];
-  var max = array[0];
-  for (var i = 0; i < count; i++) {
+  for (var i = array.length - 1; i >= 0; i--) {
     sum += array[i];
-    if (array[i] < min) {
-      min = array[i];
-    }
-    if (array[i] > max) {
-      max = array[i];
-    }
   }
-  if (count >= 3) {
-    sum = sum - min - max;
+  return sum;
+};
+
+// Returns the average value of the array, excluding the min and max values.
+Array.trimmedMean = function(array) {
+  var count = array.length;
+  var sum = Array.sum(array);
+  if (count > 2) {
+    sum -= Array.min(array) + Array.max(array);
     count -= 2;
   }
   return Math.round(sum / count);
 }
 
-// Compute the standard deviation of an array
-// TODO(mbelshe):  Note that the Array.avg() removes the min/max elts.
-//                 But this function does not.... it should!
-Array.stddev = function(array) {
+// Returns the standard deviation of the array, excluding the min and max values.
+Array.trimmedStdDev = function(array) {
   var count = array.length;
-  var mean = Array.avg(array);
+  var trimmedMean = Array.trimmedMean(array);
+  var min = Array.min(array);
+  var max = Array.max(array);
   var variance = 0;
   for (var i = 0; i < count; i++) {
-    var deviation = mean - array[i];
-    variance = variance + deviation * deviation;
+    if (count > 2 && (array[i] == min || array[i] == max)) continue;
+    var deviation = trimmedMean - array[i];
+    variance += deviation * deviation;
   }
-  variance = variance / count;
+  if (count > 2) count -= 2;
+  variance /= count;
   return Math.sqrt(variance);
 }
 
@@ -273,10 +275,10 @@ function TestResultSubmitter(config) {
       }
       if (prop == "url" || prop == "using_spdy")
 	continue;
-      result[prop] = Array.avg(result[prop]);
+      result[prop] = Array.trimmedMean(result[prop]);
     }
     result["set_id"] = test_id
-    result["total_time_stddev"] = Array.stddev(data.total_time);
+    result["total_time_stddev"] = Array.trimmedStdDev(data.total_time);
 
     url = config.server_url + kServerPostSummaryUrl;
     user_callback = callback;
