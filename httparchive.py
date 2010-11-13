@@ -20,6 +20,10 @@ import logging
 import persistentmixin
 import StringIO
 import sys
+import re
+
+
+HEAD_RE = re.compile('<head>', re.IGNORECASE)
 
 
 class HttpArchive(dict, persistentmixin.PersistentMixin):
@@ -148,7 +152,7 @@ class ArchivedHttpResponse(object):
     </script>
     """
     len_raw_data = len(raw_data)
-    raw_data = raw_data.replace('<head>', '<head>%s' % deterministic_script, 1)
+    raw_data = HEAD_RE.sub('<head>%s' % deterministic_script, raw_data, 1)
     if len_raw_data == len(raw_data):
       logging.error('Failed to inject deterministic script')
 
