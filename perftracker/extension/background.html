@@ -21,7 +21,7 @@ var kConnectCount = "tcp.connect";
 var kSpdySessionCount = "spdy.sessions";
 
 // The list of currently running benchmarks
-var benchmarks = new Array();
+var benchmarks = [];
 var benchmarkIndex = 0;
 var benchmarkWindow = 0;
 
@@ -48,22 +48,23 @@ Array.prototype.remove = function(from, to) {
 
 function removeBenchmark(benchmark) {
   var index;
-  console.log("Removing benchmark: " + benchmark.url());
-  for (var index = 0; index < benchmarks.length; ++index) {
+  for (index = 0; index < benchmarks.length; ++index) {
     if (benchmarks[index] == benchmark) {
       break;
     }
   }
+  console.log("Removing benchmarks[" + index + "]: " + benchmark.url());
   benchmarks.remove(index);
 
   // Preserve index ordering when removing from the list.
   if (index < benchmarkIndex) {
     benchmarkIndex--;  // Note:  it is okay to drop to -1 here.
   }
+  benchmarkIndex %= benchmarks.length;
 
   // Activate the new benchmark.
   if (benchmarks.length > 0) {
-    currentBenchmark().activate()
+    currentBenchmark().activate();
   }
 }
 
@@ -351,7 +352,6 @@ function Benchmark(url) {
         initialConnectCount_;
     result.num_sessions = chrome.benchmarking.counter(kSpdySessionCount) -
         initialSpdySessionCount_;
-
 
     // Record the aggregate result for this URL.
     current_.using_spdy = load_times.wasFetchedViaSpdy;
