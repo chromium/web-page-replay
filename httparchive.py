@@ -21,9 +21,44 @@ import persistentmixin
 import StringIO
 import sys
 import re
+import zlib
 
 
+HTML_RE = re.compile('<html>', re.IGNORECASE)
 HEAD_RE = re.compile('<head>', re.IGNORECASE)
+DETERMINISTIC_SCRIPT = """
+<script>
+  (function () {
+    var orig_date = Date;
+    var x = 0;
+    var time_seed = 1204251968254;
+    Math.random = function() {
+      x += .1;
+      return (x % 1);
+    };
+    Date = function() {
+      if (this instanceof Date) {
+        switch (arguments.length) {
+        case 0: return new orig_date(time_seed += 50);
+        case 1: return new orig_date(arguments[0]);
+        default: return new orig_date(arguments[0], arguments[1],
+           arguments.length >= 3 ? arguments[2] : 1,
+           arguments.length >= 4 ? arguments[3] : 0,
+           arguments.length >= 5 ? arguments[4] : 0,
+           arguments.length >= 6 ? arguments[5] : 0,
+           arguments.length >= 7 ? arguments[6] : 0);
+        }
+      }
+      return new Date().toString();
+    };
+    Date.__proto__ = orig_date;
+    Date.prototype.constructor = Date;
+    orig_date.now = function() {
+      return new Date().getTime();
+    };
+  })();
+</script>
+"""
 
 
 class HttpArchive(dict, persistentmixin.PersistentMixin):
@@ -55,6 +90,8 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
         if headers.get('content-encoding', '') == 'gzip':
           compressed_response_data = StringIO.StringIO(raw_data)
           print >>out, gzip.GzipFile(fileobj=compressed_response_data).read()
+        elif headers.get('content-encoding', '') == 'deflate':
+          print >>out, zlib.decompress(raw_data, -zlib.MAX_WBITS)
         else:
           print >>out, raw_data
       print >>out, '=' * 70
@@ -113,61 +150,38 @@ class ArchivedHttpResponse(object):
     # Concatenate the chunks so we can decompress it.
     raw_data = ''.join(self.response_data)
 
-    is_gzipped = self.get_header('content-encoding') == 'gzip'
-    if is_gzipped:
+    is_gzip = self.get_header('content-encoding') == 'gzip'
+    is_deflate = self.get_header('content-encoding') == 'deflate'
+    if is_gzip:
       compressed_data = StringIO.StringIO(raw_data)
       raw_data = gzip.GzipFile(fileobj=compressed_data).read()
+    elif is_deflate:
+      raw_data = zlib.decompress(raw_data, -zlib.MAX_WBITS)
 
-    deterministic_script = """
-    <script>
-      (function () {
-        var orig_date = Date;
-        var x = 0;
-        var time_seed = 1204251968254;
-        Math.random = function() {
-          x += .1;
-          return (x % 1);
-        };
-        Date = function() {
-          if (this instanceof Date) {
-            switch (arguments.length) {
-              case 0: return new orig_date(time_seed += 50);
-              case 1: return new orig_date(arguments[0]);
-              default: return new orig_date(arguments[0], arguments[1],
-                  arguments.length >= 3 ? arguments[2] : 1,
-                  arguments.length >= 4 ? arguments[3] : 0,
-                  arguments.length >= 5 ? arguments[4] : 0,
-                  arguments.length >= 6 ? arguments[5] : 0,
-                  arguments.length >= 7 ? arguments[6] : 0);
-            }
-          }
-          return new Date().toString();
-        };
-        Date.__proto__ = orig_date;
-        Date.prototype.constructor = Date;
-        orig_date.now = function() {
-          return new Date().getTime();
-        };
-      })();
-    </script>
-    """
+    # First try to insert immediately after <head> then try <html>.
     len_raw_data = len(raw_data)
-    raw_data = HEAD_RE.sub('<head>%s' % deterministic_script, raw_data, 1)
-    if len_raw_data == len(raw_data):
-      logging.error('Failed to inject deterministic script')
+    raw_data = HEAD_RE.sub('<head>%s' % DETERMINISTIC_SCRIPT, raw_data, 1)
+    injection_failed = len_raw_data == len(raw_data)
+    if injection_failed:
+      raw_data = HTML_RE.sub('<html>%s' % DETERMINISTIC_SCRIPT, raw_data, 1)
+      injection_failed = len_raw_data == len(raw_data)
+      if injection_failed:
+        logging.debug(raw_data)
+        raise
 
-    len_raw_data = len(raw_data)
-    self.response_data = []
-    if is_gzipped:
+    if is_gzip:
       compressed_response = StringIO.StringIO()
       gzip.GzipFile(fileobj=compressed_response, mode='w').write(raw_data)
-      self.response_data.append(compressed_response.getvalue())
-      len_raw_data = len(self.response_data[0])
-    else:
-      self.response_data.append(raw_data)
-    self.response_data.append('')    # append a null chunk
+      raw_data = compressed_response.getvalue()
+    elif is_deflate:
+      raw_data = zlib.compress(raw_data)#[2:-4]  # Discard zlib header+checksum.
+
+    self.response_data = []
+    self.response_data.append(raw_data)
+    self.response_data.append('')  # Append a null chunk
 
     if not self.get_header('transfer-encoding'):
+      len_raw_data = len(self.response_data[0])
       self.set_header('content-length', len_raw_data)
 
 

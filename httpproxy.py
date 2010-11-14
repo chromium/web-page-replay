@@ -31,7 +31,7 @@ class RealHttpRequest(object):
 
   def __call__(self, request, headers):
     # TODO(tonyg): Strip sdch from the request headers because we can't
-    # guarantee that the dictionary will be recorded, so reply may not work.
+    # guarantee that the dictionary will be recorded, so replay may not work.
     if 'accept-encoding' in headers:
       headers['accept-encoding'] = headers['accept-encoding'].replace('sdch', '')
 
@@ -49,6 +49,8 @@ class RealHttpRequest(object):
       # On the response, we'll save every read exactly as we read it
       # from the network.  We'll use this to replay chunks similarly to
       # how we recorded them.
+      # TODO(tonyg): Use something other than httplib so that we can preserve
+      # the original chunks.
       response.raw_data = []
       return response
     except Exception, e:
@@ -180,7 +182,10 @@ class RecordHandler(HttpArchiveHandler):
         response.getheaders(),
         response.raw_data)
     if self.server.use_deterministic_script:
-      archived_http_response.inject_deterministic_script()
+      try:
+        archived_http_response.inject_deterministic_script()
+      except:
+        logging.error('Failed to inject deterministic script for %s', request)
     self.send_archived_http_response(archived_http_response)
     self.server.http_archive[request] = archived_http_response
     logging.debug('Recorded: %s', request)
