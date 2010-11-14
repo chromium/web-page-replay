@@ -24,8 +24,8 @@ import re
 import zlib
 
 
-HTML_RE = re.compile('<html>', re.IGNORECASE)
-HEAD_RE = re.compile('<head>', re.IGNORECASE)
+HTML_RE = re.compile(r'<html[^>]*>', re.IGNORECASE)
+HEAD_RE = re.compile(r'<head[^>]*>', re.IGNORECASE)
 DETERMINISTIC_SCRIPT = """
 <script>
   (function () {
@@ -59,6 +59,10 @@ DETERMINISTIC_SCRIPT = """
   })();
 </script>
 """
+
+
+def _InsertScriptAfter(matchobj):
+  return matchobj.group(0) + DETERMINISTIC_SCRIPT
 
 
 class HttpArchive(dict, persistentmixin.PersistentMixin):
@@ -159,15 +163,13 @@ class ArchivedHttpResponse(object):
       raw_data = zlib.decompress(raw_data, -zlib.MAX_WBITS)
 
     # First try to insert immediately after <head> then try <html>.
-    len_raw_data = len(raw_data)
-    raw_data = HEAD_RE.sub('<head>%s' % DETERMINISTIC_SCRIPT, raw_data, 1)
-    injection_failed = len_raw_data == len(raw_data)
-    if injection_failed:
-      raw_data = HTML_RE.sub('<html>%s' % DETERMINISTIC_SCRIPT, raw_data, 1)
-      injection_failed = len_raw_data == len(raw_data)
-      if injection_failed:
-        logging.debug(raw_data)
-        raise
+    if raw_data:
+      raw_data, injected = HEAD_RE.subn(_InsertScriptAfter, raw_data, 1)
+      if not injected:
+        raw_data, injected = HTML_RE.subn(_InsertScriptAfter, raw_data, 1)
+        if not injected:
+          logging.debug(raw_data)
+          raise
 
     if is_gzip:
       compressed_response = StringIO.StringIO()
