@@ -269,11 +269,11 @@ function TestResultSubmitter(config) {
     var result = copy(data);
     // Average everything except the special properties.
     for (var prop in result) {
-      if (prop == "url" || prop == "using_spdy")
+      if (prop == "url" || prop == "using_spdy" || prop == "iterations")
 	continue;
       result[prop] = Array.trimmedMean(result[prop]);
     }
-    result["set_id"] = test_id
+    result["set_id"] = test_id;
     result["total_time_stddev"] = Array.trimmedStdDev(data.total_time);
 
     url = config.server_url + kServerPostSummaryUrl;

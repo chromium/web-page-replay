@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO(mbelshe): Remove all these console.log statements
 
 // The url is what this page is known to the benchmark as.
 // The benchmark uses this id to differentiate the benchmark's
@@ -26,15 +27,18 @@ var lastElementLoad = 0;
 var latestLoad = 0;
 
 var checkForLastLoad = function() {
+  console.log("script checkForLastLoad");
   var benchmarkExtensionPort = chrome.extension.connect();
   var loadTimes = chrome.loadTimes();
   if (lastElementLoad > latestLoad || !loadTimes.finishLoadTime) {
+    console.log("checkForLastLoad posting heartbeat");
     latestLoad = lastElementLoad;
     benchmarkExtensionPort.postMessage({message: 'heartbeat',
                                         count: heartbeatCount});
     heartbeatCount++;
     setTimeout(checkForLastLoad, heartbeatInterval);
   } else {
+    console.log("checkForLastLoad finished!");
     loadTimes.lastLoadTime = latestLoad / 1000.0;
     benchmarkExtensionPort.postMessage({message: 'load',
                                         url: benchmarkExtensionUrl,
@@ -46,7 +50,6 @@ var onWindowFinished = function(e) {
   windowLoad = new Date();
   latestLoad = windowLoad;
   console.log("Window finished at " + windowLoad);
-  setTimeout(checkForLastLoad, heartbeatInterval);
 };
 
 var onElementFinished = function(e) {
@@ -66,6 +69,11 @@ var registerListeners = function() {
   // Called each time a subresource loads.
   document.addEventListener('load', onElementFinished, true);
   document.addEventListener('error', onElementFinished, true);
+
+  // When injecting into someone else's page, we don't always get the
+  // onWindowFinished event.  Resort to polling.
+  checkForLastLoad();
+  console.log("script register complete");
 };
 
 registerListeners();
