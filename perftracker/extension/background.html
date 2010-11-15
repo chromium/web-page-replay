@@ -128,6 +128,7 @@ function Benchmark(url) {
   }
 
   this.abortPageLoad = function() {
+    runCount_--;
     me_.pageFinished();
   }
 
@@ -137,7 +138,6 @@ function Benchmark(url) {
   // Called when the test run completes.
   this.pageFinished = function() {
     console.log("running pageFinished for: " + me_.url());
-    var benchmark = nextBenchmark();
 
     if (!isActive_) {
       // The page is already dead.  It was probably killed and finished
@@ -147,22 +147,30 @@ function Benchmark(url) {
     }
     isActive_ = false;
 
+    var benchmark = nextBenchmark();
     var finished = false;
     if (!me_.hasMoreIterations() && !benchmark.hasMoreIterations()) {
       console.log("Benchmark is finished!");
       finished = true;
     }
 
-    if (finished) {
-      // If we're the last benchmark, close the window.
-      console.log("removing benchmark window: " + benchmarkWindow.id);
-      window.submitter.UpdateSetSummary(global_counter, function() {
-        console.log("Posted set summary");
-        chrome.tabs.remove(benchmarkWindow.id);
-        benchmarkWindow = 0;
-        closeAllTabs();
+    if (!me_.hasMoreIterations()) {
+      window.submitter.PostSummary(current_, function(response) {
+        console.log("Posted summary: " + response);
+        if (finished) {
+          // If we're the last benchmark, close the window.
+          console.log("removing benchmark window: " + benchmarkWindow.id);
+          window.submitter.UpdateSetSummary(global_counter, function(response) {
+            console.log("Posted set summary: " + response);
+            chrome.tabs.remove(benchmarkWindow.id);
+            benchmarkWindow = 0;
+            closeAllTabs();
+          });
+        }
       });
-    } else {
+    } 
+
+    if (!finished) {
       // Move on to next benchmarked pages.
       setTimeout(benchmark.runPage, 100);
     }
@@ -358,17 +366,10 @@ function Benchmark(url) {
                          initialSpdySessionCount_);
 
     // Submit the result.
-    window.submitter.PostResult(result, function() {
-      console.log("Posted result");
+    window.submitter.PostResult(result, function(response) {
+      console.log("Posted result: " + response);
       runCount_--;
-      if (!me_.hasMoreIterations()) {
-        window.submitter.PostSummary(current_, function() {
-          console.log("Posted summary");
-          me_.pageFinished();
-        });
-      } else {
-        me_.pageFinished();
-      }
+      me_.pageFinished();
     });
   }
 }
@@ -383,7 +384,7 @@ setInterval(function() {
   var current_benchmark = currentBenchmark();
   // current_benchmark could be undefined because this function gets called
   // right on startup before the benchmarking has really started.
-  if (current_benchmark == undefined || current_benchmark.isActive()) {
+  if (current_benchmark == undefined || !current_benchmark.isActive()) {
     return;
   }
   var totalTime = now - current_benchmark.startTime();
