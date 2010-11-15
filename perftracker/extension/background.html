@@ -128,7 +128,6 @@ function Benchmark(url) {
   }
 
   this.abortPageLoad = function() {
-    runCount_--;
     me_.pageFinished();
   }
 
@@ -146,6 +145,7 @@ function Benchmark(url) {
       return;
     }
     isActive_ = false;
+    runCount_--;
 
     var benchmark = nextBenchmark();
     var finished = false;
@@ -178,6 +178,7 @@ function Benchmark(url) {
 
   // Called before starting a page load.
   this.pageStart = function() {
+    console.log("pageStart for " + this.url());
     initialReadBytes_ = chrome.benchmarking.counter(kTCPReadBytes);
     initialWriteBytes_ = chrome.benchmarking.counter(kTCPWriteBytes);
     initialRequestCount_ = chrome.benchmarking.counter(kRequestCount);
@@ -368,7 +369,6 @@ function Benchmark(url) {
     // Submit the result.
     window.submitter.PostResult(result, function(response) {
       console.log("Posted result: " + response);
-      runCount_--;
       me_.pageFinished();
     });
   }
@@ -388,7 +388,7 @@ setInterval(function() {
     return;
   }
   var totalTime = now - current_benchmark.startTime();
-  console.log("Heartbeat check: " + interval);
+  console.log("Heartbeat check: " + interval + " (for url:" + current_benchmark.url());
   console.log("Total time check: " + totalTime);
   if (interval > kHeartbeatTimeoutMs ||
       totalTime > (kHeartbeatTimeoutMs * 2)) {
@@ -418,7 +418,10 @@ chrome.extension.onConnect.addListener(function(port) {
     if (data.message == "load") {
       console.log("Got load for " + data.url);
       var benchmark = currentBenchmark();
-      CHECK(benchmark && benchmark.isActive(), "Got load msg for inactive benchmark");
+      if (!benchmark.isActive()) {
+        console.log("Got load msg for inactive benchmark (probably killed): " + benchmark.url());
+        return;
+      }
       if (benchmark.url() != data.url) {
         alert("Error: Loaded url(" + data.url + ") is not the same as what " +
               "you set in url box. This could happen if the request is " +
