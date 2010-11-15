@@ -299,9 +299,6 @@ function Benchmark(url) {
       lastLoadTime = totalTime;
     }
 
-    current_.using_spdy = load_times.wasFetchedViaSpdy;
-    current_.iterations++;
-
     // Record the individual result
     var result = {};
     result.url = current_.url;
