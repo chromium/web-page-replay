@@ -18,6 +18,7 @@ import logging
 import models
 import os
 
+from google.appengine.api import memcache
 from google.appengine.api import users
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp import template
@@ -58,6 +59,12 @@ class BaseRequestHandler(webapp.RequestHandler):
 class JSONDataPage(BaseRequestHandler):
     """Do a search for TestSets."""
     def do_set_search(self):
+        memcache_key = "set_search." + self.request.query
+        cached_response = memcache.get(memcache_key)
+        if cached_response is not None:
+            self.response.out.write(cached_response)
+            return
+
         query = models.TestSet.all()
         query.order("-date")
 
@@ -79,7 +86,9 @@ class JSONDataPage(BaseRequestHandler):
             results = test_set.summaries
 
         results = query.fetch(250)
-        self.response.out.write(json.encode(results))
+        response = json.encode(results)
+        memcache.add(memcache_key, response, 30)   # Cache for 30secs
+        self.response.out.write(response)
     
     def do_set(self):
         """Lookup a specific TestSet."""
@@ -105,6 +114,13 @@ class JSONDataPage(BaseRequestHandler):
         if not set_id:
             self.send_json_error("Bad request, no id param")
             return
+
+        memcache_key = "summary." + set_id
+        cached_response = memcache.get(memcache_key)
+        if cached_response is not None:
+            self.response.out.write(cached_response)
+            return
+
         test_summary = models.TestSummary.get(db.Key(set_id))
         if not test_summary:
             self.send_json_error("Could not find id: ", id)
@@ -116,13 +132,19 @@ class JSONDataPage(BaseRequestHandler):
         test_results = test_set.results
         test_results.filter("url =", test_summary.url)
         json_output['results'] = [r for r in test_results]
-        self.response.out.write(json.encode(json_output))
+
+        response = json.encode(json_output)
+        memcache.add(memcache_key, response, 60)   # Cache for 1min
+        self.response.out.write(response)
 
     def do_filters(self):
         """Lookup the distinct values in the TestSet data, for use in filtering.
-
-        TODO(mbelshe):  Put this into memcache.
         """
+        cached_response = memcache.get("filters")
+        if cached_response is not None:
+            self.response.out.write(cached_response)
+            return
+
         platforms = set()
         versions = set()
         download_bandwidths = set()
@@ -146,7 +168,9 @@ class JSONDataPage(BaseRequestHandler):
         filters["upload_bandwidths"] = sorted(upload_bandwidths)
         filters["round_trip_times"] = sorted(round_trip_times)
         filters["packet_loss_rates"] = sorted(packet_loss_rates)
-        self.response.out.write(json.encode(filters))
+        response = json.encode(filters)
+        memcache.add("filters", response, 60 * 30)  # Cache for 30 mins
+        self.response.out.write(response)
 
     def do_latestresults(self):
         """Get the last 25 results posted to the server."""
@@ -186,7 +210,7 @@ class JSONDataPage(BaseRequestHandler):
             self.do_latestresults()
             return
 
-        self.response.out.write(json.dumps({}))
+        self.response.out.write(json.encode({}))
 
 
 class UploadTestSet(BaseRequestHandler):
