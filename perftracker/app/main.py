@@ -36,8 +36,8 @@ def ApplyStatisticsData(request, obj):
     obj.num_requests = int(request.get('num_requests'))
     obj.num_connects = int(request.get('num_connects'))
     obj.num_sessions = int(request.get('num_sessions'))
-    obj.read_bytes_kb = int(request.get('read_bytes_kb'))
-    obj.write_bytes_kb = int(request.get('write_bytes_kb'))
+    obj.read_bytes_kb = int(float(request.get('read_bytes_kb')))
+    obj.write_bytes_kb = int(float(request.get('write_bytes_kb')))
 
 
 class BaseRequestHandler(webapp.RequestHandler):
@@ -148,6 +148,13 @@ class JSONDataPage(BaseRequestHandler):
         filters["packet_loss_rates"] = sorted(packet_loss_rates)
         self.response.out.write(json.encode(filters))
 
+    def do_latestresults(self):
+        """Get the last 25 results posted to the server."""
+        query = models.TestResult.all()
+        query.order("-date")
+        results = query.fetch(25)
+        self.response.out.write(json.encode(results))
+
     def get(self):
         # TODO(mbelshe): the dev server doesn't properly handle logins?
         #if not user:
@@ -174,6 +181,9 @@ class JSONDataPage(BaseRequestHandler):
             return
         elif resource_type == "filters":
             self.do_filters()
+            return
+        elif resource_type == "latestresults":
+            self.do_latestresults()
             return
 
         self.response.out.write(json.dumps({}))
