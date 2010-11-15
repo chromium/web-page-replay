@@ -20,11 +20,6 @@ class DaemonServer(object):
   """Base class which manages creation and cleanup ofdaemon style servers."""
 
   def __enter__(self):
-    # Increase the listen queue size (default is 5).  Since we're intercepting
-    # many domains through this single server, it is quite possible to get
-    # more than 5 concurrent connection requests.
-    self.request_queue_size = 128
-
     # TODO: Because of python's Global Interpreter Lock (GIL), the threads
     # will run on the same CPU. Consider using processes instead because
     # the components do not need to communicate with each other. On Linux,

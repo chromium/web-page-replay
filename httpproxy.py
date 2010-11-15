@@ -218,6 +218,11 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
     self.http_archive = httparchive.HttpArchive()
 
     try:
+      # Increase the listen queue size (default is 5).  Since we're intercepting
+      # many domains through this single server, it is quite possible to get
+      # more than 5 concurrent connection requests.
+      self.request_queue_size = 128
+
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
     except Exception, e:
       logging.critical('Could not start HTTPServer on port %d: %s', port, e)
@@ -255,6 +260,11 @@ class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
                  len(self.http_archive), http_archive_filename)
 
     try:
+      # Increase the listen queue size (default is 5).  Since we're intercepting
+      # many domains through this single server, it is quite possible to get
+      # more than 5 concurrent connection requests.
+      self.request_queue_size = 128
+
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
     except Exception, e:
       logging.critical('Could not start HTTPServer on port %d: %s', port, e)
