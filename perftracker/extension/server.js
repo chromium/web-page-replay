@@ -269,10 +269,6 @@ function TestResultSubmitter(config) {
     var result = copy(data);
     // Average everything except the special properties.
     for (var prop in result) {
-      if (prop == "iterations") {
-        result.iterations = data.iterations / data.total_time.length;
-        continue;
-      }
       if (prop == "url" || prop == "using_spdy")
 	continue;
       result[prop] = Array.trimmedMean(result[prop]);
@@ -292,7 +288,7 @@ function TestResultSubmitter(config) {
     // Divide everything by iterations except the special properties.
     for (var prop in result) {
       if (prop == "iterations") {
-	result.iterations = data.iterations / data.url_count;
+	result.iterations = Math.round(data.iterations / data.url_count);
 	continue;
       }
       if (prop == "url_count")
