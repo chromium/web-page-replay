@@ -59,7 +59,7 @@ class TrafficShaper(object):
       upload_pipe = '1'      # The IPFW pipe for upload rules.
       download_pipe = '2'    # The IPFW pipe for download rules.
       dns_pipe = '3'         # The IPFW pipe for DNS.
-      queue_size = '4MBytes'
+      queue_size = str(self.platformsettings.get_ipfw_queue_slots())
 
       # Distribute the delay across the uplink and downlink bandwidths evenly.
       self.delay_ms = str(int(self.delay_ms) / 2)

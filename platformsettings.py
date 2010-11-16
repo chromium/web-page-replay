@@ -56,6 +56,9 @@ class PlatformSettings(object):
   def ipfw(self, args):
     raise NotImplementedError()
 
+  def get_ipfw_queue_slots(self):
+    return 500
+
 
 class PosixPlatformSettings(PlatformSettings):
   def ipfw(self, args):
@@ -105,6 +108,9 @@ class OsxPlatformSettings(PosixPlatformSettings):
     ])
     self._scutil(command)
     logging.info('Changed system DNS to %s', dns)
+
+  def get_ipfw_queue_slots(self):
+    return 100
 
 
 class LinuxPlatformSettings(PosixPlatformSettings):
