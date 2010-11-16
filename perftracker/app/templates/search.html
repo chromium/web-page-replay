@@ -47,12 +47,8 @@
 
     function loadData() {
       var url = "/json?type=set_search";
-      url = applyFilterToUrl(url, "rtt_filter");
-      url = applyFilterToUrl(url, "download_filter");
-      url = applyFilterToUrl(url, "upload_filter");
-      url = applyFilterToUrl(url, "pkt_loss_rate_filter");
-      url = applyFilterToUrl(url, "platform_filter");
       url = applyFilterToUrl(url, "version_filter");
+      url = applyFilterToUrl(url, "networks_filter");
 
       new XHRGet(url, function(result) {
         data.results = JSON.parse(result);
@@ -103,47 +99,19 @@
       Filters:
       <table class="sortable">
         <tr>
-          <td>Platform</td>
           <td>Version</td>
-          <td>Download</td>
-          <td>Upload</td>
-          <td>RTT</td>
-          <td>PktLoss</td>
+          <td>Network</td>
         </tr>
         <tr>
-        <td>
-          <select id="platform_filter" onchange="filterChanged()">
-            <option selected></option>
-            <option jsselect="platforms" jscontent="$this"></option>
-          </select>
-        </td>
         <td>
           <select id="version_filter" onchange="filterChanged()">
             <option selected></option>
             <option jsselect="versions" jscontent="$this"></option>
           </select>
         </td>
-        <td><select id="download_filter" onchange="filterChanged()">
+        <td><select id="networks_filter" onchange="filterChanged()">
             <option selected></option>
-            <option jsselect="download_bandwidths" jscontent="$this"></option>
-          </select>
-        </td>
-        <td>
-            <select id="upload_filter" onchange="filterChanged()">
-            <option selected></option>
-            <option jsselect="upload_bandwidths" jscontent="$this"></option>
-          </select>
-        </td>
-        <td>
-            <select id="rtt_filter" onchange="filterChanged()">
-            <option selected></option>
-            <option jsselect="round_trip_times" jscontent="$this"></option>
-          </select>
-        </td>
-        <td>
-            <select id="pkt_loss_rate_filter" onchange="filterChanged()">
-            <option selected></option>
-            <option jsselect="packet_loss_rates" jscontent="$this"></option>
+            <option jsselect="networks" jscontent="$this"></option>
           </select>
         </td>
         </tr>
@@ -168,11 +136,7 @@
       </tr>
         <tr jsselect="results">
         <td><span jseval="$val = '/do_view_set?id=' + key"></span><a jsvalues="href:$val" jscontent="date"></a></td>
-        <td><span jscontent="download_bandwidth_kbps"></span>Kbps/
-            <span jscontent="upload_bandwidth_kbps"></span>Kbps/
-            <span jscontent="round_trip_time_ms"></span>ms/
-            <span jscontent="packet_loss_rate"></span>%
-        </td>
+        <td jscontent="network_type"></td>
         <td class="righttext" jscontent="url_count"></td>
         <td class="righttext" jscontent="iterations"></td>
         <td class="righttext" jscontent="start_load_time"></td>

@@ -26,14 +26,19 @@ class TestSet(db.Model):
     date = db.DateTimeProperty(auto_now_add=True)
     notes = db.StringProperty(multiline=True)
     version = db.StringProperty(indexed=True)
-    platform = db.StringProperty(indexed=True)
-    client_hostname = db.StringProperty(indexed=True)
+    platform = db.StringProperty()
+    client_hostname = db.StringProperty()
     cmdline = db.StringProperty()
-    download_bandwidth_kbps = db.IntegerProperty(indexed=True)
-    upload_bandwidth_kbps = db.IntegerProperty(indexed=True)
-    round_trip_time_ms = db.IntegerProperty(indexed=True)
-    packet_loss_rate  = db.IntegerProperty(indexed=True)
-    using_spdy = db.BooleanProperty(indexed=True)
+
+    # The network_type is just a pretty name for the overall network
+    # configuration.  We use it as the index to avoid the combinatorial
+    # blowout of indexes if we used the individual network settings.
+    network_type = db.StringProperty(indexed=True)
+    download_bandwidth_kbps = db.IntegerProperty()
+    upload_bandwidth_kbps = db.IntegerProperty()
+    round_trip_time_ms = db.IntegerProperty()
+    packet_loss_rate  = db.FloatProperty()
+    using_spdy = db.BooleanProperty()
 
     # These fields are summary data for the TestSet.
     # When the TestSet is created, these fields are blank.
@@ -55,6 +60,7 @@ class TestSet(db.Model):
 # A TestResult is an individual test result for an individual URL.
 class TestResult(db.Model):
     set = db.ReferenceProperty(TestSet, required=True, indexed=True, collection_name="results")
+    date = db.DateTimeProperty(auto_now_add=True)
     url = db.StringProperty(required=True, indexed=True)
     using_spdy = db.BooleanProperty()
     start_load_time = db.IntegerProperty()

@@ -40,9 +40,27 @@ def ApplyStatisticsData(request, obj):
     obj.read_bytes_kb = int(float(request.get('read_bytes_kb')))
     obj.write_bytes_kb = int(float(request.get('write_bytes_kb')))
 
+def BandwidthPrettyString(bandwidth_kbps):
+    if bandwidth_kbps > 1000:
+        bandwidth_mbps = bandwidth_kbps / 1000.0
+        return str(bandwidth_mbps) + "Mbps"
+    return str(bandwidth_kbps) + "Kbps"
+
+def NetworkPrettyString(item):
+    network = ""
+    network += BandwidthPrettyString(item.download_bandwidth_kbps)
+    network += "/"
+    network += BandwidthPrettyString(item.upload_bandwidth_kbps)
+    network += "/"
+    network += str(item.round_trip_time_ms)
+    network += "ms/"
+    network += str(item.packet_loss_rate)
+    network += "%"
+    if item.using_spdy:
+        network += "/spdy"
+    return network
 
 class BaseRequestHandler(webapp.RequestHandler):
-
     def send_error(self, format, *args):
         """Send a fatal request error to the error log and response output."""
         logging.error(format, *args)
@@ -69,16 +87,8 @@ class JSONDataPage(BaseRequestHandler):
         query.order("-date")
 
         # Apply filters.
-        if self.request.get("rtt_filter"):
-            query.filter("round_trip_time_ms =", int(self.request.get("rtt_filter")))
-        if self.request.get("download_filter"):
-            query.filter("download_bandwidth_kbps =", int(self.request.get("download_filter")))
-        if self.request.get("upload_filter"):
-            query.filter("upload_bandwidth_kbps =", int(self.request.get("upload_filter")))
-        if self.request.get("pkt_loss_rate_filter"):
-            query.filter("packet_loss_rate =", int(self.request.get("pkt_loss_rate_filter")))
-        if self.request.get("platform_filter"):
-            query.filter("platform =", self.request.get("platform_filter"))
+        if self.request.get("networks_filter"):
+            query.filter("network_type =", self.request.get("networks_filter"))
         if self.request.get("version_filter"):
             query.filter("version =", self.request.get("version_filter"))
         if self.request.get("set_id"):
@@ -145,29 +155,17 @@ class JSONDataPage(BaseRequestHandler):
             self.response.out.write(cached_response)
             return
 
-        platforms = set()
         versions = set()
-        download_bandwidths = set()
-        upload_bandwidths = set()
-        round_trip_times = set()
-        packet_loss_rates = set()
+        networks = set()
 
         query = models.TestSet.all()
         for item in query:
-            platforms.add(item.platform)
             versions.add(item.version)
-            download_bandwidths.add(item.download_bandwidth_kbps)
-            upload_bandwidths.add(item.upload_bandwidth_kbps)
-            round_trip_times.add(item.round_trip_time_ms)
-            packet_loss_rates.add(item.packet_loss_rate)
+            networks.add(item.network_type)
 
         filters = {}
-        filters["platforms"] = sorted(platforms)
         filters["versions"] = sorted(versions)
-        filters["download_bandwidths"] = sorted(download_bandwidths)
-        filters["upload_bandwidths"] = sorted(upload_bandwidths)
-        filters["round_trip_times"] = sorted(round_trip_times)
-        filters["packet_loss_rates"] = sorted(packet_loss_rates)
+        filters["networks"] = sorted(networks)
         response = json.encode(filters)
         memcache.add("filters", response, 60 * 30)  # Cache for 30 mins
         self.response.out.write(response)
@@ -237,7 +235,10 @@ class UploadTestSet(BaseRequestHandler):
             test_set.download_bandwidth_kbps = int(self.request.get('download_bandwidth_kbps'))
             test_set.upload_bandwidth_kbps = int(self.request.get('upload_bandwidth_kbps'))
             test_set.round_trip_time_ms = int(self.request.get('round_trip_time_ms'))
-            test_set.packet_loss_rate  = int(self.request.get('packet_loss_rate'))
+            test_set.packet_loss_rate  = float(self.request.get('packet_loss_rate'))
+            test_set.packet_loss_rate  = float(self.request.get('packet_loss_rate'))
+            test_set.using_spdy = bool(self.request.get('using_spdy')=="CHECKED")
+            test_set.network_type = NetworkPrettyString(test_set)
             key = test_set.put()
             self.response.out.write(key)
 

@@ -1,5 +1,5 @@
 application: perftracker
-version: 4
+version: 5
 runtime: python
 api_version: 1
 default_expiration: "1d"
