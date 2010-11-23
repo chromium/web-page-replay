@@ -28,7 +28,7 @@ window.location.queryString = function() {
 };
 
 // Wrapper around XHR.
-function XHRGet(url, callback) {
+function XHRGet(url, callback, data) {
   var self = this;
   var xhr = new XMLHttpRequest();
   xhr.open("GET", url, true);
@@ -39,7 +39,7 @@ function XHRGet(url, callback) {
       if (xhr.status != 200) {
         alert("Error: could not download (" + url + "): " + xhr.status);
       }
-      callback(xhr.responseText);
+      callback(xhr.responseText, data);
     }
   }
 }
