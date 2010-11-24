@@ -128,6 +128,7 @@
       <table class="sortable">
       <tr>
         <th>Date</th>
+        <th>Machine</th>
         <th>Network</th>
         <th>URLs</th>
         <th>Iterations</th>
@@ -139,6 +140,7 @@
       </tr>
         <tr jsselect="results">
         <td><span jseval="$val = '/do_view_set?id=' + key"></span><a jsvalues="href:$val" jscontent="date"></a></td>
+        <td jscontent="client_hostname"></td>
         <td jscontent="network_type"></td>
         <td class="righttext" jscontent="url_count"></td>
         <td class="righttext" jscontent="iterations"></td>
