@@ -242,6 +242,11 @@ function TestResultSubmitter(config) {
 
       url = config.server_url + kServerPostSetUrl;
 
+      // When special notes are added, we consider the result a custom version.
+      if (config.notes.length > 0) {
+        data["version"] += "custom";
+      }
+
       user_callback = callback;
       new XHRPost(url, jsonToPostData(data), function(result) {
         test_id = result;
