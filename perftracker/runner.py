@@ -23,6 +23,7 @@ import logging
 import optparse
 import os
 import platform
+import signal
 import subprocess
 import sys
 import tempfile
@@ -109,6 +110,64 @@ def ClobberTmpDirectory(tmpdir):
             os.rmdir(os.path.join(root, name))
     os.rmdir(tmpdir)
 
+def _XvfbPidFilename(slave_build_name):
+  """Returns the filename to the Xvfb pid file.  This name is unique for each
+  builder. This is used by the linux builders."""
+  return os.path.join(tempfile.gettempdir(),
+                      'xvfb-' + slave_build_name  + '.pid')
+
+def StartVirtualX(slave_build_name, build_dir):
+  """Start a virtual X server and set the DISPLAY environment variable so sub
+  processes will use the virtual X server.  Also start icewm. This only works
+  on Linux and assumes that xvfb and icewm are installed.
+
+  Args:
+    slave_build_name: The name of the build that we use for the pid file.
+        E.g., webkit-rel-linux.
+    build_dir: The directory where binaries are produced.  If this is non-empty,
+        we try running xdisplaycheck from |build_dir| to verify our X
+        connection.
+  """
+  # We use a pid file to make sure we don't have any xvfb processes running
+  # from a previous test run.
+  StopVirtualX(slave_build_name)
+
+  # Start a virtual X server that we run the tests in.  This makes it so we can
+  # run the tests even if we didn't start the tests from an X session.
+  proc = subprocess.Popen(["Xvfb", ":9", "-screen", "0", "1024x768x24", "-ac"],
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+  xvfb_pid_filename = _XvfbPidFilename(slave_build_name)
+  open(xvfb_pid_filename, 'w').write(str(proc.pid))
+  os.environ['DISPLAY'] = ":9"
+
+  # Verify that Xvfb has started by using xdisplaycheck.
+  if len(build_dir) > 0:
+    xdisplaycheck_path = os.path.join(build_dir, 'xdisplaycheck')
+    if os.path.exists(xdisplaycheck_path):
+      print "Verifying Xvfb has started..."
+      status, output = commands.getstatusoutput(xdisplaycheck_path)
+      if status != 0:
+        print "Xvfb return code (None if still running):", proc.poll()
+        print "Xvfb stdout and stderr:", proc.communicate()
+        raise Exception(output)
+      print "...OK"
+  # Some ChromeOS tests need a window manager.
+  subprocess.Popen("icewm", stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+
+def StopVirtualX(slave_build_name):
+  """Try and stop the virtual X server if one was started with StartVirtualX.
+  When the X server dies, it takes down the window manager with it.
+  If a virtual x server is not running, this method does nothing."""
+  xvfb_pid_filename = _XvfbPidFilename(slave_build_name)
+  if os.path.exists(xvfb_pid_filename):
+    # If the process doesn't exist, we raise an exception that we can ignore.
+    try:
+      os.kill(int(open(xvfb_pid_filename).read()), signal.SIGKILL)
+    except OSError:
+      pass
+    os.remove(xvfb_pid_filename)
+
 
 class TestInstance:
     def __init__(self, config, log_level):
@@ -191,7 +250,7 @@ document.getElementById("json").innerHTML = raw_json;
     def StopProxy(self):
         if self.proxy_process:
             logging.debug("Stopping Web-Page-Replay")
-            self.proxy_process.send_signal(2)  # SIGINT
+            self.proxy_process.send_signal(signal.SIGINT)
             self.proxy_process.wait()
 
     def RunChrome(self, chrome_cmdline):
@@ -200,6 +259,7 @@ document.getElementById("json").innerHTML = raw_json;
         profile_dir = tempfile.mkdtemp(prefix="chrome.profile.");
 
         try:
+            StartVirtualX(platform.node(), "/tmp")
             cmdline = [
               runner_cfg.chrome_path,
               "--host-resolver-rules=MAP * 127.0.0.1,EXCLUDE " + runner_cfg.benchmark_server, 
@@ -221,6 +281,7 @@ document.getElementById("json").innerHTML = raw_json;
             chrome.wait();
         finally:
             ClobberTmpDirectory(profile_dir)
+            StopVirtualX(platform.node())
 
     def RunTest(self, notes, chrome_cmdline):
         try:
