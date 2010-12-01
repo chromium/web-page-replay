@@ -138,6 +138,10 @@ Array.sum = function(array) {
 // Returns the average value of the array, excluding the min and max values.
 Array.trimmedMean = function(array) {
   var count = array.length;
+  if (count == 0) {
+    return 0;
+  }
+
   var sum = Array.sum(array);
   if (count > 2) {
     sum -= Array.min(array) + Array.max(array);
@@ -149,6 +153,9 @@ Array.trimmedMean = function(array) {
 // Returns the standard deviation of the array, excluding the min and max values.
 Array.trimmedStdDev = function(array) {
   var count = array.length;
+  if (count == 0) {
+    return 0;
+  }
   var trimmedMean = Array.trimmedMean(array);
   var min = Array.min(array);
   var max = Array.max(array);
