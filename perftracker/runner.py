@@ -258,8 +258,13 @@ document.getElementById("json").innerHTML = raw_json;
 
         profile_dir = tempfile.mkdtemp(prefix="chrome.profile.");
 
+        use_virtualx = False
+        if platform.system() == 'Linux':
+            use_virtualx = True
+
         try:
-            StartVirtualX(platform.node(), "/tmp")
+            if use_virtualx:
+                StartVirtualX(platform.node(), "/tmp")
             cmdline = [
               runner_cfg.chrome_path,
               "--host-resolver-rules=MAP * 127.0.0.1,EXCLUDE " + runner_cfg.benchmark_server, 
@@ -281,7 +286,8 @@ document.getElementById("json").innerHTML = raw_json;
             chrome.wait();
         finally:
             ClobberTmpDirectory(profile_dir)
-            StopVirtualX(platform.node())
+            if use_virtualx:
+                StopVirtualX(platform.node())
 
     def RunTest(self, notes, chrome_cmdline):
         try:
