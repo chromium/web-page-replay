@@ -231,15 +231,20 @@ document.getElementById("json").innerHTML = raw_json;
         if self.log_level:
             log_level = self.log_level
         cmdline = [
-          replay_path,
-          "-x",  # Disables DNS intercepting
-          "-d", str(self.config["download_bandwidth_kbps"]) + "KBit/s",
-          "-u", str(self.config["upload_bandwidth_kbps"]) + "KBit/s",
-          "-m", str(self.config["round_trip_time_ms"]),
-          "-p", str(self.config["packet_loss_rate"] / 100.0),
-          "-l", log_level,
-          runner_cfg.replay_data_archive
+            replay_path,
+            "-l", log_level,
+            "-x"  # Disables DNS intercepting
         ]
+        if (self.config["download_bandwidth_kbps"]):
+            cmdline += ["-d", str(self.config["download_bandwidth_kbps"]) + "KBit/s"]
+        if (self.config["upload_bandwidth_kbps"]):
+            cmdline += ["-u", str(self.config["upload_bandwidth_kbps"]) + "KBit/s"]
+        if (self.config["round_trip_time_ms"]):
+            cmdline += ["-m", str(self.config["round_trip_time_ms"])]
+        if (self.config["packet_loss_rate"]):
+            cmdline += ["-p", str(self.config["packet_loss_rate"] / 100.0)]
+
+        cmdline.append(runner_cfg.replay_data_archive)
         logging.debug("Starting replay proxy: %s", str(cmdline))
         self.proxy_process = subprocess.Popen(cmdline)
 
