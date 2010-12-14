@@ -22,6 +22,12 @@ class TrafficShaperException(Exception):
 
 
 class TrafficShaper(object):
+
+  _UPLOAD_PIPE = '1'    # The IPFW pipe for upload rules.
+  _DOWNLOAD_PIPE = '2'  # The IPFW pipe for download rules.
+  _DNS_PIPE = '3'       # The IPFW pipe for DNS.
+  _RULE_SET = '5'       # We configure our rules on IPFW set #5.
+
   """Manages network traffic shaping."""
   def __init__(self,
                shape_dns,
@@ -47,27 +53,24 @@ class TrafficShaper(object):
     self.delay_ms = delay_ms
     self.packet_loss_rate = packet_loss_rate
     self.is_traffic_shaping = False
-    self.pipe_set = '5'  # We configure our rules on IPFW set #5.
 
   def __enter__(self):
     if self.is_traffic_shaping:
-      self.platformsettings.ipfw(['delete', self.pipe_set])
+      self.platformsettings.ipfw(['delete', self._RULE_SET])
     if (self.up_bandwidth == '0' and self.down_bandwidth == '0' and
         self.delay_ms == '0' and self.packet_loss_rate == '0'):
       return
+
+    queue_size = str(self.platformsettings.get_ipfw_queue_slots())
+
+    # To distribute full delay across the uplink and downlink bandwidths evenly.
+    half_delay_ms = str(int(self.delay_ms) / 2)
+
     try:
-      upload_pipe = '1'      # The IPFW pipe for upload rules.
-      download_pipe = '2'    # The IPFW pipe for download rules.
-      dns_pipe = '3'         # The IPFW pipe for DNS.
-      queue_size = str(self.platformsettings.get_ipfw_queue_slots())
-
-      # Distribute the delay across the uplink and downlink bandwidths evenly.
-      self.delay_ms = str(int(self.delay_ms) / 2)
-
       # Configure DNS shaping.
       if self.shape_dns:
         self.platformsettings.ipfw([
-            'pipe', dns_pipe,
+            'pipe', self._DNS_PIPE,
             'config',
             'bw', '0',
             'delay', self.delay_ms,
@@ -75,42 +78,49 @@ class TrafficShaper(object):
             'queue', queue_size
         ])
         self.platformsettings.ipfw([
-            'add', self.pipe_set,
-            'pipe', dns_pipe,
+            'add', self._RULE_SET,
+            'pipe', self._DNS_PIPE,
             'udp',
-            'from', 'any',
+            'from', '127.0.0.1',
             'to', '127.0.0.1',
+            'out',
             'dst-port', '53'
         ])
 
       # Configure upload shaping.
       self.platformsettings.ipfw([
-          'pipe', upload_pipe,
+          'pipe', self._UPLOAD_PIPE,
           'config',
           'bw', self.up_bandwidth,
-          'delay', self.delay_ms,
+          'delay', half_delay_ms,
           'plr', self.packet_loss_rate,
           'queue', queue_size
       ])
       self.platformsettings.ipfw([
-          'add', self.pipe_set,
-          'pipe', upload_pipe,
+          'add', self._RULE_SET,
+          'pipe', self._UPLOAD_PIPE,
+          'tcp',
+          'from', '127.0.0.1',
+          'to', '127.0.0.1',
           'out',
           'dst-port', '80'
       ])
 
       # Configure download shaping.
       self.platformsettings.ipfw([
-          'pipe', download_pipe,
+          'pipe', self._DOWNLOAD_PIPE,
           'config',
           'bw', self.down_bandwidth,
-          'delay', self.delay_ms,
+          'delay', half_delay_ms,
           'plr', self.packet_loss_rate,
           'queue', queue_size
       ])
       self.platformsettings.ipfw([
-          'add', self.pipe_set,
-          'pipe', download_pipe,
+          'add', self._RULE_SET,
+          'pipe', self._DOWNLOAD_PIPE,
+          'tcp',
+          'from', '127.0.0.1',
+          'to', '127.0.0.1',
           'in',
           'src-port', '80'
       ])
@@ -124,8 +134,7 @@ class TrafficShaper(object):
     if not self.is_traffic_shaping:
       return
     try:
-      # Delete pipe 
-      self.platformsettings.ipfw(['delete', self.pipe_set])
+      self.platformsettings.ipfw(['delete', self._RULE_SET])
       logging.info('Stopped shaping traffic')
     except Exception, e:
       raise TrafficShaperException('Unable to shape traffic: %s ' % e)
