@@ -94,7 +94,8 @@ class TrafficShaper(object):
           'bw', self.up_bandwidth,
           'delay', half_delay_ms,
           'plr', self.packet_loss_rate,
-          'queue', queue_size
+          'queue', queue_size,
+          'mask', 'src-port', '0xffff'
       ])
       self.platformsettings.ipfw([
           'add', self._RULE_SET,
@@ -113,7 +114,8 @@ class TrafficShaper(object):
           'bw', self.down_bandwidth,
           'delay', half_delay_ms,
           'plr', self.packet_loss_rate,
-          'queue', queue_size
+          'queue', queue_size,
+          'mask', 'dst-port', '0xffff'
       ])
       self.platformsettings.ipfw([
           'add', self._RULE_SET,
