@@ -170,9 +170,10 @@ def StopVirtualX(slave_build_name):
 
 
 class TestInstance:
-    def __init__(self, config, log_level):
+    def __init__(self, config, log_level, record):
         self.config = config
         self.log_level = log_level
+        self.record = record
         self.proxy_process = None
 
     def GenerateConfigFile(self, notes):
@@ -235,14 +236,18 @@ document.getElementById("json").innerHTML = raw_json;
             "-l", log_level,
             "-x"  # Disables DNS intercepting
         ]
-        if (self.config["download_bandwidth_kbps"]):
-            cmdline += ["-d", str(self.config["download_bandwidth_kbps"]) + "KBit/s"]
-        if (self.config["upload_bandwidth_kbps"]):
-            cmdline += ["-u", str(self.config["upload_bandwidth_kbps"]) + "KBit/s"]
-        if (self.config["round_trip_time_ms"]):
-            cmdline += ["-m", str(self.config["round_trip_time_ms"])]
-        if (self.config["packet_loss_rate"]):
-            cmdline += ["-p", str(self.config["packet_loss_rate"] / 100.0)]
+
+        if self.record:
+            cmdline.append("--record")
+        else:
+            if (self.config["download_bandwidth_kbps"]):
+                cmdline += ["-d", str(self.config["download_bandwidth_kbps"]) + "KBit/s"]
+            if (self.config["upload_bandwidth_kbps"]):
+                cmdline += ["-u", str(self.config["upload_bandwidth_kbps"]) + "KBit/s"]
+            if (self.config["round_trip_time_ms"]):
+                cmdline += ["-m", str(self.config["round_trip_time_ms"])]
+            if (self.config["packet_loss_rate"]):
+                cmdline += ["-p", str(self.config["packet_loss_rate"] / 100.0)]
 
         cmdline.append(runner_cfg.replay_data_archive)
         logging.debug("Starting replay proxy: %s", str(cmdline))
@@ -323,7 +328,8 @@ def main(options):
                         "use_spdy"               : False,
                     }
                     logging.debug("Running test configuration: %s", str(config))
-                    test = TestInstance(config, options.log_level)
+                    test = TestInstance(config, options.log_level,
+                                        options.record)
                     test.RunTest(options.notes, options.chrome_cmdline)
         if not options.infinite:
             done = True
@@ -353,6 +359,10 @@ if __name__ == '__main__':
             action='store',
             type='string',
             help='Log file to use in addition to writting logs to stderr.')
+    # TODO: Don't save results when recording.
+    option_parser.add_option('-r', '--record', default=False,
+            action='store_true',
+            help='Record benchmark from the network.')
     option_parser.add_option('-i', '--infinite', default=False,
             action='store_true',
             help='Loop infinitely, repeating the test.')
