@@ -22,24 +22,25 @@
 var benchmarkExtensionUrl = window.location.toString();
 var heartbeatCount = 0;
 var heartbeatInterval = 1000;  // TODO: Make this a function of window load time
-var windowLoad = 0;
-var lastElementLoad = 0;
-var latestLoad = 0;
+var lastLoadTime = 0;
+var previousLoadTime = 0;
 
 var checkForLastLoad = function() {
   console.log("script checkForLastLoad");
-  var benchmarkExtensionPort = chrome.extension.connect();
   var loadTimes = chrome.loadTimes();
-  if (lastElementLoad > latestLoad || !loadTimes.finishLoadTime) {
+  var timing = webkitPerformance.timing;
+  var benchmarkExtensionPort = chrome.extension.connect();
+  if (/*lastLoadTime > previousLoadTime ||*/ !loadTimes.finishLoadTime || !timing.loadEventStart) {
     console.log("checkForLastLoad posting heartbeat");
-    latestLoad = lastElementLoad;
+    previousLoadTime = lastLoadTime;
     benchmarkExtensionPort.postMessage({message: 'heartbeat',
                                         count: heartbeatCount});
     heartbeatCount++;
     setTimeout(checkForLastLoad, heartbeatInterval);
   } else {
     console.log("checkForLastLoad finished!");
-    loadTimes.lastLoadTime = latestLoad / 1000.0;
+    // TODO(tonyg): For diagnostics, this currently ignores LLT and just uses PLT.
+    loadTimes.lastLoadTime = timing.loadEventStart - timing.navigationStart;
     benchmarkExtensionPort.postMessage({message: 'load',
                                         url: benchmarkExtensionUrl,
                                         values: loadTimes });
@@ -47,14 +48,14 @@ var checkForLastLoad = function() {
 };
 
 var onWindowFinished = function(e) {
-  windowLoad = new Date();
-  latestLoad = windowLoad;
-  console.log("Window finished at " + windowLoad);
+  lastLoadTime = webkitPerformance.timing.loadEventStart;
+  console.log("Window finished at " + lastLoadTime);
+  checkForLastLoad();
 };
 
 var onElementFinished = function(e) {
-  lastElementLoad = new Date();
-  console.log("Element finished at " + lastElementLoad);
+  lastLoadTime = new Date();
+  console.log("Element finished at " + lastLoadTime);
 };
 
 var registerListeners = function() {
@@ -62,18 +63,23 @@ var registerListeners = function() {
     console.log("not my page.");
     return;
   }
-  
-  // Called when the window loads.
-  window.addEventListener('load', onWindowFinished, true);
 
-  // Called each time a subresource loads.
-  document.addEventListener('load', onElementFinished, true);
-  document.addEventListener('error', onElementFinished, true);
+  console.log("registerListeners");
 
-  // When injecting into someone else's page, we don't always get the
-  // onWindowFinished event.  Resort to polling.
-  checkForLastLoad();
-  console.log("script register complete");
+  if (document.readyState == "complete") {
+    // The load event may have already fired.
+    onWindowFinished();
+  } else {
+    // Called when the window loads.
+    window.addEventListener('load', onWindowFinished, true);
+    window.addEventListener('error', onWindowFinished, true);
+    window.addEventListener('abort', onWindowFinished, true);
+
+    // Called each time a subresource finishes.
+    //document.addEventListener('load', onElementFinished, true);
+    //document.addEventListener('error', onElementFinished, true);
+    //document.addEventListener('abort', onElementFinished, true);
+  }
 };
 
 registerListeners();

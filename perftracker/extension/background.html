@@ -283,8 +283,7 @@ function Benchmark(url) {
         Math.round((load_times.firstPaintTime - started) * 1000.0);
     var totalTime =
         Math.round((load_times.finishLoadTime - started) * 1000.0);
-    var lastLoadTime =
-        Math.round((load_times.lastLoadTime - started) * 1000.0);
+    var lastLoadTime = load_times.lastLoadTime;
     var firstPaintAfterLoadTime =
         Math.round((load_times.firstPaintAfterLoadTime - started) * 1000.0);
 
@@ -303,9 +302,6 @@ function Benchmark(url) {
       // In this case, the time-to-first paint is effectively the same as the
       // time to onLoad().
       paintTime = totalTime;
-    }
-    if (lastLoadTime < 0) {
-      lastLoadTime = totalTime;
     }
 
     // Record the individual result
