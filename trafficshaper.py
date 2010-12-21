@@ -23,10 +23,12 @@ class TrafficShaperException(Exception):
 
 class TrafficShaper(object):
 
-  _UPLOAD_PIPE = '1'    # The IPFW pipe for upload rules.
-  _DOWNLOAD_PIPE = '2'  # The IPFW pipe for download rules.
-  _DNS_PIPE = '3'       # The IPFW pipe for DNS.
-  _RULE_SET = '5'       # We configure our rules on IPFW set #5.
+  _UPLOAD_PIPE = '1'     # Enforces overall upload bandwidth.
+  _UPLOAD_QUEUE = '2'    # Shares upload bandwidth among sockets.
+  _DOWNLOAD_PIPE = '3'   # Enforces overall download bandwidth.
+  _DOWNLOAD_QUEUE = '4'  # Shares download bandwidth among sockets.
+  _DNS_PIPE = '5'        # Enforces RTT for DNS requests.
+  _RULE_SET = '6'        # Groups all pipes and queues.
 
   """Manages network traffic shaping."""
   def __init__(self,
@@ -75,7 +77,6 @@ class TrafficShaper(object):
             'bw', '0',
             'delay', self.delay_ms,
             'plr', self.packet_loss_rate,
-            'queue', queue_size
         ])
         self.platformsettings.ipfw([
             'add', self._RULE_SET,
@@ -84,7 +85,7 @@ class TrafficShaper(object):
             'from', '127.0.0.1',
             'to', '127.0.0.1',
             'out',
-            'dst-port', '53'
+            'dst-port', '53',
         ])
 
       # Configure upload shaping.
@@ -94,17 +95,22 @@ class TrafficShaper(object):
           'bw', self.up_bandwidth,
           'delay', half_delay_ms,
           'plr', self.packet_loss_rate,
+      ])
+      self.platformsettings.ipfw([
+          'queue', self._UPLOAD_QUEUE,
+          'config',
+          'pipe', self._UPLOAD_PIPE,
           'queue', queue_size,
-          'mask', 'src-port', '0xffff'
+          'mask', 'src-port', '0xffff',
       ])
       self.platformsettings.ipfw([
           'add', self._RULE_SET,
-          'pipe', self._UPLOAD_PIPE,
+          'queue', self._UPLOAD_QUEUE,
           'tcp',
           'from', '127.0.0.1',
           'to', '127.0.0.1',
           'out',
-          'dst-port', '80'
+          'dst-port', '80',
       ])
 
       # Configure download shaping.
@@ -114,17 +120,22 @@ class TrafficShaper(object):
           'bw', self.down_bandwidth,
           'delay', half_delay_ms,
           'plr', self.packet_loss_rate,
+      ])
+      self.platformsettings.ipfw([
+          'queue', self._DOWNLOAD_QUEUE,
+          'config',
+          'pipe', self._DOWNLOAD_PIPE,
           'queue', queue_size,
-          'mask', 'dst-port', '0xffff'
+          'mask', 'dst-port', '0xffff',
       ])
       self.platformsettings.ipfw([
           'add', self._RULE_SET,
-          'pipe', self._DOWNLOAD_PIPE,
+          'queue', self._DOWNLOAD_QUEUE,
           'tcp',
           'from', '127.0.0.1',
           'to', '127.0.0.1',
           'in',
-          'src-port', '80'
+          'src-port', '80',
       ])
 
       logging.info('Started shaping traffic')
