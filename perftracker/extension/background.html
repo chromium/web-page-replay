@@ -399,6 +399,7 @@ setInterval(function() {
 chrome.extension.onConnect.addListener(function(port) {
   port.onMessage.addListener(function(data) {
     if (data.message == "start") {
+      last_heartbeat = timestamp;
       window.benchmarkConfiguration = data.benchmark;
       window.submitter = new TestResultSubmitter(benchmarkConfiguration);
       window.submitter.CreateTest(function() { run(); });

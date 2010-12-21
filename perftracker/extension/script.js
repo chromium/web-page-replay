@@ -21,22 +21,24 @@
 // benchmark stalls.
 var benchmarkExtensionUrl = window.location.toString();
 var heartbeatCount = 0;
-var heartbeatInterval = 1000;  // TODO: Make this a function of window load time
-var lastLoadTime = 0;
-var previousLoadTime = 0;
+var heartbeatInterval = 1000;
 
-var checkForLastLoad = function() {
-  console.log("script checkForLastLoad");
+var scheduleCheckForLoadFinished = function() {
+  setTimeout(checkForLoadFinished, heartbeatInterval);
+};
+
+var checkForLoadFinished = function() {
+  console.log("script checkForLastLoad: " + heartbeatCount);
+
+  var benchmarkExtensionPort = chrome.extension.connect();
   var loadTimes = chrome.loadTimes();
   var timing = webkitPerformance.timing;
-  var benchmarkExtensionPort = chrome.extension.connect();
-  if (/*lastLoadTime > previousLoadTime ||*/ !loadTimes.finishLoadTime || !timing.loadEventStart) {
-    console.log("checkForLastLoad posting heartbeat");
-    previousLoadTime = lastLoadTime;
+
+  if (!loadTimes.finishLoadTime || !timing.loadEventStart) {
     benchmarkExtensionPort.postMessage({message: 'heartbeat',
-                                        count: heartbeatCount});
+		                        count: heartbeatCount});
     heartbeatCount++;
-    setTimeout(checkForLastLoad, heartbeatInterval);
+    scheduleCheckForLoadFinished();
   } else {
     console.log("checkForLastLoad finished!");
     // TODO(tonyg): For diagnostics, this currently ignores LLT and just uses PLT.
@@ -47,39 +49,13 @@ var checkForLastLoad = function() {
   }
 };
 
-var onWindowFinished = function(e) {
-  lastLoadTime = webkitPerformance.timing.loadEventStart;
-  console.log("Window finished at " + lastLoadTime);
-  checkForLastLoad();
-};
-
-var onElementFinished = function(e) {
-  lastLoadTime = new Date();
-  console.log("Element finished at " + lastLoadTime);
-};
-
 var registerListeners = function() {
   if (window.parent != window) {
     console.log("not my page.");
     return;
   }
-
   console.log("registerListeners");
-
-  if (document.readyState == "complete") {
-    // The load event may have already fired.
-    onWindowFinished();
-  } else {
-    // Called when the window loads.
-    window.addEventListener('load', onWindowFinished, true);
-    window.addEventListener('error', onWindowFinished, true);
-    window.addEventListener('abort', onWindowFinished, true);
-
-    // Called each time a subresource finishes.
-    //document.addEventListener('load', onElementFinished, true);
-    //document.addEventListener('error', onElementFinished, true);
-    //document.addEventListener('abort', onElementFinished, true);
-  }
+  scheduleCheckForLoadFinished();
 };
 
 registerListeners();
