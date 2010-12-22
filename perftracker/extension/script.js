@@ -19,43 +19,38 @@
 // results from random pages being browsed.
 // TODO(mbelshe): If the page redirects, the location changed and the
 // benchmark stalls.
+(function() {
 var benchmarkExtensionUrl = window.location.toString();
-var heartbeatCount = 0;
 var heartbeatInterval = 1000;
 
-var scheduleCheckForLoadFinished = function() {
+function scheduleCheckForLoadFinished() {
+  console.log("scheduleCheckForLoadFinished()");
   setTimeout(checkForLoadFinished, heartbeatInterval);
-};
+}
 
-var checkForLoadFinished = function() {
-  console.log("script checkForLastLoad: " + heartbeatCount);
+function checkForLoadFinished() {
+  console.log("checkForLoadFinished()");
 
   var benchmarkExtensionPort = chrome.extension.connect();
-  var loadTimes = chrome.loadTimes();
-  var timing = webkitPerformance.timing;
+  benchmarkExtensionPort.postMessage({message: 'heartbeat'});
+
+  var loadTimes = chrome.loadTimes() || {};
+  var timing = webkitPerformance.timing || {};
 
   if (!loadTimes.finishLoadTime || !timing.loadEventStart) {
-    benchmarkExtensionPort.postMessage({message: 'heartbeat',
-		                        count: heartbeatCount});
-    heartbeatCount++;
     scheduleCheckForLoadFinished();
   } else {
-    console.log("checkForLastLoad finished!");
-    // TODO(tonyg): For diagnostics, this currently ignores LLT and just uses PLT.
+    // TODO(tonyg): For diagnostics, this currently ignores LLT and uses PLT.
     loadTimes.lastLoadTime = timing.loadEventStart - timing.navigationStart;
     benchmarkExtensionPort.postMessage({message: 'load',
                                         url: benchmarkExtensionUrl,
                                         values: loadTimes });
   }
-};
+}
 
-var registerListeners = function() {
-  if (window.parent != window) {
-    console.log("not my page.");
-    return;
-  }
-  console.log("registerListeners");
+if (window.parent != window) {
+  console.log("Not my page.");
+} else {
   scheduleCheckForLoadFinished();
-};
-
-registerListeners();
+}
+})();

@@ -200,9 +200,13 @@ function Benchmark(url) {
                          console.log("created benchmark window: " + benchmarkWindow.id);
                          // script.js only executes on tested pages
                          // not the ones opened by the user.
-                         chrome.tabs.executeScript(tab.id, {file: "script.js"});
-                         console.log("should have injected?: " + benchmarkWindow.id);
-                        });
+                         setTimeout(function() {
+                           chrome.tabs.executeScript(tab.id, {
+                             file: "script.js"}
+                           );
+                           console.log("Injected: " + benchmarkWindow.id);
+                         }, 500);
+                       });
   }
 
   this.prepareToOpenPage = function() {
@@ -399,7 +403,6 @@ setInterval(function() {
 chrome.extension.onConnect.addListener(function(port) {
   port.onMessage.addListener(function(data) {
     if (data.message == "start") {
-      last_heartbeat = timestamp;
       window.benchmarkConfiguration = data.benchmark;
       window.submitter = new TestResultSubmitter(benchmarkConfiguration);
       window.submitter.CreateTest(function() { run(); });
