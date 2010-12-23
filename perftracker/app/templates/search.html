@@ -24,31 +24,57 @@
         var template = document.getElementById("filters_template");
         jstProcess(context, template);
         JsEvalContext.recycle(context);
+
+        var params = getParams();
+        setSelectValue("version_filter", params["version"]);
+        setSelectValue("networks_filter", params["network"]);
       });
     }
 
-    // Utility function to grab the value of a select element.
-    function selectValue(id) {
+    function setSelectValue(id, value) {
+      if (!id || !value) return;
       var elt = document.getElementById(id);
-      return elt[elt.selectedIndex];
+      for (var i = 0; i < elt.options.length; i++) {
+        if (elt.options[i].text == value)
+          elt.options[i].selected = true
+	else
+          elt.options[i].selected = false;
+      }
     }
 
-    // Given the current set of filters, construct the URL appropriately.
-    function applyFilterToUrl(url, name) {
-      var selected_value = selectValue(name)
-      if (selected_value != undefined) {
-        var val = selectValue(name).value;
-        if (val != undefined && val.length > 0) {
-          url += "&" + name + "=" + val;
-        }
+    function getSelectValue(id) {
+      var elt = document.getElementById(id);
+      return elt[elt.selectedIndex].value;
+    }
+
+    function setParams(newParams) {
+      var oldParams = getParams();
+      for (var param in newParams) {
+        oldParams[param] = newParams[param];
       }
-      return url;
+      var hashString = "";
+      for (var param in oldParams) {
+        hashString += "&" + param + "=" + encodeURIComponent(oldParams[param]);
+      }
+      window.location.hash = "#" + hashString.substring(1);
+    }
+
+    function getParams() {
+      var map = {};
+      var hash = window.location.hash.substring(1);
+      pairs = hash.split("&");
+      for (var i = 0; i < pairs.length; i++) {
+        var key_val = pairs[i].split("=");
+        map[key_val[0]] = decodeURIComponent(key_val[1]);
+      }
+      return map;
     }
 
     function loadData() {
       var url = "/json?type=set_search";
-      url = applyFilterToUrl(url, "version_filter");
-      url = applyFilterToUrl(url, "networks_filter");
+      var params = getParams();
+      if (params["version"]) url += "&version_filter=" + params["version"];
+      if (params["network"]) url += "&networks_filter=" + params["network"];
 
       new XHRGet(url, function(result) {
         data.results = JSON.parse(result);
@@ -84,6 +110,12 @@
     }
 
     function filterChanged() {
+      var params = {};
+      var versionFilter = getSelectValue("version_filter");
+      if (versionFilter) params["version"] = versionFilter;
+      var networksFilter = getSelectValue("networks_filter");
+      if (networksFilter) params["network"] = networksFilter;
+      setParams(params);
       loadData();
     }
 
@@ -108,12 +140,12 @@
         <tr>
         <td>
           <select id="version_filter" onchange="filterChanged()">
-            <option selected></option>
+            <option></option>
             <option jsselect="versions" jscontent="$this"></option>
           </select>
         </td>
         <td><select id="networks_filter" onchange="filterChanged()">
-            <option selected></option>
+            <option></option>
             <option jsselect="networks" jscontent="$this"></option>
           </select>
         </td>

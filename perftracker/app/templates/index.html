@@ -1,0 +1,136 @@
+<html>
+  <head>
+  <title>Chromium Perf Tracker</title>
+  <link rel="stylesheet" href="styles/style.css">
+  <script src="scripts/util.js"></script>
+  <script src="jst/util.js" type="text/javascript"></script>
+  <script src="jst/jsevalcontext.js" type="text/javascript"></script>
+  <script src="jst/jstemplate.js" type="text/javascript"></script>
+  <script type="text/javascript" src="https://www.google.com/jsapi"></script>
+  </head>
+
+  <body onLoad="main()">
+    <h1><div id="header">Chromium Page Tracker</div></h1>
+
+    <script>
+    data = {}
+
+    function loadFilters() {
+      // Fetch data for the filters.
+      var filter_data_url = "/json?type=filters";
+      new XHRGet(filter_data_url, function(result) {
+        data.filters = JSON.parse(result);
+        loadData();
+      });
+    }
+
+    function loadData() {
+      // TODO: Actually pass the top three networks here.
+      var url = "/json?type=set_search&networks_filter=0Kbps/0Kbps/0ms/0.0%";
+      new XHRGet(url, function(result) {
+        data.results = JSON.parse(result);
+        drawChart(data.results);
+      });
+    }
+
+    // See: http://code.google.com/apis/visualization/documentation/gallery/linechart.html
+    google.load('visualization', '1', {'packages':['corechart']});
+
+    function getVersionMap(results, network) {
+      // Average all points for a given version into a single value.
+      var versionMap = {};
+      for (var i = 0; i < results.length; ++i) {
+	if (!results[i].total_time) continue;
+	if (results[i].network_type != network) continue;
+        var point = versionMap[results[i].version] || { avg: 0, count: 0};
+        point.avg = (point.avg * point.count + results[i].total_time) / ++point.count;
+        versionMap[results[i].version] = point;
+      }
+      return versionMap;
+    }
+
+    function drawChart(results) {
+      var graph_data = new google.visualization.DataTable();
+
+      graph_data.addColumn('string', 'Version');
+
+      // Add a column for the first 3 network types.
+      // TODO: Pick the best 3.
+      var networks = [];
+      for (var i = 0; i < data.filters.networks.length && i < 3; i++) {
+        networks.push(data.filters.networks[i]);
+        graph_data.addColumn('number', networks[i]);
+      }
+
+      // Sort the versions logically.
+      var versions = data.filters.versions;
+      versions = versions.sort(function(a, b) {
+        if (a == b) return 0;
+        a = a.split(" ")[1];  // Trim leading "Chrome "
+        b = b.split(" ")[1];  // Trim leading "Chrome "
+        a = a.split(".");
+        b = b.split(".");
+        for (var i = 0; i < a.length && i < b.length; i++) {
+          if (a[i] == b[i]) continue;
+          return parseInt(a[i]) - parseInt(b[i]);
+        }
+        return 0;
+      });
+
+      // Populate the graph data.
+      for (var i = 0; i < versions.length; ++i) {
+        var row = [versions[i].split(" ")[1]];  // Trim leading "Chrome ".
+	for (var j = 0; j < networks.length; ++j) {
+          var versionMap = getVersionMap(results, networks[j]);
+          var point = versionMap[versions[i]];
+          if (!point || !point.avg) {
+            row.push(undefined);
+          } else {
+            row.push(Math.round(point.avg));
+          }
+        }
+        graph_data.addRow(row);
+      }
+
+      var chart_div = document.getElementById('chart_div');
+      if (graph_data.getNumberOfRows()) {
+        var chart = new google.visualization.LineChart(chart_div);
+        chart.draw(graph_data, {
+          width: 800,
+          height: 400,
+          title: 'Click point for details',
+          legend: 'bottom',
+          vAxis: {
+            minValue: 0,
+            title: "Page Load Time (ms)",
+          },
+          hAxis: {
+            title: "Version",
+          },
+        });
+        google.visualization.events.addListener(chart, 'select', function() {
+          var row = chart.getSelection()[0].row;
+          var col = chart.getSelection()[0].column;
+          var url = ("/search.html" +
+                     "#version=" + encodeURIComponent("Chrome " + graph_data.getValue(row, 0)) +
+                     "&network=" + encodeURIComponent(graph_data.getColumnLabel(col)));
+          window.location.href = url;
+        });
+      } else {
+        chart_div.innerHTML = "No data";
+      }
+    }
+
+    function filterChanged() {
+      loadData();
+    }
+
+    function main() {
+      loadFilters();
+    }
+
+    </script>
+
+    <div id='chart_div' style='width: 800px; height: 400px;'></div>
+  </body>
+</html>

@@ -9,6 +9,9 @@ builtins:
 
 handlers:
 - url: /
+  static_files: templates/index.html
+  upload: templates/index.html
+- url: /search.html
   static_files: templates/search.html
   upload: templates/search.html
 - url: /do_(.*)
