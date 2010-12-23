@@ -73,14 +73,11 @@ function getSelectValue(id) {
 }
 
 // Sets the parameters in the URL fragment to those in the |newParams| key:value map.
-function setParams(newParams) {
-    var oldParams = getParams();
-    for (var param in newParams) {
-        oldParams[param] = newParams[param];
-    }
+function setParams(params) {
     var hashString = "";
-    for (var param in oldParams) {
-        hashString += "&" + param + "=" + encodeURIComponent(oldParams[param]);
+    for (var param in params) {
+      if (!param) continue;
+      hashString += "&" + param + "=" + encodeURIComponent(params[param]);
     }
     window.location.hash = "#" + hashString.substring(1);
 }
