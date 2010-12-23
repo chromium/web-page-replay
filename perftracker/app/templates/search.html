@@ -31,45 +31,6 @@
       });
     }
 
-    function setSelectValue(id, value) {
-      if (!id || !value) return;
-      var elt = document.getElementById(id);
-      for (var i = 0; i < elt.options.length; i++) {
-        if (elt.options[i].text == value)
-          elt.options[i].selected = true
-	else
-          elt.options[i].selected = false;
-      }
-    }
-
-    function getSelectValue(id) {
-      var elt = document.getElementById(id);
-      return elt[elt.selectedIndex].value;
-    }
-
-    function setParams(newParams) {
-      var oldParams = getParams();
-      for (var param in newParams) {
-        oldParams[param] = newParams[param];
-      }
-      var hashString = "";
-      for (var param in oldParams) {
-        hashString += "&" + param + "=" + encodeURIComponent(oldParams[param]);
-      }
-      window.location.hash = "#" + hashString.substring(1);
-    }
-
-    function getParams() {
-      var map = {};
-      var hash = window.location.hash.substring(1);
-      pairs = hash.split("&");
-      for (var i = 0; i < pairs.length; i++) {
-        var key_val = pairs[i].split("=");
-        map[key_val[0]] = decodeURIComponent(key_val[1]);
-      }
-      return map;
-    }
-
     function loadData() {
       var url = "/json?type=set_search";
       var params = getParams();

@@ -54,3 +54,45 @@ function ci(stderr) {
   return 1.96 * stderr;
 }
 
+// Sets the selected option of the <select> with id=|id|.
+function setSelectValue(id, value) {
+    if (!id || !value) return;
+    var elt = document.getElementById(id);
+    for (var i = 0; i < elt.options.length; i++) {
+        if (elt.options[i].text == value)
+          elt.options[i].selected = true
+	  else
+	      elt.options[i].selected = false;
+    }
+}
+
+// Gets the value of the selected option of the <select> with id=|id|.
+function getSelectValue(id) {
+    var elt = document.getElementById(id);
+    return elt[elt.selectedIndex].value;
+}
+
+// Sets the parameters in the URL fragment to those in the |newParams| key:value map.
+function setParams(newParams) {
+    var oldParams = getParams();
+    for (var param in newParams) {
+        oldParams[param] = newParams[param];
+    }
+    var hashString = "";
+    for (var param in oldParams) {
+        hashString += "&" + param + "=" + encodeURIComponent(oldParams[param]);
+    }
+    window.location.hash = "#" + hashString.substring(1);
+}
+
+// Returns a key:value map of all parameters in the URL fragment.
+function getParams() {
+    var map = {};
+    var hash = window.location.hash.substring(1);
+    pairs = hash.split("&");
+    for (var i = 0; i < pairs.length; i++) {
+        var key_val = pairs[i].split("=");
+        map[key_val[0]] = decodeURIComponent(key_val[1]);
+    }
+    return map;
+}

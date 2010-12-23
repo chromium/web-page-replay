@@ -88,14 +88,14 @@ class JSONDataPage(BaseRequestHandler):
 
         # Apply filters.
         if self.request.get("networks_filter"):
-            query.filter("network_type =", self.request.get("networks_filter"))
+            query.filter("network_type IN ", self.request.get("networks_filter").split(","))
         if self.request.get("version_filter"):
-            query.filter("version =", self.request.get("version_filter"))
+            query.filter("version IN ", self.request.get("version_filter").split(","))
         if self.request.get("set_id"):
             test_set = models.TestSet.get(db.Key(self.request.get("set_id")))
             results = test_set.summaries
 
-        results = query.fetch(250)
+        results = query.fetch(500)
         response = json.encode(results)
         memcache.add(memcache_key, response, 30)   # Cache for 30secs
         self.response.out.write(response)

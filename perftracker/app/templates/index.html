@@ -20,13 +20,30 @@
       var filter_data_url = "/json?type=filters";
       new XHRGet(filter_data_url, function(result) {
         data.filters = JSON.parse(result);
+        var context = JsEvalContext.create(data.filters);
+        var template = document.getElementById("filters_template");
+        jstProcess(context, template);
+        JsEvalContext.recycle(context);
+
+        var params = getParams();
+        if (!params["network1"]) params["network1"] = data.filters.networks[0];
+        if (!params["network2"]) params["network2"] = data.filters.networks[1];
+        if (!params["network3"]) params["network3"] = data.filters.networks[2];
+        setParams(params);
+
+        setSelectValue("networks_filter1", params["network1"]);
+        setSelectValue("networks_filter2", params["network2"]);
+        setSelectValue("networks_filter3", params["network3"]);
         loadData();
       });
     }
 
     function loadData() {
-      // TODO: Actually pass the top three networks here.
-      var url = "/json?type=set_search&networks_filter=0Kbps/0Kbps/0ms/0.0%";
+      var params = getParams();
+      var url = ("/json?type=set_search&networks_filter=" +
+                 params["network1"] + "," +
+                 params["network2"] + "," +
+                 params["network3"]);
       new XHRGet(url, function(result) {
         data.results = JSON.parse(result);
         drawChart(data.results);
@@ -54,11 +71,15 @@
 
       graph_data.addColumn('string', 'Version');
 
-      // Add a column for the first 3 network types.
-      // TODO: Pick the best 3.
-      var networks = [];
-      for (var i = 0; i < data.filters.networks.length && i < 3; i++) {
-        networks.push(data.filters.networks[i]);
+      var params = getParams();
+      var networks = [
+        params["network1"],
+        params["network2"],
+        params["network3"]
+      ];
+
+      // Add a column for each network.
+      for (var i = 0; i < networks.length; i++) {
         graph_data.addColumn('number', networks[i]);
       }
 
@@ -122,6 +143,15 @@
     }
 
     function filterChanged() {
+      var params = {};
+      var networksFilter1 = getSelectValue("networks_filter1");
+      if (networksFilter1) params["network1"] = networksFilter1;
+      var networksFilter2 = getSelectValue("networks_filter2");
+      if (networksFilter2) params["network2"] = networksFilter2;
+      var networksFilter3 = getSelectValue("networks_filter3");
+      if (networksFilter3) params["network3"] = networksFilter3;
+      setParams(params);
+
       loadData();
     }
 
@@ -132,5 +162,33 @@
     </script>
 
     <div id='chart_div' style='width: 800px; height: 400px;'></div>
+
+    <div id="filters_template">
+    <table class="sortable">
+      <tr>
+        <td>Network 1</td>
+        <td>Network 2</td>
+        <td>Network 3</td>
+      </tr>
+      <tr>
+        <td>
+          <select id="networks_filter1" onchange="filterChanged()">
+            <option jsselect="networks" jscontent="$this"></option>
+          </select>
+        </td>
+        <td>
+          <select id="networks_filter2" onchange="filterChanged()">
+            <option jsselect="networks" jscontent="$this"></option>
+          </select>
+        </td>
+        <td>
+          <select id="networks_filter3" onchange="filterChanged()">
+            <option jsselect="networks" jscontent="$this"></option>
+          </select>
+        </td>
+      </tr>
+    </table>
+    </div>
+
   </body>
 </html>
