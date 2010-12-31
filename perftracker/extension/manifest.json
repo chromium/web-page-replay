@@ -7,6 +7,10 @@
     { "matches": ["file:///*startbenchmark.html"],
       "js": ["start.js"],
       "run_at": "document_start"
+    },
+    { "matches": ["http://*/*"],
+      "js": ["script.js"],
+      "run_at": "document_start"
     }
   ],
   "permissions": [

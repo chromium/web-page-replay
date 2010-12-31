@@ -5,7 +5,9 @@
 
 // Configuration and results are stored globally.
 window.iterations = 10;
-window.interval = 200;
+window.interval = 1000;
+window.loadCheck = 0;
+window.maxLoadChecks = 20;
 window.clearConnections = true;
 window.clearCache = true;
 window.enableSpdy = false;
@@ -194,18 +196,12 @@ function Benchmark(url) {
     var benchmark = currentBenchmark();
     console.log("openNextPage called. current = " + benchmark.url());
     benchmark.pageStart();
-    chrome.tabs.create({"url": benchmark.url(),"selected": true},
+    chrome.tabs.create({"url": benchmark.url(), "selected": true},
                        function(tab) {
                          benchmarkWindow = tab;
-                         console.log("created benchmark window: " + benchmarkWindow.id);
-                         // script.js only executes on tested pages
-                         // not the ones opened by the user.
-                         setTimeout(function() {
-                           chrome.tabs.executeScript(tab.id, {
-                             file: "script.js"}
-                           );
-                           console.log("Injected: " + benchmarkWindow.id);
-                         }, 500);
+                         console.log("Created benchmark tab: " + tab.id);
+                         window.loadCheck = 0;
+                         me_.checkForLoadId = setInterval(function(){benchmark.checkForLoad(tab)}, window.interval);
                        });
   }
 
@@ -213,7 +209,7 @@ function Benchmark(url) {
     console.log("prepareToOpenPage called");
     // After the previous page is closed, this function will apply
     // any settings needed to prepare for opening a new page.
-    // Note: the previous page must be closed, otherwie, the cache
+    // Note: the previous page must be closed, otherwise, the cache
     // clearing and connection clearing may not be thorough.
 
     if (window.clearCache) {
@@ -247,6 +243,25 @@ function Benchmark(url) {
     } else {
       me_.prepareToOpenPage();
     }
+  }
+
+  this.checkForLoad = function(tab) {
+    console.log("Sending load time request to tab: " + tab.id);
+    window.loadCheck++;
+    if (window.loadCheck > window.maxLoadChecks) {
+      clearInterval(me_.checkForLoadId);
+      me_.abortPageLoad();
+      return;
+    }      
+    chrome.tabs.sendRequest(tab.id, {}, function(response) {
+      if (response.timing.loadEventStart && response.loadTimes.finishLoadTime) {
+        clearInterval(me_.checkForLoadId);
+        console.log("Load complete for tab: " + tab.id);
+        var load_times = response.loadTimes;
+        load_times.lastLoadTime = response.timing.loadEventStart - response.timing.navigationStart;
+        me_.pageLoaded(load_times);
+      }
+    });
   }
 
   // Called when a page finishes loading.
@@ -374,32 +389,6 @@ function Benchmark(url) {
   }
 }
 
-var last_heartbeat = new Date();
-var kHeartbeatCheckIntervalMs = 1000;  // Check every 1s.
-var kHeartbeatTimeoutMs = 20000;   // After 20s, assume the page is hosed.
-
-setInterval(function() {
-  var now = new Date();
-  var interval = now - last_heartbeat;
-  var current_benchmark = currentBenchmark();
-  // current_benchmark could be undefined because this function gets called
-  // right on startup before the benchmarking has really started.
-  if (current_benchmark == undefined || !current_benchmark.isActive()) {
-    return;
-  }
-  var totalTime = now - current_benchmark.startTime();
-  console.log("Heartbeat check: " + interval + " (for url:" + current_benchmark.url());
-  console.log("Total time check: " + totalTime);
-  if (interval > kHeartbeatTimeoutMs ||
-      totalTime > (kHeartbeatTimeoutMs * 2)) {
-    console.log("benchmarkIndex: " + benchmarkIndex);
-    console.log("num benchmarks: " + benchmarks.length);
-    console.log("Page is taking too long.  Killing it: " + current_benchmark.url());
-    current_benchmark.abortPageLoad();
-    last_heartbeat = new Date();  // reset the timer.
-  }
-}, kHeartbeatCheckIntervalMs);
-
 chrome.extension.onConnect.addListener(function(port) {
   port.onMessage.addListener(function(data) {
     if (data.message == "start") {
@@ -407,29 +396,6 @@ chrome.extension.onConnect.addListener(function(port) {
       window.submitter = new TestResultSubmitter(benchmarkConfiguration);
       window.submitter.CreateTest(function() { run(); });
       return;
-    }
-
-    if (data.message == "heartbeat") {
-      var timestamp = new Date();
-      console.log("Received heartbeat: " + (timestamp - last_heartbeat));
-      last_heartbeat = timestamp;
-    }
-
-    if (data.message == "load") {
-      console.log("Got load for " + data.url);
-      var benchmark = currentBenchmark();
-      if (!benchmark.isActive()) {
-        console.log("Got load msg for inactive benchmark (probably killed): " + benchmark.url());
-        return;
-      }
-      if (benchmark.url() != data.url) {
-        alert("Error: Loaded url(" + data.url + ") is not the same as what " +
-              "you set in url box. This could happen if the request is " +
-              "redirected. Please use the redirected url for testing.");
-        // Stop the test here.
-        closeAllTabs();
-      }
-      benchmark.pageLoaded(data.values);
     }
   });
 });
