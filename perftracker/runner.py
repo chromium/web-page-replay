@@ -277,14 +277,21 @@ document.getElementById("json").innerHTML = raw_json;
                 StartVirtualX(platform.node(), "/tmp")
             cmdline = [
               runner_cfg.chrome_path,
-              "--host-resolver-rules=MAP * 127.0.0.1,EXCLUDE " + runner_cfg.benchmark_server, 
               "--disable-background-networking",
+
+              # TODO(tonyg): These are disabled to reduce noise. It would be nice to
+              # make the model realistic and stable enough to enable them.
+              "--disable-preconnect",
+              "--dns-prefetch-disable",
+
               "--enable-benchmarking",
               "--enable-logging",
+              "--host-resolver-rules=MAP * 127.0.0.1,EXCLUDE " + runner_cfg.benchmark_server, 
               "--load-extension=" + perftracker_extension_path,
               "--log-level=0",
+              "--no-experiments",
               "--no-first-run",
-              "--no-js-randomization",
+              "--no-js-randomness",
               "--user-data-dir=" + profile_dir,
             ]
             if chrome_cmdline:
