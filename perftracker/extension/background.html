@@ -5,9 +5,9 @@
 
 // Configuration and results are stored globally.
 window.iterations = 10;
-window.interval = 1000;
+window.interval = 750;
 window.loadCheck = 0;
-window.maxLoadChecks = 20;
+window.maxLoadChecks = 25;
 window.clearConnections = true;
 window.clearCache = true;
 window.enableSpdy = false;
@@ -174,7 +174,7 @@ function Benchmark(url) {
 
     if (!finished) {
       // Move on to next benchmarked pages.
-      setTimeout(benchmark.runPage, 100);
+      setTimeout(benchmark.runPage, window.interval);
     }
   }
 
@@ -196,12 +196,16 @@ function Benchmark(url) {
     var benchmark = currentBenchmark();
     console.log("openNextPage called. current = " + benchmark.url());
     benchmark.pageStart();
-    chrome.tabs.create({"url": benchmark.url(), "selected": true},
+    chrome.tabs.create({"url": benchmark.url(),
+                        "selected": true
+                       },
                        function(tab) {
                          benchmarkWindow = tab;
                          console.log("Created benchmark tab: " + tab.id);
                          window.loadCheck = 0;
-                         me_.checkForLoadId = setInterval(function(){benchmark.checkForLoad(tab)}, window.interval);
+                         me_.checkForLoadId = setInterval(function(){
+                           benchmark.checkForLoad(tab);
+                         }, window.interval);
                        });
   }
 
@@ -233,8 +237,7 @@ function Benchmark(url) {
   // Run a single page in the benchmark
   this.runPage = function() {
     if (benchmarkWindow) {
-      console.log("runpage should close window: " + benchmarkWindow.id);
-      console.log("closing benchmark window: " + benchmarkWindow.id);
+      console.log("Closing benchmark window: " + benchmarkWindow.id);
       var tab_id = benchmarkWindow.id;
       benchmarkWindow = 0;
       chrome.tabs.remove(tab_id, function() {
@@ -254,11 +257,11 @@ function Benchmark(url) {
       return;
     }      
     chrome.tabs.sendRequest(tab.id, {}, function(response) {
-      if (response.timing.loadEventStart && response.loadTimes.finishLoadTime) {
+      if (response.timing.loadEventEnd && response.loadTimes.finishLoadTime) {
         clearInterval(me_.checkForLoadId);
         console.log("Load complete for tab: " + tab.id);
         var load_times = response.loadTimes;
-        load_times.lastLoadTime = response.timing.loadEventStart - response.timing.navigationStart;
+        load_times.lastLoadTime = response.timing.loadEventEnd - response.timing.navigationStart;
         me_.pageLoaded(load_times);
       }
     });
