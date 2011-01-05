@@ -341,6 +341,10 @@ def main(options):
         if not options.infinite:
             done = True
 
+        if runner_cfg.inter_run_cleanup_script:
+            logging.debug("Running inter-run-cleanup-script")
+            subprocess.call([runner_cfg.inter_run_cleanup_script], shell=True)
+
 if __name__ == '__main__':
     log_levels = ('debug', 'info', 'warning', 'error', 'critical')
 

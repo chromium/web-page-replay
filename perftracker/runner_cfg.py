@@ -23,6 +23,10 @@ replay_data_archive = "<path to recorded data archive from web-page-replay>"
 benchmark_server = "<url of server, such as 'localhost:8080' or 'foo.com'>"
 benchmark_server_url = "http://" + benchmark_server + "/"
 
+# If this script is set, it will be run between each run.
+# Use this to grab a fresh copy of the browser, update your sources, or turn
+# on/off monitoring systems.
+inter_run_cleanup_script = None
 
 #
 # The set of configurations to run
