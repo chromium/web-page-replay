@@ -289,7 +289,6 @@ document.getElementById("json").innerHTML = raw_json;
               "--host-resolver-rules=MAP * 127.0.0.1,EXCLUDE " + runner_cfg.benchmark_server, 
               "--load-extension=" + perftracker_extension_path,
               "--log-level=0",
-              "--no-experiments",
               "--no-first-run",
               "--no-js-randomness",
               "--user-data-dir=" + profile_dir,
