@@ -40,13 +40,13 @@ if sys.version < '2.6':
 # Some constants for our program
 
 # The location of the Replay script
-replay_path = "../replay.py"
+replay_path = '../replay.py'
 
 # The name of the application we're using
-benchmark_application_name = "perftracker"
+benchmark_application_name = 'perftracker'
 
 # The location of the PerfTracker extension
-perftracker_extension_path = "./extension"
+perftracker_extension_path = './extension'
 
 # Function to login to the Google AppEngine app.
 # This code credit to: http://dalelane.co.uk/blog/?p=303
@@ -65,19 +65,19 @@ def DoAppEngineLogin(username, password):
     #
     try:
         auth_uri = 'https://www.google.com/accounts/ClientLogin'
-        authreq_data = urllib.urlencode({ "Email":   username,
-                                          "Passwd":  password,
-                                          "service": "ah",
-                                          "source":  benchmark_application_name,
-                                          "accountType": "HOSTED_OR_GOOGLE" })
+        authreq_data = urllib.urlencode({ 'Email':   username,
+                                          'Passwd':  password,
+                                          'service': 'ah',
+                                          'source':  benchmark_application_name,
+                                          'accountType': 'HOSTED_OR_GOOGLE' })
         auth_req = urllib2.Request(auth_uri, data=authreq_data)
         auth_resp = urllib2.urlopen(auth_req)
         auth_resp_body = auth_resp.read()
         # The auth response includes several fields.  The part  we're
-        # interested in is the bit after "Auth=".
-        auth_resp_dict = dict(x.split("=")
-                              for x in auth_resp_body.split("\n") if x)
-        authtoken = auth_resp_dict["Auth"]
+        # interested in is the bit after 'Auth='.
+        auth_resp_dict = dict(x.split('=')
+                              for x in auth_resp_body.split('\n') if x)
+        authtoken = auth_resp_dict['Auth']
 
         # Get a cookie:
         # The call to request a cookie will also automatically redirect us to
@@ -86,13 +86,14 @@ def DoAppEngineLogin(username, password):
         serv_args = {}
         serv_args['continue'] = target_authenticated_url
         serv_args['auth']     = authtoken
-        full_serv_uri = runner_cfg.benchmark_server_url + "_ah/login?%s" % (urllib.urlencode(serv_args))
+        full_serv_uri = '%s_ah/login?%s' % (runner_cfg.benchmark_server_url,
+                                            urllib.urlencode(serv_args))
 
         serv_req = urllib2.Request(full_serv_uri)
         serv_resp = urllib2.urlopen(serv_req)
-        print "AppEngineLogin succeeded."
+        print 'AppEngineLogin succeeded.'
     except Exception, e: 
-      logging.critical("DoAppEngineLogin failed: %s", e)
+      logging.critical('DoAppEngineLogin failed: %s', e)
       return None
     return full_serv_uri
 
@@ -100,7 +101,7 @@ def DoAppEngineLogin(username, password):
 # Clobber a tmp directory.  Be careful!
 def ClobberTmpDirectory(tmpdir):
     # Do sanity checking so we don't clobber the wrong thing
-    if len(tmpdir) == 0 or not tmpdir.startswith("/tmp/"):
+    if len(tmpdir) == 0 or not tmpdir.startswith('/tmp/'):
         return
 
     for root, dirs, files in os.walk(tmpdir, topdown=False):
@@ -134,25 +135,25 @@ def StartVirtualX(slave_build_name, build_dir):
 
   # Start a virtual X server that we run the tests in.  This makes it so we can
   # run the tests even if we didn't start the tests from an X session.
-  proc = subprocess.Popen(["Xvfb", ":9", "-screen", "0", "1024x768x24", "-ac"],
+  proc = subprocess.Popen(['Xvfb', ':9', '-screen', '0', '1024x768x24', '-ac'],
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
   xvfb_pid_filename = _XvfbPidFilename(slave_build_name)
   open(xvfb_pid_filename, 'w').write(str(proc.pid))
-  os.environ['DISPLAY'] = ":9"
+  os.environ['DISPLAY'] = ':9'
 
   # Verify that Xvfb has started by using xdisplaycheck.
   if len(build_dir) > 0:
     xdisplaycheck_path = os.path.join(build_dir, 'xdisplaycheck')
     if os.path.exists(xdisplaycheck_path):
-      print "Verifying Xvfb has started..."
+      print 'Verifying Xvfb has started...'
       status, output = commands.getstatusoutput(xdisplaycheck_path)
       if status != 0:
-        print "Xvfb return code (None if still running):", proc.poll()
-        print "Xvfb stdout and stderr:", proc.communicate()
+        print 'Xvfb return code (None if still running):', proc.poll()
+        print 'Xvfb stdout and stderr:', proc.communicate()
         raise Exception(output)
-      print "...OK"
+      print '...OK'
   # Some ChromeOS tests need a window manager.
-  subprocess.Popen("icewm", stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+  subprocess.Popen('icewm', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 
 def StopVirtualX(slave_build_name):
@@ -178,11 +179,11 @@ class TestInstance:
 
     def GenerateConfigFile(self, notes):
         # The PerfTracker extension requires this name in order to kick off.
-        ext_suffix = "startbenchmark.html"
-        self.filename = tempfile.mktemp(suffix=ext_suffix, prefix="")
-        f = open(self.filename, "w+")
+        ext_suffix = 'startbenchmark.html'
+        self.filename = tempfile.mktemp(suffix=ext_suffix, prefix='')
+        f = open(self.filename, 'w+')
         def writeln(f, line):
-          f.write(line + "\n")
+          f.write(line + '\n')
         
         f.write("""
 <body>
@@ -192,30 +193,30 @@ var benchmark = {};
 benchmark.user = "";  // XXXMB - fix me.
 """)
         if not notes:
-            notes = "";
+            notes = '';
 
-        cmdline = "";    # TODO(mbelshe):  How to plumb this?
+        cmdline = '';    # TODO(mbelshe):  How to plumb this?
 
-        writeln(f, "benchmark.notes = \"" + notes + "\";");
-        writeln(f, "benchmark.cmdline = \"" + cmdline + "\";");
-        writeln(f, "benchmark.server_url = \"" + runner_cfg.benchmark_server_url + "\";")
-        writeln(f, "benchmark.server_login = \"" + options.login_url + "\";")
-        writeln(f, "benchmark.client_hostname = \"" + platform.node() + "\";")
-        writeln(f, "benchmark.iterations = " + str(self.config["iterations"]) + ";")
-        writeln(f, "benchmark.download_bandwidth_kbps = " + str(self.config["download_bandwidth_kbps"]) + ";")
-        writeln(f, "benchmark.upload_bandwidth_kbps = " + str(self.config["upload_bandwidth_kbps"]) + ";")
-        writeln(f, "benchmark.round_trip_time_ms = " + str(self.config["round_trip_time_ms"]) + ";")
-        writeln(f, "benchmark.packet_loss_rate = " + str(self.config["packet_loss_rate"]) + ";")
-        if self.config["use_spdy"]:
-            writeln(f, "benchmark.use_spdy = true;")
+        writeln(f, 'benchmark.notes = "' + notes + '";');
+        writeln(f, 'benchmark.cmdline = "' + cmdline + '";');
+        writeln(f, 'benchmark.server_url = "' + runner_cfg.benchmark_server_url + '";')
+        writeln(f, 'benchmark.server_login = "' + options.login_url + '";')
+        writeln(f, 'benchmark.client_hostname = "' + platform.node() + '";')
+        writeln(f, 'benchmark.iterations = ' + str(self.config['iterations']) + ';')
+        writeln(f, 'benchmark.download_bandwidth_kbps = ' + str(self.config['download_bandwidth_kbps']) + ';')
+        writeln(f, 'benchmark.upload_bandwidth_kbps = ' + str(self.config['upload_bandwidth_kbps']) + ';')
+        writeln(f, 'benchmark.round_trip_time_ms = ' + str(self.config['round_trip_time_ms']) + ';')
+        writeln(f, 'benchmark.packet_loss_rate = ' + str(self.config['packet_loss_rate']) + ';')
+        if self.config['use_spdy']:
+            writeln(f, 'benchmark.use_spdy = true;')
         else:
-            writeln(f, "benchmark.use_spdy = false;")
+            writeln(f, 'benchmark.use_spdy = false;')
 
-        writeln(f, "benchmark.urls = [")
-        for url in runner_cfg.configurations["urls"]:
-            writeln(f, "  \"" + url + "\",")
+        writeln(f, 'benchmark.urls = [')
+        for url in runner_cfg.configurations['urls']:
+            writeln(f, '  "' + url + '",')
  
-        writeln(f, "];");
+        writeln(f, '];');
         f.write("""
 var raw_json = JSON.stringify(benchmark);
 document.getElementById("json").innerHTML = raw_json;
@@ -227,30 +228,30 @@ document.getElementById("json").innerHTML = raw_json;
         return
 
     def StartProxy(self):
-        logging.debug("Starting Web-Page-Replay")
-        log_level = "info"
+        logging.debug('Starting Web-Page-Replay')
+        log_level = 'info'
         if self.log_level:
             log_level = self.log_level
         cmdline = [
             replay_path,
-            "-l", log_level,
-            "-x"  # Disables DNS intercepting
+            '-l', log_level,
+            '-x'  # Disables DNS intercepting
         ]
 
         if self.record:
-            cmdline.append("--record")
+            cmdline.append('--record')
         else:
-            if (self.config["download_bandwidth_kbps"]):
-                cmdline += ["-d", str(self.config["download_bandwidth_kbps"]) + "KBit/s"]
-            if (self.config["upload_bandwidth_kbps"]):
-                cmdline += ["-u", str(self.config["upload_bandwidth_kbps"]) + "KBit/s"]
-            if (self.config["round_trip_time_ms"]):
-                cmdline += ["-m", str(self.config["round_trip_time_ms"])]
-            if (self.config["packet_loss_rate"]):
-                cmdline += ["-p", str(self.config["packet_loss_rate"] / 100.0)]
+            if (self.config['download_bandwidth_kbps']):
+                cmdline += ['-d', str(self.config['download_bandwidth_kbps']) + 'KBit/s']
+            if (self.config['upload_bandwidth_kbps']):
+                cmdline += ['-u', str(self.config['upload_bandwidth_kbps']) + 'KBit/s']
+            if (self.config['round_trip_time_ms']):
+                cmdline += ['-m', str(self.config['round_trip_time_ms'])]
+            if (self.config['packet_loss_rate']):
+                cmdline += ['-p', str(self.config['packet_loss_rate'] / 100.0)]
 
         cmdline.append(runner_cfg.replay_data_archive)
-        logging.debug("Starting replay proxy: %s", str(cmdline))
+        logging.debug('Starting replay proxy: %s', str(cmdline))
         self.proxy_process = subprocess.Popen(cmdline)
 
         # We just changed the system resolv.conf.  If we go too fast here
@@ -259,14 +260,14 @@ document.getElementById("json").innerHTML = raw_json;
 
     def StopProxy(self):
         if self.proxy_process:
-            logging.debug("Stopping Web-Page-Replay")
+            logging.debug('Stopping Web-Page-Replay')
             self.proxy_process.send_signal(signal.SIGINT)
             self.proxy_process.wait()
 
     def RunChrome(self, chrome_cmdline):
-        start_file_url = "file://" + self.filename
+        start_file_url = 'file://' + self.filename
 
-        profile_dir = tempfile.mkdtemp(prefix="chrome.profile.");
+        profile_dir = tempfile.mkdtemp(prefix='chrome.profile.');
 
         use_virtualx = False
         if platform.system() == 'Linux':
@@ -274,30 +275,30 @@ document.getElementById("json").innerHTML = raw_json;
 
         try:
             if use_virtualx:
-                StartVirtualX(platform.node(), "/tmp")
+                StartVirtualX(platform.node(), '/tmp')
             cmdline = [
               runner_cfg.chrome_path,
-              "--disable-background-networking",
+              '--disable-background-networking',
 
               # TODO(tonyg): These are disabled to reduce noise. It would be nice to
               # make the model realistic and stable enough to enable them.
-              "--disable-preconnect",
-              "--dns-prefetch-disable",
+              '--disable-preconnect',
+              '--dns-prefetch-disable',
 
-              "--enable-benchmarking",
-              "--enable-logging",
-              "--host-resolver-rules=MAP * 127.0.0.1,EXCLUDE " + runner_cfg.benchmark_server, 
-              "--load-extension=" + perftracker_extension_path,
-              "--log-level=0",
-              "--no-first-run",
-              "--no-js-randomness",
-              "--user-data-dir=" + profile_dir,
+              '--enable-benchmarking',
+              '--enable-logging',
+              '--host-resolver-rules=MAP * 127.0.0.1,EXCLUDE ' + runner_cfg.benchmark_server, 
+              '--load-extension=' + perftracker_extension_path,
+              '--log-level=0',
+              '--no-first-run',
+              '--no-js-randomness',
+              '--user-data-dir=' + profile_dir,
             ]
             if chrome_cmdline:
-              cmdline.extend(chrome_cmdline.split(" "))
+              cmdline.extend(chrome_cmdline.split(' '))
             cmdline.append(start_file_url)
   
-            logging.debug("Starting chrome: %s", str(cmdline))
+            logging.debug('Starting chrome: %s', str(cmdline))
             chrome = subprocess.Popen(cmdline)
             chrome.wait();
         finally:
@@ -311,7 +312,7 @@ document.getElementById("json").innerHTML = raw_json;
             self.StartProxy()
             self.RunChrome(chrome_cmdline)
         finally:
-            logging.debug("Cleaning up test")
+            logging.debug('Cleaning up test')
             self.StopProxy()
             self.Cleanup()
 
@@ -321,19 +322,19 @@ document.getElementById("json").innerHTML = raw_json;
 def main(options):
     done = False
     while not done:
-        iterations = runner_cfg.configurations["iterations"]
-        for plr in runner_cfg.configurations["packet_loss_rates"]:
-            for network in runner_cfg.configurations["networks"]:
-                for rtt in runner_cfg.configurations["round_trip_times"]:
+        iterations = runner_cfg.configurations['iterations']
+        for plr in runner_cfg.configurations['packet_loss_rates']:
+            for network in runner_cfg.configurations['networks']:
+                for rtt in runner_cfg.configurations['round_trip_times']:
                     config = {
-                        "iterations"             : iterations,
-                        "download_bandwidth_kbps": network["download_bandwidth_kbps"],
-                        "upload_bandwidth_kbps"  : network["upload_bandwidth_kbps"],
-                        "round_trip_time_ms"     : rtt,
-                        "packet_loss_rate"       : plr,
-                        "use_spdy"               : False,
+                        'iterations'             : iterations,
+                        'download_bandwidth_kbps': network['download_bandwidth_kbps'],
+                        'upload_bandwidth_kbps'  : network['upload_bandwidth_kbps'],
+                        'round_trip_time_ms'     : rtt,
+                        'packet_loss_rate'       : plr,
+                        'use_spdy'               : False,
                     }
-                    logging.debug("Running test configuration: %s", str(config))
+                    logging.debug('Running test configuration: %s', str(config))
                     test = TestInstance(config, options.log_level,
                                         options.record)
                     test.RunTest(options.notes, options.chrome_cmdline)
@@ -341,7 +342,7 @@ def main(options):
             done = True
 
         if runner_cfg.inter_run_cleanup_script:
-            logging.debug("Running inter-run-cleanup-script")
+            logging.debug('Running inter-run-cleanup-script')
             subprocess.call([runner_cfg.inter_run_cleanup_script], shell=True)
 
 if __name__ == '__main__':
@@ -394,7 +395,7 @@ if __name__ == '__main__':
     # Collect login credentials and verify
     if not options.user:
       option_parser.error('Must specify an appengine user for login')
-    options.password = getpass.getpass(options.user + " password: ");
+    options.password = getpass.getpass(options.user + ' password: ');
     options.login_url = DoAppEngineLogin(options.user, options.password)
     if not options.login_url:
       exit(-1)
