@@ -66,7 +66,7 @@ class TrafficShaper(object):
     queue_size = str(self.platformsettings.get_ipfw_queue_slots())
 
     # To distribute full delay across the uplink and downlink bandwidths evenly.
-    half_delay_ms = str(int(self.delay_ms) / 2)
+    half_delay_ms = str(int(int(self.delay_ms) / 2))
 
     try:
       # Configure DNS shaping.
@@ -94,12 +94,12 @@ class TrafficShaper(object):
           'config',
           'bw', self.up_bandwidth,
           'delay', half_delay_ms,
-          'plr', self.packet_loss_rate,
       ])
       self.platformsettings.ipfw([
           'queue', self._UPLOAD_QUEUE,
           'config',
           'pipe', self._UPLOAD_PIPE,
+          'plr', self.packet_loss_rate,
           'queue', queue_size,
           'mask', 'src-port', '0xffff',
       ])
@@ -119,12 +119,12 @@ class TrafficShaper(object):
           'config',
           'bw', self.down_bandwidth,
           'delay', half_delay_ms,
-          'plr', self.packet_loss_rate,
       ])
       self.platformsettings.ipfw([
           'queue', self._DOWNLOAD_QUEUE,
           'config',
           'pipe', self._DOWNLOAD_PIPE,
+          'plr', self.packet_loss_rate,
           'queue', queue_size,
           'mask', 'dst-port', '0xffff',
       ])
