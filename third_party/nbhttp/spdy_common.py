@@ -87,6 +87,7 @@ class SpdyMessageHandler:
     """
 
     def __init__(self):
+        print "SpdyMessageHandler"
         self.log = lambda a:a
         self._input_buffer = ""
         self._input_state = WAITING
@@ -164,6 +165,7 @@ class SpdyMessageHandler:
                     self._input_start(stream_id, hdr_tuples)
                 elif self._input_frame_type == CTL_RST_STREAM:
                     stream_id = struct.unpack("!I", frame_data[:4])[0] & STREAM_MASK
+                    print "GOT RESET" + str(stream_id)
                     self._input_end(stream_id)
                 elif self._input_frame_type == CTL_SETTINGS:
                     pass # FIXME
@@ -188,7 +190,8 @@ class SpdyMessageHandler:
     def _parse_hdrs(self, data):
         "Given a control frame data block, return a list of (name, value) tuples."
         # TODO: separate null-delimited into separate instances
-        data = self._decompress(data) # FIXME: catch errors
+        if self._decompress != dummy:
+          data = self._decompress(data) # FIXME: catch errors
         cursor = 2
         (num_hdrs,) = struct.unpack("!h", data[:cursor]) # FIXME: catch errors
         hdrs = []
@@ -225,7 +228,10 @@ class SpdyMessageHandler:
 
     def _ser_syn_frame(self, type, flags, stream_id, hdr_tuples):
         "Returns a SPDY SYN_[STREAM|REPLY] frame."
-        hdrs = self._compress(self._ser_hdrs(hdr_tuples))
+        #print "frame: " + str(self._ser_hdrs(hdr_tuples))
+        hdrs = self._ser_hdrs(hdr_tuples)
+        if self._compress != dummy:
+          hdrs = self._compress(hdrs)
         if (type == CTL_SYN_STREAM):
           data = struct.pack("!IIH%ds" % len(hdrs),
               STREAM_MASK & stream_id,
@@ -268,8 +274,15 @@ class SpdyMessageHandler:
         # TODO: collapse dups into null-delimited
         hdr_tuples.sort() # required by Chromium
         fmt = ["!H"]
-        args = [len(hdr_tuples)]
+        # filter junk from hdr_tuples
+        broken = 0
         for (n,v) in hdr_tuples:
+            if len(n) == 0 or len(v) == 0:
+                broken += 1
+        args = [len(hdr_tuples) - broken]
+        for (n,v) in hdr_tuples:
+            if len(n) == 0 or len(v) == 0:
+                continue
             # TODO: check for overflowing n, v lengths
             fmt.append("H%dsH%ds" % (len(n), len(v)))
             args.extend([len(n), n, len(v), v])

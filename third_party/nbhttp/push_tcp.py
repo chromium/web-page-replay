@@ -144,6 +144,7 @@ THE SOFTWARE.
 
 import sys
 import socket
+import ssl
 import errno
 import asyncore
 import time
@@ -158,8 +159,24 @@ class _TcpConnection(asyncore.dispatcher):
     "Base class for a TCP connection."
     write_bufsize = 16
     read_bufsize = 1024 * 16
-    def __init__(self, sock, host, port, connect_error_handler=None):
-        self.socket = sock
+    def __init__(self, sock, is_server, host, port, certfile, keyfile, connect_error_handler=None):
+        if is_server:
+          try:
+              self.socket = ssl.wrap_socket(sock,
+                                            server_side=True,
+                                            certfile=certfile,
+                                            keyfile=keyfile,
+                                            do_handshake_on_connect=False)
+              self.socket.do_handshake()
+          except ssl.SSLError, err:
+              if err.args[0] == ssl.SSL_ERROR_WANT_READ:
+                  select.select([self.socket], [], [])
+              elif err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
+                  select.select([], [self.socket], [])
+              else:
+                  raise
+        else:
+            self.socket = sock
         self.host = host
         self.port = port
         self.connect_error_handler = connect_error_handler
@@ -172,10 +189,10 @@ class _TcpConnection(asyncore.dispatcher):
         self._closing = False
         self._write_buffer = []
         if event:
-            self._revent = event.read(sock, self.handle_read)
-            self._wevent = event.write(sock, self.handle_write)
+            self._revent = event.read(self.socket, self.handle_read)
+            self._wevent = event.write(self.socket, self.handle_write)
         else: # asyncore
-            asyncore.dispatcher.__init__(self, sock)
+            asyncore.dispatcher.__init__(self, self.socket)
 
     def handle_read(self):
         """
@@ -183,7 +200,7 @@ class _TcpConnection(asyncore.dispatcher):
         if appropriate.
         """
         try:
-            data = self.socket.recv(self.read_bufsize)
+            data = self.recv(self.read_bufsize)
         except socket.error, why:
             if why[0] in [errno.EBADF, errno.ECONNRESET, errno.EPIPE, errno.ETIMEDOUT]:
                 self.conn_closed()
@@ -283,6 +300,9 @@ class _TcpConnection(asyncore.dispatcher):
 
     def readable(self):
         "asyncore-specific readable method"
+        if isinstance(self.socket, ssl.SSLSocket):
+            while self.socket.pending() > 0:
+                self.handle_read_event()
         return self.read_cb and self.tcp_connected and not self._paused
     
     def writable(self):
@@ -299,9 +319,11 @@ class _TcpConnection(asyncore.dispatcher):
 
 class create_server(asyncore.dispatcher):
     "An asynchrnous TCP server."
-    def __init__(self, host, port, conn_handler):
+    def __init__(self, host, port, certfile, keyfile, conn_handler):
         self.host = host
         self.port = port
+        self.certfile = certfile
+        self.keyfile = keyfile
         self.conn_handler = conn_handler
         if event:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -323,7 +345,7 @@ class create_server(asyncore.dispatcher):
             conn, addr = args[1].accept()
         else: # asyncore
             conn, addr = self.accept()
-        tcp_conn = _TcpConnection(conn, self.host, self.port, self.handle_error)
+        tcp_conn = _TcpConnection(conn, True, self.host, self.port, self.certfile, self.keyfile, self.handle_error)
         tcp_conn.read_cb, tcp_conn.close_cb, tcp_conn.pause_cb = self.conn_handler(tcp_conn)
 
     def handle_error(self, err=None):
@@ -368,7 +390,7 @@ class create_client(asyncore.dispatcher):
             self._timeout_ev.delete()
         if sock is None: # asyncore
             sock = self.socket
-        tcp_conn = _TcpConnection(sock, self.host, self.port, self.handle_error)
+        tcp_conn = _TcpConnection(sock, False, self.host, self.port, self.certfile, self.keyfile, self.handle_error)
         tcp_conn.read_cb, tcp_conn.close_cb, tcp_conn.pause_cb = self.conn_handler(tcp_conn)
 
     def handle_write(self):
