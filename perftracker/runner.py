@@ -19,6 +19,7 @@ description = """
 
 import cookielib
 import getpass
+import json
 import logging
 import optparse
 import os
@@ -176,52 +177,36 @@ class TestInstance:
     self.record = record
     self.proxy_process = None
 
-  def GenerateConfigFile(self, notes):
+  def GenerateConfigFile(self, notes=''):
     # The PerfTracker extension requires this name in order to kick off.
     ext_suffix = 'startbenchmark.html'
     self.filename = tempfile.mktemp(suffix=ext_suffix, prefix='')
     f = open(self.filename, 'w+')
-    def writeln(f, line):
-      f.write(line + '\n')
-        
+    
+    benchmark = {
+      'user': getpass.getuser(),
+      'notes': str(notes),
+      'cmdline': ' '.join(sys.argv),
+      'server_url': runner_cfg.benchmark_server_url,
+      'server_login': options.login_url,
+      'client_hostname': platform.node(),
+      'iterations': str(self.config['iterations']),
+      'download_bandwidth_kbps': str(self.config['download_bandwidth_kbps']),
+      'upload_bandwidth_kbps': str(self.config['upload_bandwidth_kbps']),
+      'round_trip_time_ms': str(self.config['round_trip_time_ms']),
+      'packet_loss_rate': str(self.config['packet_loss_rate']),
+      'use_spdy': self.config['use_spdy'],
+      'urls': runner_cfg.configurations['urls']
+    }
+
     f.write("""
 <body>
-<textarea id=json></textarea>
-<script>
-var benchmark = {};
-benchmark.user = "";  // XXXMB - fix me.
-""")
-    if not notes:
-      notes = '';
-
-    cmdline = '';    # TODO(mbelshe):  How to plumb this?
-
-    writeln(f, 'benchmark.notes = "' + notes + '";');
-    writeln(f, 'benchmark.cmdline = "' + cmdline + '";');
-    writeln(f, 'benchmark.server_url = "' + runner_cfg.benchmark_server_url + '";')
-    writeln(f, 'benchmark.server_login = "' + options.login_url + '";')
-    writeln(f, 'benchmark.client_hostname = "' + platform.node() + '";')
-    writeln(f, 'benchmark.iterations = ' + str(self.config['iterations']) + ';')
-    writeln(f, 'benchmark.download_bandwidth_kbps = ' + str(self.config['download_bandwidth_kbps']) + ';')
-    writeln(f, 'benchmark.upload_bandwidth_kbps = ' + str(self.config['upload_bandwidth_kbps']) + ';')
-    writeln(f, 'benchmark.round_trip_time_ms = ' + str(self.config['round_trip_time_ms']) + ';')
-    writeln(f, 'benchmark.packet_loss_rate = ' + str(self.config['packet_loss_rate']) + ';')
-    if self.config['use_spdy']:
-      writeln(f, 'benchmark.use_spdy = true;')
-    else:
-      writeln(f, 'benchmark.use_spdy = false;')
-
-    writeln(f, 'benchmark.urls = [')
-    for url in runner_cfg.configurations['urls']:
-      writeln(f, '  "' + url + '",')
- 
-    writeln(f, '];');
-    f.write("""
-var raw_json = JSON.stringify(benchmark);
-document.getElementById("json").innerHTML = raw_json;
-</script>
+<h3>Running benchmark...</h3>
+<textarea id=json style="width:100%%;height:80%%;">
+%s
+</textarea>
 </body>
-""")
+""" % json.dumps(benchmark, indent=2))
 
     f.close()
     return
