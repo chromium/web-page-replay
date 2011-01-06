@@ -262,6 +262,7 @@ class TestInstance:
         StartVirtualX(platform.node(), '/tmp')
       cmdline = [
           runner_cfg.chrome_path,
+          '--activate-on-launch',
           '--disable-background-networking',
 
           # TODO(tonyg): These are disabled to reduce noise. It would be nice to
@@ -276,6 +277,7 @@ class TestInstance:
           '--log-level=0',
           '--no-first-run',
           '--no-js-randomness',
+          '--start-maximized',
           '--user-data-dir=' + profile_dir,
           ]
       if chrome_cmdline:
