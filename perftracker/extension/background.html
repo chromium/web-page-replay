@@ -262,7 +262,14 @@ function Benchmark(url) {
         console.log("Load complete for tab: " + tab.id);
         var load_times = response.loadTimes;
         load_times.lastLoadTime = response.timing.loadEventEnd - response.timing.navigationStart;
-        me_.pageLoaded(load_times);
+
+        // If it record mode, wait here another 10 seconds to be absolutely
+        // sure that any lazy loaded resources are recorded.
+        if (benchmarkConfiguration.record) {
+          setTimeout(function() { me_.pageLoaded(load_times); }, 10000);
+        } else {
+          me_.pageLoaded(load_times);
+        }
       }
     });
   }

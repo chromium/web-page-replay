@@ -196,7 +196,8 @@ class TestInstance:
       'round_trip_time_ms': str(self.config['round_trip_time_ms']),
       'packet_loss_rate': str(self.config['packet_loss_rate']),
       'use_spdy': self.config['use_spdy'],
-      'urls': runner_cfg.configurations['urls']
+      'urls': runner_cfg.configurations['urls'],
+      'record': self.record
     }
 
     f.write("""
@@ -364,7 +365,6 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Log file to use in addition to writting logs to stderr.')
-  # TODO: Don't save results when recording.
   option_parser.add_option('-r', '--record', default='',
       action='store',
       type='string',

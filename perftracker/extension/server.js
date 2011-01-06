@@ -241,6 +241,7 @@ function TestResultSubmitter(config) {
     }
 
     self.AppEngineLogin(function() {
+      if (config.record) { setTimeout(callback, 0); return; }
       create_test_started = true;
       var data = copy(config);
       data["cmd"] = "create";
@@ -264,6 +265,7 @@ function TestResultSubmitter(config) {
 
   // Post a single result
   this.PostResult = function (result, callback) {
+    if (config.record) { setTimeout(callback, 0); return; }
     var data = copy(result);
     data["set_id"] = test_id;
     // TODO: This is an artifact of the presentation. It should not be
@@ -278,6 +280,7 @@ function TestResultSubmitter(config) {
 
   // Post the rollup summary of a set of data
   this.PostSummary = function(data, callback) {
+    if (config.record) { setTimeout(callback, 0); return; }
     var result = copy(data);
     // Average everything except the special properties.
     for (var prop in result) {
@@ -296,6 +299,7 @@ function TestResultSubmitter(config) {
 
   // Update the set with its summary data
   this.UpdateSetSummary = function(data, callback) {
+    if (config.record) { setTimeout(callback, 0); return; }
     var result = copy(data);
     // Divide everything by iterations except the special properties.
     for (var prop in result) {
