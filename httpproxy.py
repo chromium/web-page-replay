@@ -209,7 +209,7 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
                             daemonserver.DaemonServer):
   def __init__(
       self, http_archive_filename, use_deterministic_script, real_dns_lookup,
-      host='localhost', port=80):
+      host='localhost', port=80, certfile="", keyfile=""):
     self.use_deterministic_script = use_deterministic_script
     self.archive_filename = http_archive_filename
     self.real_http_request = RealHttpRequest(real_dns_lookup)
@@ -253,7 +253,7 @@ class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
                             daemonserver.DaemonServer):
   def __init__(
       self, http_archive_filename, use_deterministic_script, real_dns_lookup,
-      host='localhost', port=80):
+      host='localhost', port=80, certfile="", keyfile=""):
     self.use_deterministic_script = use_deterministic_script
     self.http_archive = httparchive.HttpArchive.Create(http_archive_filename)
     logging.info('Loaded %d responses from %s',

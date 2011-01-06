@@ -71,7 +71,11 @@ def main(options, replay_file):
                                  options.dns_private_passthrough) as dns_server:
       with replay_server_class(replay_file,
                                options.deterministic_script,
-                               dns_server.real_dns_lookup):
+                               dns_server.real_dns_lookup,
+                               "localhost",
+                               80,
+                               options.certfile,
+                               options.keyfile):
         with trafficshaper.TrafficShaper(options.dns_forwarding,
                                          options.up,
                                          options.down,
@@ -144,6 +148,16 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Packet loss rate in range [0..1]. Zero means no loss.')
+  network_group.add_option('-c', '--certfile', default='',
+      action='store',
+      dest='certfile',
+      type='string',
+      help='Certificate file for use with SSL')
+  network_group.add_option('-k', '--keyfile', default='',
+      action='store',
+      dest='keyfile',
+      type='string',
+      help='Key file for use with SSL')
   option_parser.add_option_group(network_group)
 
   harness_group = optparse.OptionGroup(option_parser,

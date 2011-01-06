@@ -31,7 +31,7 @@ VERSION = 'version'
 class ReplaySpdyServer(daemonserver.DaemonServer):
   def __init__(
       self, http_archive_filename, use_deterministic_script, real_dns_lookup,
-      host='localhost', port=80):
+      host='localhost', port=80, certfile="", keyfile=""):
     #TODO(lzheng): figure out how to get the log level from main.
     self.log = logging.getLogger('ReplaySpdyServer')
     self.log.setLevel(logging.INFO)
@@ -40,7 +40,13 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
                   len(self.http_archive), http_archive_filename)
     self.host = host
     self.port = port
-    self.spdy_server = spdy_server.SpdyServer(host, port,
+    if not len(certfile) or not len(keyfile):
+      logging.error("SPDY requires a keyfile and certificate file")
+      raise Exception("keyfile or certfile missing")
+    self.spdy_server = spdy_server.SpdyServer(host,
+                                              port,
+                                              certfile,
+                                              keyfile,
                                               self.request_handler,
                                               self.log)
 
