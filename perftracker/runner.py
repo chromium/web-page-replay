@@ -33,8 +33,8 @@ import urllib2
 import runner_cfg
 
 if sys.version < '2.6':
-    print 'Need Python 2.6 or greater.'
-    sys.exit(1)
+  print 'Need Python 2.6 or greater.'
+  sys.exit(1)
 
 
 # Some constants for our program
@@ -237,19 +237,18 @@ document.getElementById("json").innerHTML = raw_json;
         '-x'  # Disables DNS intercepting
         ]
 
+    if self.config['download_bandwidth_kbps']:
+      cmdline += ['-d', str(self.config['download_bandwidth_kbps']) + 'KBit/s']
+    if self.config['upload_bandwidth_kbps']:
+      cmdline += ['-u', str(self.config['upload_bandwidth_kbps']) + 'KBit/s']
+    if self.config['round_trip_time_ms']:
+      cmdline += ['-m', str(self.config['round_trip_time_ms'])]
+    if self.config['packet_loss_rate']:
+      cmdline += ['-p', str(self.config['packet_loss_rate'] / 100.0)]
     if self.record:
-      cmdline.append('--record')
-    else:
-      if (self.config['download_bandwidth_kbps']):
-          cmdline += ['-d', str(self.config['download_bandwidth_kbps']) + 'KBit/s']
-      if (self.config['upload_bandwidth_kbps']):
-          cmdline += ['-u', str(self.config['upload_bandwidth_kbps']) + 'KBit/s']
-      if (self.config['round_trip_time_ms']):
-          cmdline += ['-m', str(self.config['round_trip_time_ms'])]
-      if (self.config['packet_loss_rate']):
-          cmdline += ['-p', str(self.config['packet_loss_rate'] / 100.0)]
-
+      cmdline.append('-r')
     cmdline.append(runner_cfg.replay_data_archive)
+
     logging.debug('Starting replay proxy: %s', str(cmdline))
     self.proxy_process = subprocess.Popen(cmdline)
 
@@ -294,7 +293,7 @@ document.getElementById("json").innerHTML = raw_json;
           '--user-data-dir=' + profile_dir,
           ]
       if chrome_cmdline:
-          cmdline.extend(chrome_cmdline.split(' '))
+        cmdline.extend(chrome_cmdline.split(' '))
       cmdline.append(start_file_url)
   
       logging.debug('Starting chrome: %s', str(cmdline))
@@ -303,7 +302,7 @@ document.getElementById("json").innerHTML = raw_json;
     finally:
       ClobberTmpDirectory(profile_dir)
       if use_virtualx:
-          StopVirtualX(platform.node())
+        StopVirtualX(platform.node())
 
   def RunTest(self, notes, chrome_cmdline):
     try:
@@ -319,6 +318,18 @@ document.getElementById("json").innerHTML = raw_json;
     os.remove(self.filename)
 
 def main(options):
+  # When in record mode, override most of the configuration.
+  if options.record:
+    runner_cfg.replay_data_archive = options.record
+    runner_cfg.configurations['iterations'] = 1
+    runner_cfg.configurations['packet_loss_rates'] = [0]
+    runner_cfg.configurations['networks'] = [{
+        'download_bandwidth_kbps': 0,
+        'upload_bandwidth_kbps': 0
+        }]
+    runner_cfg.configurations['round_trip_times'] = [0]
+    runner_cfg.configurations['packet_loss_rates'] = [0]
+
   done = False
   while not done:
     iterations = runner_cfg.configurations['iterations']
@@ -336,10 +347,10 @@ def main(options):
           logging.debug('Running test configuration: %s', str(config))
           test = TestInstance(config, options.log_level, options.record)
           test.RunTest(options.notes, options.chrome_cmdline)
-    if not options.infinite:
+    if not options.infinite or options.record:
       done = True
 
-    if runner_cfg.inter_run_cleanup_script:
+    if runner_cfg.inter_run_cleanup_script and not options.record:
       logging.debug('Running inter-run-cleanup-script')
       subprocess.call([runner_cfg.inter_run_cleanup_script], shell=True)
 
@@ -369,9 +380,11 @@ if __name__ == '__main__':
       type='string',
       help='Log file to use in addition to writting logs to stderr.')
   # TODO: Don't save results when recording.
-  option_parser.add_option('-r', '--record', default=False,
-      action='store_true',
-      help='Record benchmark from the network.')
+  option_parser.add_option('-r', '--record', default='',
+      action='store',
+      type='string',
+      help=('If specified, rather than running benchmark, record URLs in config'
+            'to given file.'))
   option_parser.add_option('-i', '--infinite', default=False,
       action='store_true',
       help='Loop infinitely, repeating the test.')
