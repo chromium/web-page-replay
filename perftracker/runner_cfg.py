@@ -20,7 +20,9 @@ chrome_path = "<path to chrome>"
 replay_data_archive = "<path to recorded data archive from web-page-replay>"
 
 # The URL of the PerfTracker web application to post results to
-benchmark_server = "<url of server, such as 'localhost:8080' or 'foo.com'>"
+benchmark_hostname = "<hostname of server, e.g. 'localhost'>" 
+becnhmark_port     = "<port number for server, e.g. '8080'>"
+benchmark_server = benchmark_hostname + ":" + benchmark_port
 benchmark_server_url = "http://" + benchmark_server + "/"
 
 # If this script is set, it will be run between each run.
@@ -58,6 +60,11 @@ configurations["round_trip_times"] = [
 ]
 configurations["packet_loss_rates"] = [
     0, 1
+]
+
+configurations["protocols"] = [
+   "http",
+   # "spdy" --- NOT READY FOR PRIME TIME YET!
 ]
 
 # The list of URLs to test

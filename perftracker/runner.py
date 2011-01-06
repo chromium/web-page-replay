@@ -220,9 +220,12 @@ class TestInstance:
     cmdline = [
         replay_path,
         '-l', log_level,
-        '-x'  # Disables DNS intercepting
+        '-x', # Disables DNS intercepting
+        '-c', options.certfile,
+        '-k', options.keyfile,
         ]
-
+    if self.config["use_spdy"]:
+      cmdline.extend(["-s"])
     if self.config['download_bandwidth_kbps']:
       cmdline += ['-d', str(self.config['download_bandwidth_kbps']) + 'KBit/s']
     if self.config['upload_bandwidth_kbps']:
@@ -264,7 +267,6 @@ class TestInstance:
           runner_cfg.chrome_path,
           '--activate-on-launch',
           '--disable-background-networking',
-
           # TODO(tonyg): These are disabled to reduce noise. It would be nice to
           # make the model realistic and stable enough to enable them.
           '--disable-preconnect',
@@ -272,7 +274,8 @@ class TestInstance:
           
           '--enable-benchmarking',
           '--enable-logging',
-          '--host-resolver-rules=MAP * 127.0.0.1,EXCLUDE ' + runner_cfg.benchmark_server, 
+          '--host-resolver-rules=MAP * 127.0.0.1:80,EXCLUDE ' +
+              runner_cfg.benchmark_hostname, 
           '--load-extension=' + perftracker_extension_path,
           '--log-level=0',
           '--no-first-run',
@@ -280,6 +283,9 @@ class TestInstance:
           '--start-maximized',
           '--user-data-dir=' + profile_dir,
           ]
+      if self.config["use_spdy"]:
+          cmdline.extend(["--use-spdy=ssl,exclude=" +
+                          runner_cfg.benchmark_server_url])
       if chrome_cmdline:
         cmdline.extend(chrome_cmdline.split(' '))
       cmdline.append(start_file_url)
@@ -321,25 +327,27 @@ def main(options):
   done = False
   while not done:
     iterations = runner_cfg.configurations['iterations']
-    for plr in runner_cfg.configurations['packet_loss_rates']:
-      for network in runner_cfg.configurations['networks']:
-        for rtt in runner_cfg.configurations['round_trip_times']:
-          config = {
-              'iterations'             : iterations,
-              'download_bandwidth_kbps': network['download_bandwidth_kbps'],
-              'upload_bandwidth_kbps'  : network['upload_bandwidth_kbps'],
-              'round_trip_time_ms'     : rtt,
-              'packet_loss_rate'       : plr,
-              'use_spdy'               : False,
-              }
-          logging.debug('Running test configuration: %s', str(config))
-          test = TestInstance(config, options.log_level, options.record)
-          test.RunTest(options.notes, options.chrome_cmdline)
+    for proto in runner_cfg.configurations['protocols']:
+      for plr in runner_cfg.configurations['packet_loss_rates']:
+        for network in runner_cfg.configurations['networks']:
+          for rtt in runner_cfg.configurations['round_trip_times']:
+            config = {
+                'iterations'             : iterations,
+                'download_bandwidth_kbps': network['download_bandwidth_kbps'],
+                'upload_bandwidth_kbps'  : network['upload_bandwidth_kbps'],
+                'round_trip_time_ms'     : rtt,
+                'packet_loss_rate'       : plr,
+                'use_spdy'               : proto == 'spdy',
+            }
+            logging.debug("Running test configuration: %s", str(config))
+            test = TestInstance(config, options.log_level,
+                                options.record)
+            test.RunTest(options.notes, options.chrome_cmdline)
     if not options.infinite or options.record:
       done = True
 
     if runner_cfg.inter_run_cleanup_script and not options.record:
-      logging.debug('Running inter-run-cleanup-script')
+      logging.debug("Running inter-run-cleanup-script")
       subprocess.call([runner_cfg.inter_run_cleanup_script], shell=True)
 
 if __name__ == '__main__':
@@ -375,7 +383,7 @@ if __name__ == '__main__':
   option_parser.add_option('-i', '--infinite', default=False,
       action='store_true',
       help='Loop infinitely, repeating the test.')
-  option_parser.add_option('-c', '--chrome_cmdline', default=None,
+  option_parser.add_option('-o', '--chrome_cmdline', default=None,
       action='store',
       type='string',
       help='Command line options to pass to chrome.')
@@ -387,6 +395,14 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Username for logging into appengine.')
+  option_parser.add_option('-c', '--certfile', default='',
+      action='store',
+      type='string',
+      help='Certificate file for use with SSL')
+  option_parser.add_option('-k', '--keyfile', default='',
+      action='store',
+      type='string',
+      help='Key file for use with SSL')
 
   options, args = option_parser.parse_args()
 
