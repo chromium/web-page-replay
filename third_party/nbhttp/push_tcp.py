@@ -253,6 +253,7 @@ class _TcpConnection(asyncore.dispatcher):
         The connection has been closed by the other side. Do local cleanup
         and then call close_cb.
         """
+        self.socket.close()
         self.tcp_connected = False
         if self._close_cb_called:
             return
