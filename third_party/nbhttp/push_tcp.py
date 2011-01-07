@@ -349,7 +349,8 @@ class create_server(asyncore.dispatcher):
         tcp_conn.read_cb, tcp_conn.close_cb, tcp_conn.pause_cb = self.conn_handler(tcp_conn)
 
     def handle_error(self, err=None):
-        raise AssertionError, "this (%s) should never happen for a server." % err
+        #raise AssertionError, "this (%s) should never happen for a server." % err
+        pass
 
 
 class create_client(asyncore.dispatcher):

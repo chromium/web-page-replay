@@ -87,7 +87,6 @@ class SpdyMessageHandler:
     """
 
     def __init__(self):
-        print "SpdyMessageHandler"
         self.log = lambda a:a
         self._input_buffer = ""
         self._input_state = WAITING
@@ -165,7 +164,6 @@ class SpdyMessageHandler:
                     self._input_start(stream_id, hdr_tuples)
                 elif self._input_frame_type == CTL_RST_STREAM:
                     stream_id = struct.unpack("!I", frame_data[:4])[0] & STREAM_MASK
-                    print "GOT RESET" + str(stream_id)
                     self._input_end(stream_id)
                 elif self._input_frame_type == CTL_SETTINGS:
                     pass # FIXME
