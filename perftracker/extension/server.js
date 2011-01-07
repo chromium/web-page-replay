@@ -268,9 +268,6 @@ function TestResultSubmitter(config) {
     if (config.record) { setTimeout(callback, 0); return; }
     var data = copy(result);
     data["set_id"] = test_id;
-    // TODO: This is an artifact of the presentation. It should not be
-    // stored in the DB this way.
-    data["using_spdy"] = (result.using_spdy ? "CHECKED" : "");
 
     url = config.server_url + kServerPostResultUrl;
     user_callback = callback;

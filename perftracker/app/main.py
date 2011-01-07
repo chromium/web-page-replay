@@ -27,7 +27,7 @@ from google.appengine.ext import db
 
 def ApplyStatisticsData(request, obj):
     """Applies statistics uploaded via the request to the object."""
-    obj.using_spdy = bool(request.get('using_spdy')=="CHECKED")
+    obj.using_spdy = bool(request.get('using_spdy') == 'true')
     obj.start_load_time = int(request.get('start_load_time'))
     obj.commit_load_time = int(request.get('commit_load_time'))
     obj.doc_load_time = int(request.get('doc_load_time'))
@@ -237,7 +237,7 @@ class UploadTestSet(BaseRequestHandler):
             test_set.round_trip_time_ms = int(self.request.get('round_trip_time_ms'))
             test_set.packet_loss_rate  = float(self.request.get('packet_loss_rate'))
             test_set.packet_loss_rate  = float(self.request.get('packet_loss_rate'))
-            test_set.using_spdy = bool(self.request.get('using_spdy')=="CHECKED")
+            test_set.using_spdy = bool(self.request.get('use_spdy') == "true")
             test_set.network_type = NetworkPrettyString(test_set)
             key = test_set.put()
             self.response.out.write(key)
