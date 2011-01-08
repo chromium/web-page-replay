@@ -134,7 +134,7 @@ class TrafficShaper(object):
           'tcp',
           'from', '127.0.0.1',
           'to', '127.0.0.1',
-          'in',
+          'out',
           'src-port', '80',
       ])
 
