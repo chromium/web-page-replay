@@ -289,7 +289,22 @@ class _TcpConnection(asyncore.dispatcher):
     def write(self, data):
         "Write data to the connection."
 	# assert not self._paused
-        self._write_buffer.append(data)
+
+        # For SSL we want to write small chunks so that we don't end up with
+        # multi-packet spans of data.  Multi-packet spans leads to increased
+        # latency because all packets must be received before any of the
+        # packets can be delivered to the application layer.
+        use_small_chunks = True
+        if use_small_chunks:
+            data_length = len(data)
+            start_pos = 0
+            while data_length > 0:
+               chunk_length = min(data_length, 1460)
+               self._write_buffer.append(data[start_pos:start_pos + chunk_length])
+               start_pos += chunk_length
+               data_length -= chunk_length
+        else:
+          self._write_buffer.append(data)
         if self.pause_cb and len(self._write_buffer) > self.write_bufsize:
             self.pause_cb(True)
         if event:
