@@ -97,7 +97,7 @@ class Compressor:
 
     def __del__(self):
         err = _zlib.deflateEnd(C.byref(self.st))
-        assert err == Z_OK, err # FIXME: more specific error
+        #assert err == Z_OK, err # FIXME: more specific error
 
     
 class Decompressor:
