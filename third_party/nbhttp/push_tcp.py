@@ -149,6 +149,8 @@ import errno
 import asyncore
 import time
 import bisect
+import logging
+import select
 
 try:
     import event      # http://www.monkey.org/~dugsong/pyevent/
@@ -221,25 +223,43 @@ class _TcpConnection(asyncore.dispatcher):
         
     def handle_write(self):
         "The connection is ready for writing; write any buffered data."
-        if len(self._write_buffer) > 0:
-            data = "".join(self._write_buffer)
-            try:
-                sent = self.socket.send(data)
-            except socket.error, why:
-                if why[0] in [errno.EBADF, errno.ECONNRESET, errno.EPIPE, errno.ETIMEDOUT]:
-                    self.conn_closed()
-                    return
-                elif why[0] in [errno.ECONNREFUSED, errno.ENETUNREACH] and \
-                  self.connect_error_handler:
-                    self.tcp_connected = False
-                    self.connect_error_handler(why[0])
-                    return
+        try:
+            # This write could be more efficient and coalesce multiple elements
+            # of the _write_buffer into a single write.  However, the stock
+            # ssl library with python needs us to pass the same buffer back
+            # after a socket.send() returns 0 bytes.  To fix this, we need
+            # to use the SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER, but this can
+            # only be done on the context in the ssl.c code.  So, we work
+            # around this problem by not coalescing buffers.  Repeated calls
+            # to handle_write after SSL errors always hand the same buffer
+            # to the SSL library, and it works.
+            while len(self._write_buffer):
+                data = self._write_buffer[0]
+                sent = self.socket.send(self._write_buffer[0])
+                if sent == len(self._write_buffer[0]):
+                    self._write_buffer = self._write_buffer[1:]
                 else:
-                    raise
-            if sent < len(data):
-                self._write_buffer = [data[sent:]]
+                    # Only did a partial write.
+                    self._write_buffer[0] = self._write_buffer[0][sent:]
+        except ssl.SSLError, err:
+            logging.error(str(self.socket) + "SSL Write error: " + str(err))
+            if err.args[0] == ssl.SSL_ERROR_WANT_READ:
+                select.select([self.socket], [], [])
+            elif err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
+                select.select([], [self.socket], [])
             else:
-                self._write_buffer = []
+                raise
+        except socket.error, why:
+            if why[0] in [errno.EBADF, errno.ECONNRESET, errno.EPIPE, errno.ETIMEDOUT]:
+                self.conn_closed()
+                return
+            elif why[0] in [errno.ECONNREFUSED, errno.ENETUNREACH] and \
+              self.connect_error_handler:
+                self.tcp_connected = False
+                self.connect_error_handler(why[0])
+                return
+            else:
+                raise
         if self.pause_cb and len(self._write_buffer) < self.write_bufsize:
             self.pause_cb(False)
         if self._closing:
@@ -268,7 +288,7 @@ class _TcpConnection(asyncore.dispatcher):
 
     def write(self, data):
         "Write data to the connection."
-#        assert not self._paused
+	# assert not self._paused
         self._write_buffer.append(data)
         if self.pause_cb and len(self._write_buffer) > self.write_bufsize:
             self.pause_cb(True)
