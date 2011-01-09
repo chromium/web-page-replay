@@ -101,9 +101,17 @@ log.setLevel(logging.INFO)
 
 class SpdyServer:
     "An asynchronous SPDY server."
-    def __init__(self, host, port, certfile, keyfile, request_handler, log=None):
+    def __init__(self,
+                 host,
+                 port,
+                 use_ssl,
+                 certfile,
+                 keyfile,
+                 request_handler,
+                 log=None):
         self.request_handler = request_handler
-        self.server = push_tcp.create_server(host, port, certfile, keyfile, self.handle_connection)
+        self.use_ssl = use_ssl
+        self.server = push_tcp.create_server(host, port, use_ssl, certfile, keyfile, self.handle_connection)
         self.log = log
 
     def handle_connection(self, tcp_conn):

@@ -161,24 +161,33 @@ class _TcpConnection(asyncore.dispatcher):
     "Base class for a TCP connection."
     write_bufsize = 16
     read_bufsize = 1024 * 16
-    def __init__(self, sock, is_server, host, port, certfile, keyfile, connect_error_handler=None):
+    def __init__(self,
+                 sock,
+                 is_server,
+                 host,
+                 port,
+                 use_ssl,
+                 certfile,
+                 keyfile,
+                 connect_error_handler=None):
+        self.use_ssl = use_ssl
+        self.socket = sock
         if is_server:
-          try:
-              self.socket = ssl.wrap_socket(sock,
-                                            server_side=True,
-                                            certfile=certfile,
-                                            keyfile=keyfile,
-                                            do_handshake_on_connect=False)
-              self.socket.do_handshake()
-          except ssl.SSLError, err:
-              if err.args[0] == ssl.SSL_ERROR_WANT_READ:
-                  select.select([self.socket], [], [])
-              elif err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
-                  select.select([], [self.socket], [])
-              else:
-                  raise
-        else:
-            self.socket = sock
+            if self.use_ssl: 
+                try:
+                    self.socket = ssl.wrap_socket(sock,
+                                                  server_side=True,
+                                                  certfile=certfile,
+                                                  keyfile=keyfile,
+                                                  do_handshake_on_connect=False)
+                    self.socket.do_handshake()
+                except ssl.SSLError, err:
+                    if err.args[0] == ssl.SSL_ERROR_WANT_READ:
+                        select.select([self.socket], [], [])
+                    elif err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
+                        select.select([], [self.socket], [])
+                    else:
+                        raise
         self.host = host
         self.port = port
         self.connect_error_handler = connect_error_handler
@@ -195,7 +204,7 @@ class _TcpConnection(asyncore.dispatcher):
             self._wevent = event.write(self.socket, self.handle_write)
         else: # asyncore
             asyncore.dispatcher.__init__(self, self.socket)
-
+    
     def handle_read(self):
         """
         The connection has data read for reading; call read_cb
@@ -343,21 +352,27 @@ class _TcpConnection(asyncore.dispatcher):
     
     def writable(self):
         "asyncore-specific writable method"
-        return self.tcp_connected and (len(self._write_buffer) > 0 or self._closing)
+        return self.tcp_connected and \
+            (len(self._write_buffer) > 0 or self._closing)
 
     def handle_error(self):
         "asyncore-specific error method"
-        err = sys.exc_info()
-        if issubclass(err[0], socket.error):
-            self.connect_error_handler(err[0])
+        if self.use_ssl:
+            err = sys.exc_info()
+            if issubclass(err[0], socket.error):
+                self.connect_error_handler(err[0])
+            else:
+                raise
         else:
-            raise
+            # Treat the error as a connection closed.
+            self.conn_closed()
 
 class create_server(asyncore.dispatcher):
     "An asynchrnous TCP server."
-    def __init__(self, host, port, certfile, keyfile, conn_handler):
+    def __init__(self, host, port, use_ssl, certfile, keyfile, conn_handler):
         self.host = host
         self.port = port
+        self.use_ssl = use_ssl
         self.certfile = certfile
         self.keyfile = keyfile
         self.conn_handler = conn_handler
@@ -381,7 +396,14 @@ class create_server(asyncore.dispatcher):
             conn, addr = args[1].accept()
         else: # asyncore
             conn, addr = self.accept()
-        tcp_conn = _TcpConnection(conn, True, self.host, self.port, self.certfile, self.keyfile, self.handle_error)
+        tcp_conn = _TcpConnection(conn,
+                                  True,
+                                  self.host,
+                                  self.port,
+                                  self.use_ssl,
+                                  self.certfile,
+                                  self.keyfile,
+                                  self.handle_error)
         tcp_conn.read_cb, tcp_conn.close_cb, tcp_conn.pause_cb = self.conn_handler(tcp_conn)
 
     def handle_error(self, err=None):
@@ -427,7 +449,14 @@ class create_client(asyncore.dispatcher):
             self._timeout_ev.delete()
         if sock is None: # asyncore
             sock = self.socket
-        tcp_conn = _TcpConnection(sock, False, self.host, self.port, self.certfile, self.keyfile, self.handle_error)
+        tcp_conn = _TcpConnection(sock,
+                                  False,
+                                  self.host,
+                                  self.port,
+                                  False,     # use_ssl
+                                  self.certfile,
+                                  self.keyfile,
+                                  self.handle_error)
         tcp_conn.read_cb, tcp_conn.close_cb, tcp_conn.pause_cb = self.conn_handler(tcp_conn)
 
     def handle_write(self):
@@ -474,7 +503,7 @@ class _AsyncoreLoop:
             if n > self.max_channels:
                 self.max_channels = n
             asyncore.poll(self.timeout)
-            
+
     def stop(self):
         "Stop the loop."
         self.socket_map = {}
