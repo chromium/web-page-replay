@@ -74,6 +74,7 @@ def main(options, replay_file):
                                dns_server.real_dns_lookup,
                                "localhost",
                                80,
+                               not options.spdy=="no-ssl",
                                options.certfile,
                                options.keyfile):
         with trafficshaper.TrafficShaper(options.dns_forwarding,
@@ -110,8 +111,9 @@ if __name__ == '__main__':
       epilog='http://code.google.com/p/web-page-replay/')
 
   option_parser.add_option('-s', '--spdy', default=False,
-      action='store_true',
-      help='Use spdy to replay relay_file.')
+      action='store',
+      type='string',
+      help='Use spdy to replay relay_file.  --spdy="no-ssl" uses SPDY without SSL.')
   option_parser.add_option('-r', '--record', default=False,
       action='store_true',
       help='Download real responses and record them to replay_file')

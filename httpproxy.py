@@ -253,7 +253,7 @@ class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
                             daemonserver.DaemonServer):
   def __init__(
       self, http_archive_filename, use_deterministic_script, real_dns_lookup,
-      host='localhost', port=80, certfile="", keyfile=""):
+      host='localhost', port=80, use_ssl=False, certfile="", keyfile=""):
     self.use_deterministic_script = use_deterministic_script
     self.http_archive = httparchive.HttpArchive.Create(http_archive_filename)
     logging.info('Loaded %d responses from %s',

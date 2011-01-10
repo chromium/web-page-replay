@@ -25,6 +25,12 @@ becnhmark_port     = "<port number for server, e.g. '8080'>"
 benchmark_server = benchmark_hostname + ":" + benchmark_port
 benchmark_server_url = "http://" + benchmark_server + "/"
 
+# SPDY options
+spdy = {}
+spdy['ssl'] = False
+spdy['certfile'] = "../cert.pem"
+spdy['keyfile'] = "../key.pem"
+
 # If this script is set, it will be run between each run.
 # Use this to grab a fresh copy of the browser, update your sources, or turn
 # on/off monitoring systems.

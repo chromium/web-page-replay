@@ -221,11 +221,14 @@ class TestInstance:
         replay_path,
         '-l', log_level,
         '-x', # Disables DNS intercepting
-        '-c', options.certfile,
-        '-k', options.keyfile,
+        '-c', runner_cfg.spdy['certfile'],
+        '-k', runner_cfg.spdy['keyfile'],
         ]
     if self.config["use_spdy"]:
-      cmdline.extend(["-s"])
+      spdy_mode = "ssl"
+      if not runner_cfg.spdy['ssl']:
+          spdy_mode = "no-ssl"
+      cmdline.extend(["-s", spdy_mode])
     if self.config['download_bandwidth_kbps']:
       cmdline += ['-d', str(self.config['download_bandwidth_kbps']) + 'KBit/s']
     if self.config['upload_bandwidth_kbps']:
@@ -284,7 +287,10 @@ class TestInstance:
           '--user-data-dir=' + profile_dir,
           ]
       if self.config["use_spdy"]:
-          cmdline.extend(["--use-spdy=ssl,exclude=" +
+          spdy_mode = "no-ssl"
+          if runner_cfg.spdy['ssl']:
+              spdy_mode = "ssl"
+          cmdline.extend(["--use-spdy=" + spdy_mode + ",exclude=" +
                           runner_cfg.benchmark_server_url])
       if chrome_cmdline:
         cmdline.extend(chrome_cmdline.split(' '))
@@ -395,14 +401,6 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Username for logging into appengine.')
-  option_parser.add_option('-c', '--certfile', default='',
-      action='store',
-      type='string',
-      help='Certificate file for use with SSL')
-  option_parser.add_option('-k', '--keyfile', default='',
-      action='store',
-      type='string',
-      help='Key file for use with SSL')
 
   options, args = option_parser.parse_args()
 
