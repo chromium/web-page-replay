@@ -222,6 +222,8 @@ class _TcpConnection(asyncore.dispatcher):
                 self.tcp_connected = False
                 self.connect_error_handler(why[0])
                 return
+            elif why[0] in [errno.EAGAIN]:
+                pass
             else:
                 raise
         if data == "":
@@ -269,6 +271,8 @@ class _TcpConnection(asyncore.dispatcher):
                 self.tcp_connected = False
                 self.connect_error_handler(why[0])
                 return
+            elif why[0] in [errno.EAGAIN]:
+                pass
             else:
                 raise
         if self.pause_cb and len(self._write_buffer) < self.write_bufsize:
