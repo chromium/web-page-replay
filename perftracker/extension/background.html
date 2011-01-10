@@ -224,12 +224,6 @@ function Benchmark(url) {
       chrome.benchmarking.closeConnections();
     }
 
-    if (window.enableSpdy) {
-      chrome.benchmarking.enableSpdy(true);
-    } else {
-      chrome.benchmarking.enableSpdy(false);
-    }
-
     // Go back to the browser so that tasks can run.
     setTimeout(me_.openNextPage, window.interval);
   }
