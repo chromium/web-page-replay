@@ -186,7 +186,7 @@ class SpdyServerConnection(SpdyMessageHandler):
         if self._tcp_conn:
             self._tcp_conn.write(chunk)
 
-    def _input_start(self, stream_id, hdr_tuples):
+    def _input_start(self, stream_id, stream_priority, hdr_tuples):
         self.log.debug("request start %s %s" % (stream_id, hdr_tuples))
         method = get_hdr(hdr_tuples, 'method')[0] # FIXME: error handling
         uri = get_hdr(hdr_tuples, 'url')[0] # FIXME: error handling

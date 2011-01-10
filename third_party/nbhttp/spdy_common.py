@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import logging
 
 """
 shared SPDY infrastructure
@@ -73,6 +74,7 @@ FLAG_NONE = 0x00
 FLAG_FIN = 0x01
 FLAG_UNIDIRECTIONAL = 0x02
 
+PRIORITY_MASK = 0xc0
 STREAM_MASK = 0x7fffffff
 
 class SpdyMessageHandler:
@@ -155,13 +157,14 @@ class SpdyMessageHandler:
                     stream_id = self._input_stream_id # for FLAG_FIN below
                 elif self._input_frame_type in [CTL_SYN_STREAM, CTL_SYN_REPLY]:
                     stream_id = struct.unpack("!I", frame_data[:4])[0] & STREAM_MASK # FIXME: what if they lied about the frame len?
+                    stream_priority = (struct.unpack("!b", frame_data[8:9])[0] & PRIORITY_MASK) >> 6
                     tuple_pos = 4 + 2
                     if self._input_frame_type == CTL_SYN_STREAM:
                       associated_stream_id = struct.unpack("!I", frame_data[4:8])[0]
                       tuple_pos += 4
                     hdr_tuples = self._parse_hdrs(frame_data[tuple_pos:]) or self._input_error(stream_id, 1) # FIXME: proper error here
                     # FIXME: expose pri
-                    self._input_start(stream_id, hdr_tuples)
+                    self._input_start(stream_id, stream_priority, hdr_tuples)
                 elif self._input_frame_type == CTL_RST_STREAM:
                     stream_id = struct.unpack("!I", frame_data[:4])[0] & STREAM_MASK
                     self._input_end(stream_id)

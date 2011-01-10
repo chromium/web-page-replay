@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import traceback
+
 """
 push-based asynchronous TCP
 
@@ -365,6 +367,8 @@ class _TcpConnection(asyncore.dispatcher):
                 raise
         else:
             # Treat the error as a connection closed.
+            t, err, tb = sys.exc_info()
+            logging.error("TCP error!" + str(err))
             self.conn_closed()
 
 class create_server(asyncore.dispatcher):

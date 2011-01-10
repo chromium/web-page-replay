@@ -215,7 +215,7 @@ class SpdyConnection(SpdyMessageHandler):
 
     # Methods called by common.SpdyMessageHandler
 
-    def _input_start(self, stream_id, hdr_tuples):
+    def _input_start(self, stream_id, stream_priority, hdr_tuples):
         """
         Take the top set of headers from the input stream, parse them
         and queue the request to be processed by the application.
