@@ -286,19 +286,21 @@ class TestInstance:
           '--start-maximized',
           '--user-data-dir=' + profile_dir,
           ]
-      if self.config["use_spdy"]:
-          spdy_mode = "no-ssl"
-          if runner_cfg.spdy['ssl']:
-              spdy_mode = "ssl"
-          cmdline.extend(["--use-spdy=" + spdy_mode + ",exclude=" +
-                          runner_cfg.benchmark_server_url])
+      if self.config['use_spdy']:
+        spdy_mode = 'no-ssl'
+        if runner_cfg.spdy['ssl']:
+          spdy_mode = 'ssl'
+        cmdline.extend(['--use-spdy=' + spdy_mode + ',exclude=' +
+                        runner_cfg.benchmark_server_url])
       if chrome_cmdline:
         cmdline.extend(chrome_cmdline.split(' '))
       cmdline.append(start_file_url)
   
       logging.debug('Starting chrome: %s', str(cmdline))
       chrome = subprocess.Popen(cmdline)
-      chrome.wait();
+      returncode = chrome.wait();
+      if returncode:
+        logging.error('Chrome returned status code %d. It may have crashed.' % returncode)
     finally:
       ClobberTmpDirectory(profile_dir)
       if use_virtualx:
