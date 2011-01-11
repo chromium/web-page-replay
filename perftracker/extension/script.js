@@ -15,8 +15,9 @@
 
 // Respond to all requests with timing information for this tab.
 chrome.extension.onRequest.addListener(function(request, sender, sendResponse) {
+  var performance = window.performance || window.webkitPerformance;
   sendResponse({
-    timing: webkitPerformance.timing,
+    timing: performance.timing,
     loadTimes: chrome.loadTimes(),
   });
 });
