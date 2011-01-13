@@ -335,10 +335,10 @@ def main(options):
   done = False
   while not done:
     iterations = runner_cfg.configurations['iterations']
-    for proto in runner_cfg.configurations['protocols']:
-      for plr in runner_cfg.configurations['packet_loss_rates']:
-        for network in runner_cfg.configurations['networks']:
-          for rtt in runner_cfg.configurations['round_trip_times']:
+    for plr in runner_cfg.configurations['packet_loss_rates']:
+      for network in runner_cfg.configurations['networks']:
+        for rtt in runner_cfg.configurations['round_trip_times']:
+          for proto in runner_cfg.configurations['protocols']:
             config = {
                 'iterations'             : iterations,
                 'download_bandwidth_kbps': network['download_bandwidth_kbps'],
