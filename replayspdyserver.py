@@ -91,8 +91,7 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
                                        res_hdrs, dummy)
         body = ''
         for item in response.response_data:
-          body += item
-        res_body(body)
+          res_body(item)
         res_done(None)
       else:
         self.log.error("404 returned: %s %s", method, uri)
