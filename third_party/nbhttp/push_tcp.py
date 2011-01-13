@@ -162,7 +162,7 @@ except ImportError:
 class _TcpConnection(asyncore.dispatcher):
     "Base class for a TCP connection."
     write_bufsize = 16
-    read_bufsize = 1024 * 16
+    read_bufsize = 1024 * 4
     def __init__(self,
                  sock,
                  is_server,
@@ -212,27 +212,32 @@ class _TcpConnection(asyncore.dispatcher):
         The connection has data read for reading; call read_cb
         if appropriate.
         """
-        try:
-            data = self.recv(self.read_bufsize)
-        except socket.error, why:
-            if why[0] in [errno.EBADF, errno.ECONNRESET, errno.EPIPE, errno.ETIMEDOUT]:
+        # We want to read as much data as we can, loop here until we get EAGAIN
+        while True:
+            try:
+                data = self.recv(self.read_bufsize)
+            except socket.error, why:
+                if why[0] in [errno.EBADF, errno.ECONNRESET, errno.EPIPE, errno.ETIMEDOUT]:
+                    self.conn_closed()
+                    return
+                elif why[0] in [errno.ECONNREFUSED, errno.ENETUNREACH] and self.connect_error_handler:
+                    self.tcp_connected = False
+                    self.connect_error_handler(why[0])
+                    return
+                elif why[0] in [errno.EAGAIN]:
+                    return
+                else:
+                    raise
+
+            if data == "":
                 self.conn_closed()
                 return
-            elif why[0] in [errno.ECONNREFUSED, errno.ENETUNREACH] and self.connect_error_handler:
-                self.tcp_connected = False
-                self.connect_error_handler(why[0])
-                return
-            elif why[0] in [errno.EAGAIN]:
-                pass
             else:
-                raise
-        if data == "":
-            self.conn_closed()
-        else:
-            self.read_cb(data)
-            if event:
-                if self.read_cb and self.tcp_connected and not self._paused:
-                    return self._revent
+                self.read_cb(data)
+                if event:
+                    if self.read_cb and self.tcp_connected and not self._paused:
+                        return self._revent
+            return
         
     def handle_write(self):
         "The connection is ready for writing; write any buffered data."
@@ -487,8 +492,8 @@ class _AsyncoreLoop:
         self.events = []
         self.num_channels = 0
         self.max_channels = 0
-        self.timeout = 1
-        self.granularity = 1
+        self.timeout = 0.001    # 1ms
+        self.granularity = 0.001   # 1ms
         self.socket_map = asyncore.socket_map
 
     def run(self):

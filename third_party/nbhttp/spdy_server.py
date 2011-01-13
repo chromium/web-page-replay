@@ -130,26 +130,44 @@ class SpdyServerConnection(SpdyMessageHandler):
         self._streams = {}
         self._res_body_pause_cb = False
         self.log.debug("new connection %s" % id(self))
+        # SPDY has 4 priorities.  write_queue is an array of [0..3], one for each priority.
+        self.write_queue = []
+        for index in range(0,4):
+            self.write_queue.append([])
+        # Write pending when a write to the output queue has been scheduled
+        self.write_pending = False
 
-    def res_start(self, stream_id, status_code, status_phrase, res_hdrs, res_body_pause):
+    def res_start(self, stream_id, stream_priority, status_code, status_phrase, res_hdrs, res_body_pause):
         "Start a response. Must only be called once per response."
         self.log.debug("res_start %s" % stream_id)
         self._res_body_pause_cb = res_body_pause
         res_hdrs.append(('status', "%s %s" % (status_code, status_phrase)))
         # TODO: hop-by-hop headers?
-        self._output(self._ser_syn_frame(CTL_SYN_REPLY, FLAG_NONE, stream_id, res_hdrs))
+        self._queue_frame(stream_priority, self._ser_syn_frame(CTL_SYN_REPLY, FLAG_NONE, stream_id, res_hdrs))
         def res_body(*args):
-            return self.res_body(stream_id, *args)
+            return self.res_body(stream_id, stream_priority, *args)
         def res_done(*args):
-            return self.res_done(stream_id, *args)
+            return self.res_done(stream_id, stream_priority, *args)
         return res_body, res_done
 
-    def res_body(self, stream_id, chunk):
+    def res_body(self, stream_id, stream_priority, chunk):
         "Send part of the response body. May be called zero to many times."
         if chunk:
-            self._output(self._ser_data_frame(stream_id, FLAG_NONE, chunk))
+            do_chunking = True
+            if stream_priority == 0:
+                do_chunking = True
+            if do_chunking:
+                kMaxChunkSize = 1460 * 4
+                start_pos = 0
+                chunk_size = len(chunk)
+                while start_pos < chunk_size:
+                    size = min(chunk_size - start_pos, kMaxChunkSize)
+                    self._queue_frame(stream_priority, self._ser_data_frame(stream_id, FLAG_NONE, chunk[start_pos:start_pos + size]))
+                    start_pos += size
+            else:
+                self._queue_frame(stream_priority, self._ser_data_frame(stream_id, FLAG_NONE, chunk))
 
-    def res_done(self, stream_id, err):
+    def res_done(self, stream_id, stream_priority, err):
         """
         Signal the end of the response, whether or not there was a body. MUST be
         called exactly once for each response.
@@ -158,7 +176,7 @@ class SpdyServerConnection(SpdyMessageHandler):
         indicating that an HTTP-specific (i.e., non-application) error occured
         in the generation of the response; this is useful for debugging.
         """
-        self._output(self._ser_data_frame(stream_id, FLAG_FIN, ""))
+        self._queue_frame(stream_priority, self._ser_data_frame(stream_id, FLAG_FIN, ""))
         # TODO: delete stream after checking that input side is half-closed
 
     def req_body_pause(self, paused):
@@ -180,6 +198,35 @@ class SpdyServerConnection(SpdyMessageHandler):
 #        self.tcp_conn.handler = None
 #        self.tcp_conn = None
 
+    def _has_write_data(self):
+        for index in range(0, 4):
+            if len(self.write_queue[index]) > 0:
+                return True
+        return False
+
+    def _write_frame_callback(self):
+        self.write_pending = False
+
+        # Find the highest priority data chunk and send it.
+        for index in range(0, 4):
+            if len(self.write_queue[index]) > 0:
+                data = self.write_queue[index][0]
+                self.write_queue[index] = self.write_queue[index][1:]
+                self._output(data)
+                break
+        if self._has_write_data():
+            self._schedule_write()
+        
+    def _schedule_write(self):
+        # We only need one write scheduled at a time.
+        if not self.write_pending:
+            push_tcp.schedule(0, self._write_frame_callback)
+            self.write_pending = True
+
+    def _queue_frame(self, priority, chunk):
+        self.write_queue[priority].append(chunk)
+        self._schedule_write()
+
     # Methods called by common.SpdyRequestHandler
 
     def _output(self, chunk):
@@ -192,7 +239,7 @@ class SpdyServerConnection(SpdyMessageHandler):
         uri = get_hdr(hdr_tuples, 'url')[0] # FIXME: error handling
         assert not self._streams.has_key(stream_id) # FIXME
         def res_start(*args):
-            return self.res_start(stream_id, *args)
+            return self.res_start(stream_id, stream_priority, *args)
         # TODO: sanity checks / catch errors from requst_handler
         self._streams[stream_id] = self.request_handler(
             method, uri, hdr_tuples, res_start, self.req_body_pause)
