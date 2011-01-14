@@ -13,68 +13,159 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The location of Chrome to test
-chrome_path = "<path to chrome>"
+#
+# Location of Chrome to test.
+#
+chrome_path = '<path to chrome>'
 
-# The location of the recorded replay data
-replay_data_archive = "<path to recorded data archive from web-page-replay>"
+#
+# Location of the recorded replay data.
+#
+replay_data_archive = '<path to archive>'
 
+#
 # The URL of the PerfTracker web application to post results to
-benchmark_hostname = "<hostname of server, e.g. 'localhost'>" 
-becnhmark_port     = "<port number for server, e.g. '8080'>"
-benchmark_server = benchmark_hostname + ":" + benchmark_port
-benchmark_server_url = "http://" + benchmark_server + "/"
+#
+appengine_host = 'localhost'
+appengine_port = 8080
+appengine_url = 'http://%s:%d/' % (appengine_host, appengine_port)
 
-# SPDY options
-spdy = {}
-spdy['ssl'] = False
-spdy['certfile'] = "../cert.pem"
-spdy['keyfile'] = "../key.pem"
-
-# If this script is set, it will be run between each run.
+#
+# Script to run between each run.
+#
 # Use this to grab a fresh copy of the browser, update your sources, or turn
-# on/off monitoring systems.
+# on/off monitoring systems, etc.
+#
 inter_run_cleanup_script = None
 
 #
-# The set of configurations to run
+# SPDY network options
 #
+spdy = {
+  'ssl': False,
+  'certfile': '../cert.pem',
+  'keyfile': '../key.pem',
+}
 
+#
+# Number of times to load each URL for each network.
+#
+iterations = 20
+
+#
 # The configuration to use in the runner
-configurations = {}
-configurations["iterations"] = 15;
-configurations["networks"] = [
-    {   # Fast Network
-        "download_bandwidth_kbps": 0,
-        "upload_bandwidth_kbps"  : 0,
+#
+networks = []
+
+# Unlimited network speed for both http and spdy.
+networks +=  [
+  {
+    'bandwidth_kbps': {
+      'down': 0,
+      'up': 0,
     },
-    {   # 10Mbps Network
-        "download_bandwidth_kbps": 10000,
-        "upload_bandwidth_kbps"  : 10000,
-    },
-    {   # Cable Network
-        "download_bandwidth_kbps": 5000,
-        "upload_bandwidth_kbps"  : 1000,
-    },
-    {   # DSL Network
-        "download_bandwidth_kbps": 2000,
-        "upload_bandwidth_kbps"  : 400,
-    }
-]
-configurations["round_trip_times"] = [
-    0, 40, 80, 100, 120, 160, 200
-]
-configurations["packet_loss_rates"] = [
-    0, 1
+    'round_trip_time_ms': 0,
+    'packet_loss_percent': 0,
+    'protocol': protocols,
+  }
+  for protocols in ['http', 'spdy']
 ]
 
-configurations["protocols"] = [
-   "http",
-   # "spdy" --- NOT READY FOR PRIME TIME YET!
+# Vary RTT against "Cable" speed bandwidth.
+networks += [
+  {
+    'bandwidth_kbps': {
+      'down': 5000,
+      'up': 1000,
+    },
+    'round_trip_time_ms': round_trip_times,
+    'packet_loss_percent': 0,
+    'protocol': protocols,
+  }
+  for protocols in ['http', 'spdy']
+  for round_trip_times in [20, 40, 80, 100, 120]
 ]
 
-# The list of URLs to test
-configurations["urls"] = [
-    "http://www.google.com/",
-    "<add your list of urls here>
+# Vary bandwidth against a pretty reasonable RTT.
+networks += [
+  {
+    'bandwidth_kbps': bandwidths,
+    'round_trip_time_ms': 40,
+    'packet_loss_percent': 0,
+    'protocol': protocols,
+  }
+  for protocols in ['http', 'spdy']
+  for bandwidths in  [
+    # DSL.
+    {
+      'down': 2000,
+      'up': 400,
+    },
+    # Cable.
+    {
+      'down': 5000,
+      'up': 1000,
+    },
+    # 10Mbps.
+    {
+      'down': 10000,
+      'up': 10000,
+    },
+  ]
+]
+
+# Vary packet loss rate against a slow network.
+networks += [
+  {
+    'bandwidth_kbps': {
+      'down': 2000,
+      'up': 400,
+    },
+    'round_trip_time_ms': 40,
+    'packet_loss_percent': packet_losses,
+    'protocol': protocols,
+  }
+  for protocols in ['http', 'spdy']
+  for packet_losses in [1, 2]
+]
+
+#
+# URLs to test.
+#
+urls = [
+  "http://www.google.com/",
+  "http://www.google.com/search?q=dogs",
+  "http://www.facebook.com/",
+  "http://www.youtube.com/",
+  "http://www.yahoo.com/",
+  "http://www.baidu.com/",
+  "http://www.baidu.com/s?wd=obama",
+  "http://www.wikipedia.org/",
+  "http://en.wikipedia.org/wiki/Lady_gaga",
+  "http://googleblog.blogspot.com/",
+  "http://www.qq.com/",
+  "http://twitter.com/",
+  "http://twitter.com/search?q=pizza",
+  "http://www.msn.com/",
+  "http://www.yahoo.co.jp/",
+  "http://www.amazon.com/",
+  "http://wordpress.com/",
+  "http://www.linkedin.com/",
+  "http://www.microsoft.com/en/us/default.aspx",
+  "http://www.ebay.com/",
+  "http://fashion.ebay.com/womens-clothing",
+  "http://www.bing.com/",
+  "http://www.bing.com/search?q=cars",
+  "http://www.yandex.ru/",
+  "http://yandex.ru/yandsearch?text=obama&lr=84",
+  "http://www.163.com/",
+  "http://www.fc2.com/",
+  "http://www.conduit.com/",
+  "http://www.mail.ru/",
+  "http://www.flickr.com/",
+  "http://www.flickr.com/photos/tags/flowers",
+  "http://www.nytimes.com/",
+  "http://www.cnn.com/",
+  "http://www.apple.com/",
+  "http://www.bbc.co.uk/"
 ]

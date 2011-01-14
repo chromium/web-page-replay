@@ -52,7 +52,7 @@ perftracker_extension_path = './extension'
 # Function to login to the Google AppEngine app.
 # This code credit to: http://dalelane.co.uk/blog/?p=303
 def DoAppEngineLogin(username, password):
-  target_authenticated_url = runner_cfg.benchmark_server_url
+  target_authenticated_url = runner_cfg.appengine_url
 
   # We use a cookie to authenticate with Google App Engine by registering a
   # cookie handler here, this will automatically store the cookie returned
@@ -86,7 +86,7 @@ def DoAppEngineLogin(username, password):
     serv_args = {}
     serv_args['continue'] = target_authenticated_url
     serv_args['auth']     = authtoken
-    full_serv_uri = '%s_ah/login?%s' % (runner_cfg.benchmark_server_url,
+    full_serv_uri = '%s_ah/login?%s' % (runner_cfg.appengine_url,
                                         urllib.urlencode(serv_args))
 
     serv_req = urllib2.Request(full_serv_uri)
@@ -171,8 +171,8 @@ def StopVirtualX(slave_build_name):
 
 
 class TestInstance:
-  def __init__(self, config, log_level, record):
-    self.config = config
+  def __init__(self, network, log_level, record):
+    self.network = network
     self.log_level = log_level
     self.record = record
     self.proxy_process = None
@@ -187,16 +187,16 @@ class TestInstance:
       'user': getpass.getuser(),
       'notes': str(notes),
       'cmdline': ' '.join(sys.argv),
-      'server_url': runner_cfg.benchmark_server_url,
+      'server_url': runner_cfg.appengine_url,
       'server_login': options.login_url,
       'client_hostname': platform.node(),
-      'iterations': str(self.config['iterations']),
-      'download_bandwidth_kbps': str(self.config['download_bandwidth_kbps']),
-      'upload_bandwidth_kbps': str(self.config['upload_bandwidth_kbps']),
-      'round_trip_time_ms': str(self.config['round_trip_time_ms']),
-      'packet_loss_rate': str(self.config['packet_loss_rate']),
-      'protocol': self.config['protocol'],
-      'urls': runner_cfg.configurations['urls'],
+      'iterations': str(runner_cfg.iterations),
+      'download_bandwidth_kbps': str(self.network['bandwidth_kbps']['down']),
+      'upload_bandwidth_kbps': str(self.network['bandwidth_kbps']['up']),
+      'round_trip_time_ms': str(self.network['round_trip_time_ms']),
+      'packet_loss_rate': str(self.network['packet_loss_percent']),
+      'protocol': self.network['protocol'],
+      'urls': runner_cfg.urls,
       'record': self.record
     }
 
@@ -224,18 +224,18 @@ class TestInstance:
         '-c', runner_cfg.spdy['certfile'],
         '-k', runner_cfg.spdy['keyfile'],
         ]
-    if self.config["protocol"] == "spdy":
-      cmdline.extend(["-s", "ssl"])
-    if self.config["protocol"] == "spdy-nossl":
-      cmdline.extend(["-s", "no-ssl"])
-    if self.config['download_bandwidth_kbps']:
-      cmdline += ['-d', str(self.config['download_bandwidth_kbps']) + 'KBit/s']
-    if self.config['upload_bandwidth_kbps']:
-      cmdline += ['-u', str(self.config['upload_bandwidth_kbps']) + 'KBit/s']
-    if self.config['round_trip_time_ms']:
-      cmdline += ['-m', str(self.config['round_trip_time_ms'])]
-    if self.config['packet_loss_rate']:
-      cmdline += ['-p', str(self.config['packet_loss_rate'] / 100.0)]
+    if self.network['protocol'] == 'spdy':
+      cmdline.extend(['-s', 'ssl'])
+    elif self.network['protocol'] == 'spdy-nossl':
+      cmdline.extend(['-s', 'no-ssl'])
+    if self.network['bandwidth_kbps']['down']:
+      cmdline += ['-d', str(self.network['bandwidth_kbps']['down']) + 'KBit/s']
+    if self.network['bandwidth_kbps']:
+      cmdline += ['-u', str(self.network['bandwidth_kbps']['up']) + 'KBit/s']
+    if self.network['round_trip_time_ms']:
+      cmdline += ['-m', str(self.network['round_trip_time_ms'])]
+    if self.network['packet_loss_percent']:
+      cmdline += ['-p', str(self.network['packet_loss_percent'] / 100.0)]
     if self.record:
       cmdline.append('-r')
     cmdline.append(runner_cfg.replay_data_archive)
@@ -277,7 +277,7 @@ class TestInstance:
           '--enable-benchmarking',
           '--enable-logging',
           '--host-resolver-rules=MAP * 127.0.0.1:80,EXCLUDE ' +
-              runner_cfg.benchmark_hostname, 
+              runner_cfg.appengine_host, 
           '--load-extension=' + perftracker_extension_path,
           '--log-level=0',
           '--no-first-run',
@@ -287,13 +287,13 @@ class TestInstance:
           ]
 
       spdy_mode = None
-      if self.config['protocol'] == "spdy":
+      if self.network['protocol'] == 'spdy':
         spdy_mode = 'ssl'
-      if self.config['protocol'] == "spdy-nossl":
+      if self.network['protocol'] == 'spdy-nossl':
         spdy_mode = 'no-ssl'
       if spdy_mode:
         cmdline.extend(['--use-spdy=' + spdy_mode + ',exclude=' +
-                        runner_cfg.benchmark_server_url])
+                        runner_cfg.appengine_url])
       if chrome_cmdline:
         cmdline.extend(chrome_cmdline.split(' '))
       cmdline.append(start_file_url)
@@ -325,34 +325,25 @@ def main(options):
   # When in record mode, override most of the configuration.
   if options.record:
     runner_cfg.replay_data_archive = options.record
-    runner_cfg.configurations['iterations'] = 1
-    runner_cfg.configurations['packet_loss_rates'] = [0]
-    runner_cfg.configurations['networks'] = [{
-        'download_bandwidth_kbps': 0,
-        'upload_bandwidth_kbps': 0
-        }]
-    runner_cfg.configurations['round_trip_times'] = [0]
-    runner_cfg.configurations['packet_loss_rates'] = [0]
+    runner_cfg.iterations = 1
+    runner_cfg.networks = [
+      {
+        bandwidth_kbps: {
+          up: 0,
+          down: 0
+        },
+        round_trip_time_ms: 0,
+        packet_loss_percent: 0,
+        protocol: 'http',
+      }
+    ]
 
   done = False
   while not done:
-    iterations = runner_cfg.configurations['iterations']
-    for plr in runner_cfg.configurations['packet_loss_rates']:
-      for network in runner_cfg.configurations['networks']:
-        for rtt in runner_cfg.configurations['round_trip_times']:
-          for proto in runner_cfg.configurations['protocols']:
-            config = {
-                'iterations'             : iterations,
-                'download_bandwidth_kbps': network['download_bandwidth_kbps'],
-                'upload_bandwidth_kbps'  : network['upload_bandwidth_kbps'],
-                'round_trip_time_ms'     : rtt,
-                'packet_loss_rate'       : plr,
-                'protocol'               : proto,
-            }
-            logging.debug("Running test configuration: %s", str(config))
-            test = TestInstance(config, options.log_level,
-                                options.record)
-            test.RunTest(options.notes, options.chrome_cmdline)
+    for network in runner_cfg.networks:
+      logging.debug("Running network configuration: %s", str(network))
+      test = TestInstance(network, options.log_level, options.record)
+      test.RunTest(options.notes, options.chrome_cmdline)
     if not options.infinite or options.record:
       done = True
 
