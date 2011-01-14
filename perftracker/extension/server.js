@@ -252,7 +252,7 @@ function TestResultSubmitter(config) {
 
       // When special notes are added, we consider the result a custom version.
       if (config.notes.length > 0) {
-        data["version"] += "custom";
+        data["version"] += "custom" + config.notes;
       }
 
       user_callback = callback;

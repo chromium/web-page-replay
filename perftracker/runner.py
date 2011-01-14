@@ -395,7 +395,7 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Command line options to pass to chrome.')
-  option_parser.add_option('-n', '--notes', default=None,
+  option_parser.add_option('-n', '--notes', default='',
       action='store',
       type='string',
       help='Notes to record with this test run.')
