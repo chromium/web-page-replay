@@ -91,13 +91,13 @@ class JSONDataPage(BaseRequestHandler):
         networks = self.request.get("networks_filter")
         if networks:
             query.filter("network IN ",
-                         [db.Key(k) for k in networks.split(",")])
+                [db.Key.from_path('Network', int(k)) for k in networks.split(",")])
         versions = self.request.get("version_filter")
         if versions:
             query.filter("version IN ",
-                         [db.Key(k) for k in versions.split(",")])
+                [db.Key.from_path('Version', int(k)) for k in versions.split(",")])
         if self.request.get("set_id"):
-            test_set = models.TestSet.get(db.Key(self.request.get("set_id")))
+            test_set = models.TestSet.get_by_id(int(self.request.get("set_id")))
             results = test_set.summaries
 
         results = query.fetch(500)
@@ -111,7 +111,7 @@ class JSONDataPage(BaseRequestHandler):
         if not set_id:
             self.send_json_error("Bad request, no id param")
             return
-        test_set = models.TestSet.get(db.Key(set_id))
+        test_set = models.TestSet.get_by_id(int(set_id))
         if not test_set:
             self.send_json_error("Could not find id: ", id)
             return
@@ -136,14 +136,14 @@ class JSONDataPage(BaseRequestHandler):
             self.response.out.write(cached_response)
             return
 
-        test_summary = models.TestSummary.get(db.Key(set_id))
+        test_summary = models.TestSummary.get_by_id(int(set_id))
         if not test_summary:
             self.send_json_error("Could not find id: ", id)
             return
 
         json_output = {}
         json_output['obj'] = test_summary
-        test_set = models.TestSet.get(test_summary.set.key())
+        test_set = models.TestSet.get_by_id(test_summary.set.key().id())
         test_results = test_set.results
         test_results.filter("url =", test_summary.url)
         json_output['results'] = [r for r in test_results]
@@ -165,10 +165,10 @@ class JSONDataPage(BaseRequestHandler):
 
         query = models.Version.all()
         for item in query:
-            versions.add(( item.version, str(item.key()) ))
+            versions.add(( item.version, str(item.key().id()) ))
         query = models.Network.all()
         for item in query:
-            networks.add(( item.network_type, str(item.key()) ) )
+            networks.add(( item.network_type, str(item.key().id()) ) )
 
         filters = {}
         filters["versions"] = sorted(versions)
@@ -273,9 +273,9 @@ class UploadTestSet(BaseRequestHandler):
             version_str  = self.request.get('version')
             if not version_str:
                 raise Exception("missing version")
-            download_bandwidth_kbps =
+            download_bandwidth_kbps = \
                 int(self.request.get('download_bandwidth_kbps'))
-            upload_bandwidth_kbps =
+            upload_bandwidth_kbps = \
                 int(self.request.get('upload_bandwidth_kbps'))
             round_trip_time_ms = int(self.request.get('round_trip_time_ms'))
             packet_loss_rate  = float(self.request.get('packet_loss_rate'))
@@ -299,14 +299,14 @@ class UploadTestSet(BaseRequestHandler):
             test_set.platform  = self.request.get('platform')
             test_set.client_hostname  = self.request.get('client_hostname')
             key = test_set.put()
-            self.response.out.write(key)
+            self.response.out.write(key.id())
 
         elif cmd == "update":
             set_id = self.request.get("set_id")
             if not set_id:
                 self.send_error("Bad request, no set_id param")
                 return
-            test_set = models.TestSet.get(db.Key(set_id))
+            test_set = models.TestSet.get_by_id(int(set_id))
             if not test_set:
                 self.send_error("Could not find set_id: ", set_id)
                 return
@@ -314,7 +314,7 @@ class UploadTestSet(BaseRequestHandler):
             test_set.iterations = int(self.request.get('iterations'))
             test_set.url_count = int(self.request.get('url_count'))
             key = test_set.put()
-            self.response.out.write(key)
+            self.response.out.write(key.id())
         else:
             self.send_error("Bad request, unknown cmd: %s", cmd)
 
@@ -331,7 +331,7 @@ class UploadTestResult(BaseRequestHandler):
         if not set_id:
             self.send_error("Bad request, no set_id param")
             return
-        test_set = models.TestSet.get(db.Key(set_id))
+        test_set = models.TestSet.get_by_id(int(set_id))
         if not test_set:
             self.send_error("Could not find set_id: ", set_id)
             return
@@ -341,7 +341,7 @@ class UploadTestResult(BaseRequestHandler):
         test_result.using_spdy = bool(self.request.get('using_spdy') == 'true')
         ApplyStatisticsData(self.request, test_result)
         key = test_result.put()
-        self.response.out.write(key)
+        self.response.out.write(key.id())
 
 class UploadTestSummary(BaseRequestHandler):
     def post(self):
@@ -355,7 +355,7 @@ class UploadTestSummary(BaseRequestHandler):
         if not set_id:
             self.send_error("Bad request, no set_id param")
             return
-        test_set = models.TestSet.get(db.Key(set_id))
+        test_set = models.TestSet.get_by_id(int(set_id))
         if not test_set:
             self.send_error("Could not find set_id: ", set_id)
             return
@@ -366,7 +366,7 @@ class UploadTestSummary(BaseRequestHandler):
         test_summary.iterations = int(self.request.get('iterations'))
         test_summary.total_time_stddev = float(self.request.get('total_time_stddev'))
         key = test_summary.put()
-        self.response.out.write(key)
+        self.response.out.write(key.id())
 
 application = webapp.WSGIApplication(
                                      [
