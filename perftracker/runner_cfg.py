@@ -14,23 +14,20 @@
 # limitations under the License.
 
 # The location of Chrome to test
-#chrome_path = "/usr/local/google/dailychrome/chrome-linux/chrome"
-chrome_path = "/usr/local/google/mbelshe/src/out/Release/chrome"
+chrome_path = "<path to chrome>"
 
 # The location of the recorded replay data
-replay_data_archive = "../../data/alexa-top25_20110105.archive"
+replay_data_archive = "<path to recorded data archive from web-page-replay>"
 
 # The URL of the PerfTracker web application to post results to
-#benchmark_server = "perftracker.googleplex.com"
-#benchmark_server = "2.latest.perftracker.googleplex.com"
-benchmark_hostname = "mbelshe"
-benchmark_port = "8080"
+benchmark_hostname = "<hostname of server, e.g. 'localhost'>" 
+becnhmark_port     = "<port number for server, e.g. '8080'>"
 benchmark_server = benchmark_hostname + ":" + benchmark_port
 benchmark_server_url = "http://" + benchmark_server + "/"
 
 # SPDY options
 spdy = {}
-spdy['ssl'] = True
+spdy['ssl'] = False
 spdy['certfile'] = "../cert.pem"
 spdy['keyfile'] = "../key.pem"
 
@@ -45,82 +42,39 @@ inter_run_cleanup_script = None
 
 # The configuration to use in the runner
 configurations = {}
-configurations["iterations"] = 10;
+configurations["iterations"] = 15;
 configurations["networks"] = [
-#    {   # Fast Network
-#        "download_bandwidth_kbps": 0,
-#        "upload_bandwidth_kbps"  : 0,
-#    },
+    {   # Fast Network
+        "download_bandwidth_kbps": 0,
+        "upload_bandwidth_kbps"  : 0,
+    },
     {   # 10Mbps Network
         "download_bandwidth_kbps": 10000,
         "upload_bandwidth_kbps"  : 10000,
     },
-#    {   # Cable Network
-#        "download_bandwidth_kbps": 5000,
-#        "upload_bandwidth_kbps"  : 1000,
-#    },
-#    {   # DSL Network
-#        "download_bandwidth_kbps": 2000,
-#        "upload_bandwidth_kbps"  : 400,
-#    }
+    {   # Cable Network
+        "download_bandwidth_kbps": 5000,
+        "upload_bandwidth_kbps"  : 1000,
+    },
+    {   # DSL Network
+        "download_bandwidth_kbps": 2000,
+        "upload_bandwidth_kbps"  : 400,
+    }
 ]
-
 configurations["round_trip_times"] = [
-#    0, 40, 80, 100, 120, 160, 200
-    100
+    0, 40, 80, 100, 120, 160, 200
 ]
-
 configurations["packet_loss_rates"] = [
-#    0, 1
-    0
+    0, 1
 ]
 
 configurations["protocols"] = [
-#    "http",
-    "spdy",
+   "http",
+   # "spdy" --- NOT READY FOR PRIME TIME YET!
 ]
 
 # The list of URLs to test
 configurations["urls"] = [
-    "http://www.amazon.com/",
-]
-
-configurations["urls2"] = [
     "http://www.google.com/",
-    "http://www.google.com/search?q=dogs",
-    "http://www.facebook.com/",
-    "http://www.youtube.com/",
-    "http://www.yahoo.com/",
-    "http://www.baidu.com/",
-    "http://www.baidu.com/s?wd=obama",
-    "http://www.wikipedia.org/",
-    "http://en.wikipedia.org/wiki/Lady_gaga",
-    "http://googleblog.blogspot.com/",
-    "http://www.qq.com/",
-    "http://twitter.com/",
-    "http://twitter.com/search?q=pizza",
-    "http://www.msn.com/",
-    "http://www.yahoo.co.jp/",
-# this one has a hardcoded IP to 110.75.1.110.
-#    "http://www.taobao.com/index_global.php",
-    "http://www.amazon.com/",
-    "http://wordpress.com/",
-    "http://www.linkedin.com/",
-    "http://www.microsoft.com/en/us/default.aspx",
-    "http://www.ebay.com/",
-    "http://fashion.ebay.com/womens-clothing",
-    "http://www.bing.com/",
-    "http://www.bing.com/search?q=cars",
-    "http://www.yandex.ru/",
-    "http://yandex.ru/yandsearch?text=obama&lr=84",
-    "http://www.163.com/",
-    "http://www.fc2.com/",
-    "http://www.conduit.com/",
-    "http://www.mail.ru/",
-    "http://www.flickr.com/",
-    "http://www.flickr.com/photos/tags/flowers",
-    "http://www.nytimes.com/",
-    "http://www.cnn.com/",
-    "http://www.apple.com/",
-    "http://www.bbc.co.uk/"
+    "<add your list of urls here>
 ]
