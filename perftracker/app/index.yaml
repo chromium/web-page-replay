@@ -10,11 +10,6 @@ indexes:
 # automatically uploaded to the admin console when you next deploy
 # your application using appcfg.py.
 
-- kind: Network
-  properties:
-  - name: network_type
-    direction: desc
-
 - kind: TestSet
   properties:
   - name: network
@@ -38,9 +33,4 @@ indexes:
   properties:
   - name: version
   - name: date
-    direction: desc
-
-- kind: Version
-  properties:
-  - name: version
     direction: desc

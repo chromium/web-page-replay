@@ -368,12 +368,21 @@ class UploadTestSummary(BaseRequestHandler):
         key = test_summary.put()
         self.response.out.write(key.id())
 
+class BulkDelete(BaseRequestHandler):
+    def get(self):
+        query = models.TestResult.all(keys_only=True)
+        results = query.fetch(500)
+        db.delete(results)
+        self.response.out.write("500 entries deleted")
+
+
 application = webapp.WSGIApplication(
                                      [
                                       ('/set', UploadTestSet),
                                       ('/result', UploadTestResult),
                                       ('/summary', UploadTestSummary),
                                       ('/json', JSONDataPage),
+                                      ('/bulkdel', BulkDelete),
                                      ],
                                      debug=True)
 

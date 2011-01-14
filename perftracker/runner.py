@@ -258,10 +258,9 @@ class TestInstance:
 
     profile_dir = tempfile.mkdtemp(prefix='chrome.profile.');
 
-    # XXXXMB
     use_virtualx = False
-    #if platform.system() == 'Linux':
-    #  use_virtualx = True
+    if platform.system() == 'Linux':
+      use_virtualx = True
 
     try:
       if use_virtualx:

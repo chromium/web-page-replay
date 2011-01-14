@@ -1,11 +1,12 @@
 application: perftracker
-version: 5
+version: 6
 runtime: python
 api_version: 1
 default_expiration: "1d"
 
 builtins:
 - datastore_admin: on
+- appstats: on
 
 handlers:
 - url: /
