@@ -13,7 +13,8 @@
     <h1><div id="header">Chromium Page Tracker</div></h1>
 
     <script>
-    data = {}
+    data = {};
+    networks_map = {};   // maps from db.Key to pretty name.
 
     function loadFilters() {
       // Fetch data for the filters.
@@ -25,10 +26,22 @@
         jstProcess(context, template);
         JsEvalContext.recycle(context);
 
-        var params = getParams();
-        if (!params["network1"]) params["network1"] = data.filters.networks[0];
-        if (!params["network2"]) params["network2"] = data.filters.networks[1];
-        if (!params["network3"]) params["network3"] = data.filters.networks[2];
+        // Populate the networks list
+        for (index in data.filters.networks) {
+          networks_map[data.filters.networks[index][1]] =
+              data.filters.networks[index][0];
+        }
+
+        var params = getParams();   // Load parameters from URL.
+        if (!params["network1"]) {
+          params["network1"] = data.filters.networks[0][1];
+        }
+        if (!params["network1"]) {
+          params["network2"] = data.filters.networks[1][1];
+        }
+        if (!params["network1"]) {
+          params["network3"] = data.filters.networks[2][1];
+        }
         setParams(params);
 
         setSelectValue("networks_filter1", params["network1"]);
@@ -57,8 +70,8 @@
       // Average all points for a given version into a single value.
       var versionMap = {};
       for (var i = 0; i < results.length; ++i) {
-	if (!results[i].total_time) continue;
-	if (results[i].network_type != network) continue;
+        if (!results[i].total_time) continue;
+        if (results[i].network != network) continue;
         var point = versionMap[results[i].version] || { avg: 0, count: 0};
         point.avg = (point.avg * point.count + results[i].total_time) / ++point.count;
         versionMap[results[i].version] = point;
@@ -80,7 +93,7 @@
 
       // Add a column for each network.
       for (var i = 0; i < networks.length; i++) {
-        graph_data.addColumn('number', networks[i]);
+        graph_data.addColumn('number', networks_map[networks[i]]);
       }
 
       // Sort the versions logically.
@@ -100,10 +113,10 @@
 
       // Populate the graph data.
       for (var i = 0; i < versions.length; ++i) {
-        var row = [versions[i].split(" ")[1]];  // Trim leading "Chrome ".
-	for (var j = 0; j < networks.length; ++j) {
+        var row = [versions[i][0].split(" ")[1]];  // Trim leading "Chrome ".
+        for (var j = 0; j < networks.length; ++j) {
           var versionMap = getVersionMap(results, networks[j]);
-          var point = versionMap[versions[i]];
+          var point = versionMap[versions[i][1]];
           if (!point || !point.avg) {
             row.push(undefined);
           } else {
@@ -151,7 +164,6 @@
       var networksFilter3 = getSelectValue("networks_filter3");
       if (networksFilter3) params["network3"] = networksFilter3;
       setParams(params);
-
       loadData();
     }
 
@@ -173,17 +185,20 @@
       <tr>
         <td>
           <select id="networks_filter1" onchange="filterChanged()">
-            <option jsselect="networks" jscontent="$this"></option>
+            <option jsselect="networks" jscontent="$this[0]"
+                    jsvalues=".value:$this[1]"></option>
           </select>
         </td>
         <td>
           <select id="networks_filter2" onchange="filterChanged()">
-            <option jsselect="networks" jscontent="$this"></option>
+            <option jsselect="networks" jscontent="$this[0]"
+                    jsvalues=".value:$this[1]"></option>
           </select>
         </td>
         <td>
           <select id="networks_filter3" onchange="filterChanged()">
-            <option jsselect="networks" jscontent="$this"></option>
+            <option jsselect="networks" jscontent="$this[0]"
+                    jsvalues=".value:$this[1]"></option>
           </select>
         </td>
       </tr>

@@ -27,7 +27,6 @@ from google.appengine.ext import db
 
 def ApplyStatisticsData(request, obj):
     """Applies statistics uploaded via the request to the object."""
-    obj.using_spdy = bool(request.get('using_spdy') == 'true')
     obj.start_load_time = int(request.get('start_load_time'))
     obj.commit_load_time = int(request.get('commit_load_time'))
     obj.doc_load_time = int(request.get('doc_load_time'))
@@ -46,18 +45,20 @@ def BandwidthPrettyString(bandwidth_kbps):
         return str(bandwidth_mbps) + "Mbps"
     return str(bandwidth_kbps) + "Kbps"
 
-def NetworkPrettyString(item):
-    network = ""
-    network += BandwidthPrettyString(item.download_bandwidth_kbps)
+def NetworkPrettyString(download_bandwidth_kbps,
+                        upload_bandwidth_kbps,
+                        round_trip_time_ms,
+                        packet_loss_rate,
+                        protocol_str):
+    network = protocol_str + "/"
+    network += BandwidthPrettyString(download_bandwidth_kbps)
     network += "/"
-    network += BandwidthPrettyString(item.upload_bandwidth_kbps)
+    network += BandwidthPrettyString(upload_bandwidth_kbps)
     network += "/"
-    network += str(item.round_trip_time_ms)
+    network += str(round_trip_time_ms)
     network += "ms/"
-    network += str(item.packet_loss_rate)
+    network += str(packet_loss_rate)
     network += "%"
-    if item.using_spdy:
-        network += "/spdy"
     return network
 
 class BaseRequestHandler(webapp.RequestHandler):
@@ -87,10 +88,14 @@ class JSONDataPage(BaseRequestHandler):
         query.order("-date")
 
         # Apply filters.
-        if self.request.get("networks_filter"):
-            query.filter("network_type IN ", self.request.get("networks_filter").split(","))
-        if self.request.get("version_filter"):
-            query.filter("version IN ", self.request.get("version_filter").split(","))
+        networks = self.request.get("networks_filter")
+        if networks:
+            query.filter("network IN ",
+                         [db.Key(k) for k in networks.split(",")])
+        versions = self.request.get("version_filter")
+        if versions:
+            query.filter("version IN ",
+                         [db.Key(k) for k in versions.split(",")])
         if self.request.get("set_id"):
             test_set = models.TestSet.get(db.Key(self.request.get("set_id")))
             results = test_set.summaries
@@ -116,7 +121,7 @@ class JSONDataPage(BaseRequestHandler):
         json_output = {}
         json_output['obj'] = test_set
         json_output['summaries'] = [s for s in test_set.summaries]
-        self.response.out.write(json.encode(json_output))
+        self.response.out.write(json.encode(json_output, False))
 
     def do_summary(self):
         """ Lookup a specific TestSummary"""
@@ -158,16 +163,18 @@ class JSONDataPage(BaseRequestHandler):
         versions = set()
         networks = set()
 
-        query = models.TestSet.all()
+        query = models.Version.all()
         for item in query:
-            versions.add(item.version)
-            networks.add(item.network_type)
+            versions.add(( item.version, str(item.key()) ))
+        query = models.Network.all()
+        for item in query:
+            networks.add(( item.network_type, str(item.key()) ) )
 
         filters = {}
         filters["versions"] = sorted(versions)
         filters["networks"] = sorted(networks)
         response = json.encode(filters)
-        memcache.add("filters", response, 60 * 30)  # Cache for 30 mins
+        memcache.add("filters", response, 60 * 10)  # Cache for 10 mins
         self.response.out.write(response)
 
     def do_latestresults(self):
@@ -212,6 +219,43 @@ class JSONDataPage(BaseRequestHandler):
 
 
 class UploadTestSet(BaseRequestHandler):
+    """ Get a version from the datastore.  If it doesn't exist, create it """
+    def GetOrCreateVersion(self, version_str):
+        query = models.Version.all()
+        query.filter("version = ", version_str)
+        versions = query.fetch(1)
+        if versions:
+            return versions[0]
+        version = models.Version(version = version_str)
+        version.put()
+        return version
+
+    """ Get a network from the datastore.  If it doesn't exist, create it """
+    def GetOrCreateNetwork(self,
+                           download_bandwidth_kbps,
+                           upload_bandwidth_kbps,
+                           round_trip_time_ms,
+                           packet_loss_rate,
+                           protocol_str):
+        network_type = NetworkPrettyString(download_bandwidth_kbps,
+                                           upload_bandwidth_kbps,
+                                           round_trip_time_ms,
+                                           packet_loss_rate,
+                                           protocol_str)
+        query = models.Network.all()
+        query.filter("network_type = ", network_type)
+        networks = query.fetch(1)
+        if networks:
+            return networks[0]
+        network = models.Network(network_type = network_type,
+            download_bandwidth_kbps = download_bandwidth_kbps,
+            upload_bandwidth_kbps = upload_bandwidth_kbps,
+            round_trip_time_ms = round_trip_time_ms,
+            packet_loss_rate = packet_loss_rate,
+            protocol = protocol_str)
+        network.put()
+        return network
+
     """Create an entry in the store for a new test."""
     def post(self):
         user = users.get_current_user()
@@ -226,19 +270,34 @@ class UploadTestSet(BaseRequestHandler):
             return
    
         if cmd == "create":
+            version_str  = self.request.get('version')
+            if not version_str:
+                raise Exception("missing version")
+            download_bandwidth_kbps =
+                int(self.request.get('download_bandwidth_kbps'))
+            upload_bandwidth_kbps =
+                int(self.request.get('upload_bandwidth_kbps'))
+            round_trip_time_ms = int(self.request.get('round_trip_time_ms'))
+            packet_loss_rate  = float(self.request.get('packet_loss_rate'))
+            protocol_str = self.request.get('protocol')
+            version = self.GetOrCreateVersion(version_str)
+            if not version:
+                raise Exception("could not create version")
+            network = self.GetOrCreateNetwork(download_bandwidth_kbps,
+                                              upload_bandwidth_kbps,
+                                              round_trip_time_ms,
+                                              packet_loss_rate,
+                                              protocol_str)
+            if not network:
+                raise Exception("could not create network")
+
             test_set = models.TestSet(user=user)
+            test_set.version = version
+            test_set.network = network
             test_set.notes = self.request.get('notes')
             test_set.cmdline  = self.request.get('cmdline')
-            test_set.version  = self.request.get('version')
             test_set.platform  = self.request.get('platform')
             test_set.client_hostname  = self.request.get('client_hostname')
-            test_set.download_bandwidth_kbps = int(self.request.get('download_bandwidth_kbps'))
-            test_set.upload_bandwidth_kbps = int(self.request.get('upload_bandwidth_kbps'))
-            test_set.round_trip_time_ms = int(self.request.get('round_trip_time_ms'))
-            test_set.packet_loss_rate  = float(self.request.get('packet_loss_rate'))
-            test_set.packet_loss_rate  = float(self.request.get('packet_loss_rate'))
-            test_set.using_spdy = bool(self.request.get('use_spdy') == "true")
-            test_set.network_type = NetworkPrettyString(test_set)
             key = test_set.put()
             self.response.out.write(key)
 
@@ -279,6 +338,7 @@ class UploadTestResult(BaseRequestHandler):
         my_url = self.request.get('url')
 
         test_result = models.TestResult(set=test_set, url=my_url)
+        test_result.using_spdy = bool(self.request.get('using_spdy') == 'true')
         ApplyStatisticsData(self.request, test_result)
         key = test_result.put()
         self.response.out.write(key)

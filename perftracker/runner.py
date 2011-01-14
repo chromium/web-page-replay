@@ -195,7 +195,7 @@ class TestInstance:
       'upload_bandwidth_kbps': str(self.config['upload_bandwidth_kbps']),
       'round_trip_time_ms': str(self.config['round_trip_time_ms']),
       'packet_loss_rate': str(self.config['packet_loss_rate']),
-      'use_spdy': self.config['use_spdy'],
+      'protocol': self.config['protocol'],
       'urls': runner_cfg.configurations['urls'],
       'record': self.record
     }
@@ -224,11 +224,10 @@ class TestInstance:
         '-c', runner_cfg.spdy['certfile'],
         '-k', runner_cfg.spdy['keyfile'],
         ]
-    if self.config["use_spdy"]:
-      spdy_mode = "ssl"
-      if not runner_cfg.spdy['ssl']:
-          spdy_mode = "no-ssl"
-      cmdline.extend(["-s", spdy_mode])
+    if self.config["protocol"] == "spdy":
+      cmdline.extend(["-s", "ssl"])
+    if self.config["protocol"] == "spdy-nossl":
+      cmdline.extend(["-s", "no-ssl"])
     if self.config['download_bandwidth_kbps']:
       cmdline += ['-d', str(self.config['download_bandwidth_kbps']) + 'KBit/s']
     if self.config['upload_bandwidth_kbps']:
@@ -259,9 +258,10 @@ class TestInstance:
 
     profile_dir = tempfile.mkdtemp(prefix='chrome.profile.');
 
+    # XXXXMB
     use_virtualx = False
-    if platform.system() == 'Linux':
-      use_virtualx = True
+    #if platform.system() == 'Linux':
+    #  use_virtualx = True
 
     try:
       if use_virtualx:
@@ -286,10 +286,13 @@ class TestInstance:
           '--start-maximized',
           '--user-data-dir=' + profile_dir,
           ]
-      if self.config['use_spdy']:
+
+      spdy_mode = None
+      if self.config['protocol'] == "spdy":
+        spdy_mode = 'ssl'
+      if self.config['protocol'] == "spdy-nossl":
         spdy_mode = 'no-ssl'
-        if runner_cfg.spdy['ssl']:
-          spdy_mode = 'ssl'
+      if spdy_mode:
         cmdline.extend(['--use-spdy=' + spdy_mode + ',exclude=' +
                         runner_cfg.benchmark_server_url])
       if chrome_cmdline:
@@ -345,7 +348,7 @@ def main(options):
                 'upload_bandwidth_kbps'  : network['upload_bandwidth_kbps'],
                 'round_trip_time_ms'     : rtt,
                 'packet_loss_rate'       : plr,
-                'use_spdy'               : proto == 'spdy',
+                'protocol'               : proto,
             }
             logging.debug("Running test configuration: %s", str(config))
             test = TestInstance(config, options.log_level,

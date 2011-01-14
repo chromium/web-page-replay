@@ -19,26 +19,34 @@
 
 from google.appengine.ext import db
 
+# The unique list of versions tested
+class Version(db.Model):
+    version = db.StringProperty(required=True, indexed=True)
+
+# The unique list of network types
+class Network(db.Model):
+    # The network_type is just a pretty name for the overall network
+    # configuration.  We use it as the index to avoid the combinatorial
+    # blowout of indexes if we used the individual network settings.
+    network_type = db.StringProperty(required=True, indexed=True)
+    download_bandwidth_kbps = db.IntegerProperty(required=True)
+    upload_bandwidth_kbps = db.IntegerProperty(required=True)
+    round_trip_time_ms = db.IntegerProperty(required=True)
+    packet_loss_rate  = db.FloatProperty(required=True)
+    protocol = db.StringProperty(required=True, choices=set(["http", "spdy", "spdy-nossl"]))
+
 # A TestSet is a set of tests conducted over one or many URLs.
 # The test setup and configuration is constant across all URLs in the TestSet.
 class TestSet(db.Model):
     user = db.UserProperty()
     date = db.DateTimeProperty(auto_now_add=True)
     notes = db.StringProperty(multiline=True)
-    version = db.StringProperty(indexed=True)
+    version = db.ReferenceProperty(Version, indexed=True)
     platform = db.StringProperty()
     client_hostname = db.StringProperty()
     cmdline = db.StringProperty()
 
-    # The network_type is just a pretty name for the overall network
-    # configuration.  We use it as the index to avoid the combinatorial
-    # blowout of indexes if we used the individual network settings.
-    network_type = db.StringProperty(indexed=True)
-    download_bandwidth_kbps = db.IntegerProperty()
-    upload_bandwidth_kbps = db.IntegerProperty()
-    round_trip_time_ms = db.IntegerProperty()
-    packet_loss_rate  = db.FloatProperty()
-    using_spdy = db.BooleanProperty()
+    network = db.ReferenceProperty(Network, indexed=True)
 
     # These fields are summary data for the TestSet.
     # When the TestSet is created, these fields are blank.
@@ -82,7 +90,6 @@ class TestSummary(db.Model):
     date = db.DateTimeProperty(auto_now_add=True)
     url = db.StringProperty(required=True, indexed=True)
     iterations = db.IntegerProperty()
-    using_spdy = db.BooleanProperty()
     start_load_time = db.IntegerProperty()
     commit_load_time = db.IntegerProperty()
     doc_load_time = db.IntegerProperty()
@@ -95,3 +102,4 @@ class TestSummary(db.Model):
     num_sessions = db.IntegerProperty()
     read_bytes_kb = db.IntegerProperty()
     write_bytes_kb = db.IntegerProperty()
+

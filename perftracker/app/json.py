@@ -33,6 +33,12 @@ class GqlEncoder(simplejson.JSONEncoder):
 
    # TODO Improve coverage for all of App Engine's Property types. 
 
+   # When an object contains db.ReferenceProperty attributes, we have the
+   # choice to either jsonify the entire ReferenceProperty object recursively
+   # or to simply jsonify the key of the referenced property.  By default,
+   # only jsonify the keys.
+   keys_only = True
+
    def default(self, obj): 
 
      """Tests the input object, obj, to encode as JSON.""" 
@@ -47,7 +53,7 @@ class GqlEncoder(simplejson.JSONEncoder):
        properties = obj.properties().items() 
        output = {} 
        for field, value in properties: 
-         if isinstance(value, db.ReferenceProperty):
+         if isinstance(value, db.ReferenceProperty) and self.keys_only:
            output[field] = str(getattr(getattr(obj, field), "key")())
          else:
            output[field] = getattr(obj, field) 
@@ -70,11 +76,12 @@ class GqlEncoder(simplejson.JSONEncoder):
      return simplejson.JSONEncoder.default(self, obj) 
 
 
-def encode(input): 
+def encode(input, keys_only = True): 
    """Encode an input GQL object as JSON 
 
      Args: 
        input: A GQL object or DB property. 
+       keys_only: Don't expand db.ReferenceProperty objects
 
      Returns: 
        A JSON string based on the input object.  
@@ -83,4 +90,6 @@ def encode(input):
        TypeError: Typically occurs when an input object contains an unsupported 
          type. 
      """ 
-   return GqlEncoder().encode(input)
+   encoder = GqlEncoder()
+   encoder.keys_only = keys_only
+   return encoder.encode(input)

@@ -102,12 +102,14 @@
         <td>
           <select id="version_filter" onchange="filterChanged()">
             <option></option>
-            <option jsselect="versions" jscontent="$this"></option>
+            <option jsselect="versions" jscontent="$this[0]"
+                    jsvalues=".value:$this[1]"></option>
           </select>
         </td>
         <td><select id="networks_filter" onchange="filterChanged()">
             <option></option>
-            <option jsselect="networks" jscontent="$this"></option>
+            <option jsselect="networks" jscontent="$this[0]"
+                    jsvalues=".value:$this[1]"></option>
           </select>
         </td>
         </tr>

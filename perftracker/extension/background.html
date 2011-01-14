@@ -406,7 +406,8 @@ chrome.extension.onConnect.addListener(function(port) {
 
 function run() {
   window.iterations = benchmarkConfiguration.iterations;
-  window.enableSpdy = benchmarkConfiguration.use_spdy;
+  window.enableSpdy = benchmarkConfiguration.protocol == "spdy" ||
+                      benchmarkConfiguration.protocol == "spdy-nossl";
 
   if (window.clearCache) {
     // Show a warning if we will try to clear the cache between runs

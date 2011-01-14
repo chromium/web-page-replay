@@ -59,10 +59,11 @@ function setSelectValue(id, value) {
     if (!id || !value) return;
     var elt = document.getElementById(id);
     for (var i = 0; i < elt.options.length; i++) {
-        if (elt.options[i].text == value)
+        if (elt.options[i].value == value) {
           elt.options[i].selected = true
-	  else
-	      elt.options[i].selected = false;
+        } else {
+          elt.options[i].selected = false;
+        }
     }
 }
 
@@ -72,7 +73,8 @@ function getSelectValue(id) {
     return elt[elt.selectedIndex].value;
 }
 
-// Sets the parameters in the URL fragment to those in the |newParams| key:value map.
+// Sets the parameters in the URL fragment to those in the |newParams|
+// key:value map.
 function setParams(params) {
     var hashString = "";
     for (var param in params) {
