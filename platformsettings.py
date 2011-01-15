@@ -164,12 +164,12 @@ class LinuxPlatformSettings(PosixPlatformSettings):
     is_first_nameserver_replaced = False
     # The fileinput module uses sys.stdout as the edited file output.
     for line in fileinput.input(self.RESOLV_CONF, inplace=1, backup='.bak'):
-      if line.startswith('nameserver ') and not is_nameserver_replaced:
+      if line.startswith('nameserver ') and not is_first_nameserver_replaced:
         print 'nameserver %s' % dns
-        is_nameserver_replaced = True
+        is_first_nameserver_replaced = True
       else:
         print line,
-    if not is_nameserver_replaced:
+    if not is_first_nameserver_replaced:
       raise DnsUpdateError('Could not find a suitable namserver entry in %s' %
                            self.RESOLV_CONF)
 
