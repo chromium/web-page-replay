@@ -155,6 +155,17 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_HEAD(self):
     self.do_GET()
 
+  # Override the default send error with a version that doesn't unnecessarily close
+  # the connection.
+  def send_error(self, error, message = None):
+    logging.error("send error overriddent!" + str(error))
+    body = "Not found"
+    self.send_response(error, message)
+    self.send_header("content-type", "text/plain")
+    self.send_header("content-length", str(len(body)))
+    self.end_headers()
+    self.wfile.write("Not Found")
+    self.wfile.flush()
 
 class RecordHandler(HttpArchiveHandler):
   def do_GET(self):
