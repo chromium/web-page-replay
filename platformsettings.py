@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import fileinput
 import logging
 import os
 import platform
@@ -153,15 +154,24 @@ class LinuxPlatformSettings(PosixPlatformSettings):
     """
     if not self.original_primary_dns:
       self.original_primary_dns = self.get_primary_dns()
-    subprocess.Popen(
-        ['perl', '-p', '-i.bak', '-e',
-         'if (!$done) { s/^nameserver\s*(.*)/nameserver %s/; $done++ }' % dns,
-         self.RESOLV_CONF]).communicate()
+    self._write_resolve_conf(dns)
     if self.get_primary_dns() == dns:
       logging.info('Changed system DNS to %s', dns)
     else:
       raise DnsUpdateError('Did you run under sudo?')
 
+  def _write_resolve_conf(self, dns):
+    is_first_nameserver_replaced = False
+    # The fileinput module uses sys.stdout as the edited file output.
+    for line in fileinput.input(self.RESOLV_CONF, inplace=1, backup='.bak'):
+      if line.startswith('nameserver ') and not is_nameserver_replaced:
+        print 'nameserver %s' % dns
+        is_nameserver_replaced = True
+      else:
+        print line,
+    if not is_nameserver_replaced:
+      raise DnsUpdateError('Could not find a suitable namserver entry in %s' %
+                           self.RESOLV_CONF)
 
 class WindowsPlatformSettings(PlatformSettings):
   def _netsh_set_dns(self, args):
