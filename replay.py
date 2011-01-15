@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-description = """Replays web pages under simulated network conditions.
+"""Replays web pages under simulated network conditions.
 
 Must be run as administrator (sudo).
 
@@ -36,7 +36,8 @@ Network simulation examples:
   $ sudo ./replay.py --up 128KByte/s --down 4Mbit/s --delay_ms=100 archive.wpr
 
   # 1% packet loss rate
-  $ sudo ./replay.py --packet_loss_rate=0.01 archive.wpr"""
+  $ sudo ./replay.py --packet_loss_rate=0.01 archive.wpr
+"""
 
 import dnsproxy
 import httpproxy
@@ -74,7 +75,7 @@ def main(options, replay_file):
                                dns_server.real_dns_lookup,
                                "localhost",
                                80,
-                               not options.spdy=="no-ssl",
+                               options.spdy != "no-ssl",
                                options.certfile,
                                options.keyfile):
         with trafficshaper.TrafficShaper(options.dns_forwarding,
@@ -107,7 +108,7 @@ if __name__ == '__main__':
   option_parser = optparse.OptionParser(
       usage='%prog [options] replay_file',
       formatter=PlainHelpFormatter(),
-      description=description,
+      description=__doc__,
       epilog='http://code.google.com/p/web-page-replay/')
 
   option_parser.add_option('-s', '--spdy', default=False,
