@@ -100,8 +100,8 @@
       var versions = data.filters.versions;
       versions = versions.sort(function(a, b) {
         if (a == b) return 0;
-        a = a.split(" ")[1];  // Trim leading "Chrome "
-        b = b.split(" ")[1];  // Trim leading "Chrome "
+        a = a[0].split(" ");  // Trim leading "Chrome "
+        b = b[0].split(" ");  // Trim leading "Chrome "
         a = a.split(".");
         b = b.split(".");
         for (var i = 0; i < a.length && i < b.length; i++) {
