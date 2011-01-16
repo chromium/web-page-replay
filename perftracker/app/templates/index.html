@@ -71,10 +71,10 @@
       var versionMap = {};
       for (var i = 0; i < results.length; ++i) {
         if (!results[i].total_time) continue;
-        if (results[i].network != network) continue;
-        var point = versionMap[results[i].version] || { avg: 0, count: 0};
+        if (results[i].network.key != network) continue;
+        var point = versionMap[results[i].version.key] || { avg: 0, count: 0};
         point.avg = (point.avg * point.count + results[i].total_time) / ++point.count;
-        versionMap[results[i].version] = point;
+        versionMap[results[i].version.key] = point;
       }
       return versionMap;
     }
