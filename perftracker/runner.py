@@ -176,6 +176,7 @@ class TestInstance:
     self.log_level = log_level
     self.record = record
     self.proxy_process = None
+    self.spdy_proxy_process = None
 
   def GenerateConfigFile(self, notes=''):
     # The PerfTracker extension requires this name in order to kick off.
@@ -213,7 +214,6 @@ class TestInstance:
     return
 
   def StartProxy(self):
-    logging.debug('Starting Web-Page-Replay')
     log_level = 'info'
     if self.log_level:
       log_level = self.log_level
@@ -221,13 +221,7 @@ class TestInstance:
         replay_path,
         '-l', log_level,
         '-x', # Disables DNS intercepting
-        '-c', runner_cfg.spdy['certfile'],
-        '-k', runner_cfg.spdy['keyfile'],
         ]
-    if self.network['protocol'] == 'spdy':
-      cmdline.extend(['-s', 'ssl'])
-    elif self.network['protocol'] == 'spdy-nossl':
-      cmdline.extend(['-s', 'no-ssl'])
     if self.network['bandwidth_kbps']['down']:
       cmdline += ['-d', str(self.network['bandwidth_kbps']['down']) + 'KBit/s']
     if self.network['bandwidth_kbps']:
@@ -240,18 +234,41 @@ class TestInstance:
       cmdline.append('-r')
     cmdline.append(runner_cfg.replay_data_archive)
 
-    logging.debug('Starting replay proxy: %s', str(cmdline))
+    logging.debug('Starting Web-Page-Replay: %s', str(cmdline))
     self.proxy_process = subprocess.Popen(cmdline)
-
-    # We just changed the system resolv.conf.  If we go too fast here
-    # it may still be pointing at the old version...  linux sux
-    time.sleep(5)
 
   def StopProxy(self):
     if self.proxy_process:
       logging.debug('Stopping Web-Page-Replay')
       self.proxy_process.send_signal(signal.SIGINT)
       self.proxy_process.wait()
+
+  def StartSpdyProxy(self):
+    proxy_parameters = {
+      "listen_host": "",
+      "listen_port": 8000,
+      "cert_file": runner_cfg.spdy['certfile'],
+      "key_file": runner_cfg.spdy['keyfile'],
+      "http_host": "127.0.0.1",
+      "http_port": 80,
+      "https_host": "",
+      "https_port": "",
+      "spdy_only": 0,
+    }
+    proxy_cfg = "--proxy1=%(listen_host)s,%(listen_port)d,%(cert_file)s,%(key_file)s,%(http_host)s,%(http_port)d,%(https_host)s,%(https_port)s,%(spdy_only)d" % proxy_parameters
+    # TODO(mbelshe): Find a way to support "spdy-nossl" protocol.
+    #                Right now we only support "spdy" (SSL is on)
+    cmdline = [ runner_cfg.spdy_proxy_server_path, proxy_cfg, "--force_spdy"]
+    logging.debug('Starting SPDY proxy: %s', str(cmdline))
+    self.spdy_proxy_process = subprocess.Popen(cmdline,
+                                               stdout=subprocess.PIPE,
+                                               stderr=subprocess.STDOUT)
+
+  def StopSpdyProxy(self):
+    if self.spdy_proxy_process:
+      logging.debug('Stopping SPDY Proxy')
+      self.spdy_proxy_process.send_signal(signal.SIGINT)
+      self.spdy_proxy_process.wait()
 
   def RunChrome(self, chrome_cmdline):
     start_file_url = 'file://' + self.filename
@@ -265,6 +282,15 @@ class TestInstance:
     try:
       if use_virtualx:
         StartVirtualX(platform.node(), '/tmp')
+
+      protocol = self.network['protocol']
+      port = 80
+      # To run SPDY, we use the SPDY-to-HTTP gateway, which runs
+      # on port 8000, contacting the origin server (the replay server)
+      # which always runs on port 80.
+      if protocol == 'spdy' or protocol == 'spdy-nossl':
+        port = 8000
+      
       cmdline = [
           runner_cfg.chrome_path,
           '--activate-on-launch',
@@ -276,7 +302,7 @@ class TestInstance:
           
           '--enable-benchmarking',
           '--enable-logging',
-          '--host-resolver-rules=MAP * 127.0.0.1:80,EXCLUDE ' +
+          '--host-resolver-rules=MAP * 127.0.0.1:' + str(port) + ',EXCLUDE ' +
               runner_cfg.appengine_host, 
           '--load-extension=' + perftracker_extension_path,
           '--log-level=0',
@@ -312,10 +338,14 @@ class TestInstance:
     try:
       self.GenerateConfigFile(notes)
       self.StartProxy()
+      protocol = self.network['protocol']
+      if protocol == 'spdy' or protocol == 'spdy-nossl':
+        self.StartSpdyProxy()
       self.RunChrome(chrome_cmdline)
     finally:
       logging.debug('Cleaning up test')
       self.StopProxy()
+      self.StopSpdyProxy()
       self.Cleanup()
 
   def Cleanup(self):

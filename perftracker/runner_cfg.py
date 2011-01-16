@@ -19,6 +19,11 @@
 chrome_path = '<path to chrome>'
 
 #
+# Location of the SPDY proxy server to use (if testing SPDY)
+#
+spdy_proxy_server_path = "<path to spdy proxy program>"
+
+#
 # Location of the recorded replay data.
 #
 replay_data_archive = '<path to archive>'
