@@ -40,7 +40,7 @@ def ApplyStatisticsData(request, obj):
     obj.write_bytes_kb = int(float(request.get('write_bytes_kb')))
 
 def BandwidthPrettyString(bandwidth_kbps):
-    if bandwidth_kbps > 1000:
+    if bandwidth_kbps >= 1000:
         bandwidth_mbps = bandwidth_kbps / 1000.0
         return str(bandwidth_mbps) + "Mbps"
     return str(bandwidth_kbps) + "Kbps"
