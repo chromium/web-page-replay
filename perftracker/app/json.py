@@ -54,8 +54,13 @@ class GqlEncoder(simplejson.JSONEncoder):
        output = {} 
        for field, value in properties: 
          if isinstance(value, db.ReferenceProperty) and self.keys_only:
-           key = getattr(getattr(obj, field), "key")()
-           output[field] = str(getattr(key, "id")())
+           # The ReferenceProperty has a method "_attr_name()", which returns
+           # the name of the attribute on this object which contains the key
+           # to the referenced object.
+           # It is important to use this technique to avoid accidentally
+           # fetching the actual object.
+           key_field_name = value._attr_name()
+           output[field] = getattr(obj, key_field_name).id()
          else:
            output[field] = getattr(obj, field) 
        output['key'] = str(getattr(getattr(obj, "key")(), "id")())

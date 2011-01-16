@@ -101,7 +101,7 @@ class JSONDataPage(BaseRequestHandler):
             results = test_set.summaries
 
         results = query.fetch(500)
-        response = json.encode(results, False)
+        response = json.encode(results)
         memcache.add(memcache_key, response, 30)   # Cache for 30secs
         self.response.out.write(response)
     

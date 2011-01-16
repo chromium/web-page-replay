@@ -14,6 +14,7 @@
 
     <script>
     data = {}
+    networks_map = {};   // maps from db.Key to pretty name.
 
     function loadFilters() {
       // Fetch data for the filters.
@@ -28,6 +29,13 @@
         var params = getParams();
         setSelectValue("version_filter", params["version"]);
         setSelectValue("networks_filter", params["network"]);
+
+        // Populate the networks list
+        for (index in data.filters.networks) {
+          networks_map[data.filters.networks[index][1]] =
+              data.filters.networks[index][0];
+        }
+        ProcessResults();
       });
     }
 
@@ -39,12 +47,20 @@
 
       new XHRGet(url, function(result) {
         data.results = JSON.parse(result);
-        var context = JsEvalContext.create(data);
-        var template = document.getElementById("data_template");
-        jstProcess(context, template);
-        drawChart(data.results);
-        JsEvalContext.recycle(context);
+        ProcessResults();
       });
+    }
+
+    function ProcessResults() {
+      if (!data.results || !data.filters) {
+        return;  // Still waiting for XHR to finish.
+      } 
+
+      var context = JsEvalContext.create(data);
+      var template = document.getElementById("data_template");
+      jstProcess(context, template);
+      drawChart(data.results);
+      JsEvalContext.recycle(context);
     }
 
     google.load('visualization', '1', {'packages':['annotatedtimeline']});
@@ -136,7 +152,7 @@
         <tr jsselect="results">
         <td><span jseval="$val = '/do_view_set?id=' + key"></span><a jsvalues="href:$val" jscontent="date"></a></td>
         <td jscontent="client_hostname"></td>
-        <td jscontent="network.network_type"></td>
+        <td jscontent="networks_map[network]"></td>
         <td class="righttext" jscontent="url_count"></td>
         <td class="righttext" jscontent="iterations"></td>
         <td class="righttext" jscontent="start_load_time"></td>
