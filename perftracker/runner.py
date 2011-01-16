@@ -304,10 +304,12 @@ class TestInstance:
           '--enable-logging',
           '--host-resolver-rules=MAP * 127.0.0.1:' + str(port) + ',EXCLUDE ' +
               runner_cfg.appengine_host, 
+          '--ignore-certificate-errors',
           '--load-extension=' + perftracker_extension_path,
           '--log-level=0',
           '--no-first-run',
           '--no-js-randomness',
+          '--no-proxy-server',
           '--start-maximized',
           '--user-data-dir=' + profile_dir,
           ]
