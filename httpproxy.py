@@ -158,7 +158,6 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   # Override the default send error with a version that doesn't unnecessarily close
   # the connection.
   def send_error(self, error, message = None):
-    logging.error("send error overriddent!" + str(error))
     body = "Not found"
     self.send_response(error, message)
     self.send_header("content-type", "text/plain")
