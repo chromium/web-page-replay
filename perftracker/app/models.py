@@ -44,6 +44,7 @@ class TestSet(db.Model):
     version = db.ReferenceProperty(Version, indexed=True)
     platform = db.StringProperty()
     client_hostname = db.StringProperty()
+    cpu = db.StringProperty()
     cmdline = db.StringProperty()
 
     network = db.ReferenceProperty(Network, indexed=True)

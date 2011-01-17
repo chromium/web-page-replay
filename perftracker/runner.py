@@ -170,6 +170,21 @@ def StopVirtualX(slave_build_name):
     os.remove(xvfb_pid_filename)
 
 
+def GetCPU():
+  # When /proc/cpuinfo exists it is more reliable than platform.
+  if os.path.exists('/proc/cpuinfo'):
+    try:
+      f = open('/proc/cpuinfo')
+      lines = f.readlines()
+      for line in lines:
+        parts = line.split(':')
+        if parts[0].strip() == 'model name':
+          return parts[1].strip()
+    finally:
+      f.close()
+  return platform.processor()
+
+
 class TestInstance:
   def __init__(self, network, log_level, record):
     self.network = network
@@ -191,6 +206,7 @@ class TestInstance:
       'server_url': runner_cfg.appengine_url,
       'server_login': options.login_url,
       'client_hostname': platform.node(),
+      'cpu': GetCPU(),
       'iterations': str(runner_cfg.iterations),
       'download_bandwidth_kbps': str(self.network['bandwidth_kbps']['down']),
       'upload_bandwidth_kbps': str(self.network['bandwidth_kbps']['up']),
