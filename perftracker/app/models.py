@@ -35,6 +35,10 @@ class Network(db.Model):
     packet_loss_rate  = db.FloatProperty(required=True)
     protocol = db.StringProperty(required=True, choices=set(["http", "spdy", "spdy-nossl"]))
 
+# The unique list of CPUs
+class Cpu(db.Model):
+    cpu = db.StringProperty(required=True, indexed=True)
+
 # A TestSet is a set of tests conducted over one or many URLs.
 # The test setup and configuration is constant across all URLs in the TestSet.
 class TestSet(db.Model):
@@ -44,7 +48,7 @@ class TestSet(db.Model):
     version = db.ReferenceProperty(Version, indexed=True)
     platform = db.StringProperty()
     client_hostname = db.StringProperty()
-    cpu = db.StringProperty()
+    cpu = db.ReferenceProperty(Cpu, indexed=True)
     cmdline = db.StringProperty()
 
     network = db.ReferenceProperty(Network, indexed=True)

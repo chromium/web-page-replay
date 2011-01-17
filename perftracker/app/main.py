@@ -96,6 +96,10 @@ class JSONDataPage(BaseRequestHandler):
         if versions:
             query.filter("version IN ",
                 [db.Key.from_path('Version', int(k)) for k in versions.split(",")])
+        cpus = self.request.get("cpu_filter")
+        if cpus:
+            query.filter("cpu IN ",
+                [db.Key.from_path('Cpu', int(k)) for k in cpus.split(",")])
         if self.request.get("set_id"):
             test_set = models.TestSet.get_by_id(int(self.request.get("set_id")))
             results = test_set.summaries
@@ -121,6 +125,7 @@ class JSONDataPage(BaseRequestHandler):
         json_output = {}
         json_output['obj'] = test_set
         json_output['version'] = test_set.version
+        json_output['cpu'] = test_set.cpu
         json_output['network'] = test_set.network
         summaries_query = test_set.summaries
         summaries_query.order("date")
@@ -165,17 +170,22 @@ class JSONDataPage(BaseRequestHandler):
             return
 
         versions = set()
+        cpus = set()
         networks = set()
 
         query = models.Version.all()
         for item in query:
             versions.add(( item.version, str(item.key().id()) ))
+        query = models.Cpu.all()
+        for item in query:
+            cpus.add(( item.cpu, str(item.key().id()) ))
         query = models.Network.all()
         for item in query:
             networks.add(( item.network_type, str(item.key().id()) ) )
 
         filters = {}
         filters["versions"] = sorted(versions)
+        filters["cpus"] = sorted(cpus)
         filters["networks"] = sorted(networks)
         response = json.encode(filters)
         memcache.add("filters", response, 60 * 10)  # Cache for 10 mins
@@ -234,6 +244,17 @@ class UploadTestSet(BaseRequestHandler):
         version.put()
         return version
 
+    """ Get a cpu from the datastore.  If it doesn't exist, create it """
+    def GetOrCreateCpu(self, cpu_str):
+        query = models.Cpu.all()
+        query.filter("cpu = ", cpu_str)
+        cpus = query.fetch(1)
+        if cpus:
+            return cpus[0]
+        cpu = models.Cpu(cpu = cpu_str)
+        cpu.put()
+        return cpu
+
     """ Get a network from the datastore.  If it doesn't exist, create it """
     def GetOrCreateNetwork(self,
                            download_bandwidth_kbps,
@@ -287,6 +308,11 @@ class UploadTestSet(BaseRequestHandler):
             version = self.GetOrCreateVersion(version_str)
             if not version:
                 raise Exception("could not create version")
+
+            cpu = self.GetOrCreateCpu(self.request.get('cpu'))
+            if not cpu:
+                raise Exception("could not create cpu")
+
             network = self.GetOrCreateNetwork(download_bandwidth_kbps,
                                               upload_bandwidth_kbps,
                                               round_trip_time_ms,
@@ -297,12 +323,12 @@ class UploadTestSet(BaseRequestHandler):
 
             test_set = models.TestSet(user=user)
             test_set.version = version
+            test_set.cpu  = cpu
             test_set.network = network
             test_set.notes = self.request.get('notes')
             test_set.cmdline  = self.request.get('cmdline')
             test_set.platform  = self.request.get('platform')
             test_set.client_hostname  = self.request.get('client_hostname')
-            test_set.cpu  = self.request.get('cpu')
             key = test_set.put()
             self.response.out.write(key.id())
 
