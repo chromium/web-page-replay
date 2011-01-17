@@ -120,8 +120,12 @@ class JSONDataPage(BaseRequestHandler):
         # into a single json blob.
         json_output = {}
         json_output['obj'] = test_set
-        json_output['summaries'] = [s for s in test_set.summaries]
-        self.response.out.write(json.encode(json_output, False))
+        json_output['version'] = test_set.version
+        json_output['network'] = test_set.network
+        summaries_query = test_set.summaries
+        summaries_query.order("date")
+        json_output['summaries'] = [s for s in summaries_query]
+        self.response.out.write(json.encode(json_output))
 
     def do_summary(self):
         """ Lookup a specific TestSummary"""

@@ -34,3 +34,14 @@ indexes:
   - name: version
   - name: date
     direction: desc
+
+- kind: TestSummary
+  properties:
+  - name: set
+  - name: date
+
+- kind: TestSummary
+  properties:
+  - name: set
+  - name: date
+    direction: desc
