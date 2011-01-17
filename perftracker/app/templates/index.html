@@ -79,6 +79,14 @@
       return versionMap;
     }
 
+    function getId(type, name) {
+      var items = data.filters[type];
+      for (var i = items.length - 1; i >= 0; i--) {
+        if (items[i][0] == name) return items[i][1];
+      }
+      return 0;
+    }
+
     function drawChart(results) {
       var graph_data = new google.visualization.DataTable();
 
@@ -146,8 +154,8 @@
           var row = chart.getSelection()[0].row;
           var col = chart.getSelection()[0].column;
           var url = ("/search.html" +
-                     "#version=" + encodeURIComponent("Chrome " + graph_data.getValue(row, 0)) +
-                     "&network=" + encodeURIComponent(graph_data.getColumnLabel(col)));
+                     "#version=" + getId("versions", "Chrome " + graph_data.getValue(row, 0)) +
+                     "&network=" + getId("networks", graph_data.getColumnLabel(col)));
           window.location.href = url;
         });
       } else {
