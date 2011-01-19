@@ -14,7 +14,7 @@
 
 // We wait 1s before starting the test just to let chrome warm up better.
 setTimeout(function() {
-  var raw_json_data = document.getElementById("json").textContent;
+  var raw_json_data = document.getElementById('json').textContent;
   var json = JSON.parse(raw_json_data);
   var port = chrome.extension.connect();
   port.postMessage({message: 'start', benchmark: json});
