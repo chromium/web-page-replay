@@ -60,7 +60,11 @@ class GqlEncoder(simplejson.JSONEncoder):
            # It is important to use this technique to avoid accidentally
            # fetching the actual object.
            key_field_name = value._attr_name()
-           output[field] = getattr(obj, key_field_name).id()
+           key_field = getattr(obj, key_field_name)
+           if key_field == None:
+             output[field] = "null"
+           else:
+             output[field] = key_field.id()
          else:
            output[field] = getattr(obj, field) 
        output['key'] = str(getattr(getattr(obj, "key")(), "id")())
