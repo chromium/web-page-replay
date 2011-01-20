@@ -15,48 +15,105 @@
     <script>
     data = {};
     networks_map = {};   // maps from db.Key to pretty name.
+    cpus_map = {};   // maps from db.Key to pretty name.
+
+    // Colors to use for the chart.
+    var colors = [
+      '#0066FF',
+      '#CC0000',
+      '#009900',
+      '#FFCC00',
+      '#006666',
+      '#0000CC',
+      '#663399',
+      '#CC0099'
+    ];
+
+    var lines = [
+    ];
+
+    function addLine() {
+      var params = getParams();
+      var networks = params["networks_filter"].split(",");
+      var cpus = params["cpus_filter"].split(",");
+      networks.push(data.filters.networks[0][1]);
+      cpus.push(data.filters.cpus[0][1]);
+      params["networks_filter"] = networks.join(",");
+      params["cpus_filter"] = cpus.join(",");
+      setParams(params);
+      loadFilters();
+    }
+
+    function removeLine(index) {
+      var params = getParams();
+      var networks = params["networks_filter"].split(",");
+      var cpus = params["cpus_filter"].split(",");
+      networks.splice(index, 1);
+      cpus.splice(index, 1);
+      params["networks_filter"] = networks.join(",");
+      params["cpus_filter"] = cpus.join(",");
+      setParams(params);
+      loadFilters();
+    }
 
     function loadFilters() {
       // Fetch data for the filters.
       var filter_data_url = "/json?type=filters";
       new XHRGet(filter_data_url, function(result) {
+        lines = [];
         data.filters = JSON.parse(result);
-        var context = JsEvalContext.create(data.filters);
-        var template = document.getElementById("filters_template");
-        jstProcess(context, template);
-        JsEvalContext.recycle(context);
 
         // Populate the networks list
         for (index in data.filters.networks) {
           networks_map[data.filters.networks[index][1]] =
               data.filters.networks[index][0];
         }
+        for (index in data.filters.cpus) {
+          cpus_map[data.filters.cpus[index][1]] =
+              data.filters.cpus[index][0];
+        }
 
         var params = getParams();   // Load parameters from URL.
-        if (!params["network1"]) {
-          params["network1"] = data.filters.networks[0][1];
-        }
-        if (!params["network2"]) {
-          params["network2"] = data.filters.networks[1][1];
-        }
-        if (!params["network3"]) {
-          params["network3"] = data.filters.networks[2][1];
+        if (!params["networks_filter"] || !params["cpus_filter"]) {
+          params["networks_filter"] = data.filters.networks[0][1];
+          params["cpus_filter"] = data.filters.cpus[0][1];
         }
         setParams(params);
+        var networks = params["networks_filter"].split(",");
+        var cpus = params["cpus_filter"].split(",");
+        for (var i = 0; i < networks.length; i++) {
+          lines.push({
+            network_name: networks_map[networks[i]],
+            network_id: networks[i],
+            networks: data.filters.networks,
+            cpu_name: cpus_map[cpus[i]],
+            cpu_id: cpus[i],
+            cpus: data.filters.cpus
+          });
+        }
 
-        setSelectValue("networks_filter1", params["network1"]);
-        setSelectValue("networks_filter2", params["network2"]);
-        setSelectValue("networks_filter3", params["network3"]);
+        var context = JsEvalContext.create({
+            lines: lines,
+            colors: colors
+        });
+        var template = document.getElementById("filters_template");
+        jstProcess(context, template);
+        JsEvalContext.recycle(context);
+
+        for (var i = 0; i < networks.length; i++) {
+          setSelectValue("networks_filter" + i, networks[i]);
+          setSelectValue("cpus_filter" + i, cpus[i]);
+        }
+
         loadData();
       });
     }
 
     function loadData() {
       var params = getParams();
-      var url = ("/json?type=set_search&networks_filter=" +
-                 params["network1"] + "," +
-                 params["network2"] + "," +
-                 params["network3"]);
+      var url = ("/json?type=set_search" +
+                 "&networks_filter=" + params["networks_filter"] +
+                 "&cpus_filter=" + params["cpus_filter"]);
       new XHRGet(url, function(result) {
         data.results = JSON.parse(result);
         drawChart(data.results);
@@ -66,12 +123,13 @@
     // See: http://code.google.com/apis/visualization/documentation/gallery/linechart.html
     google.load('visualization', '1', {'packages':['corechart']});
 
-    function getVersionMap(results, network) {
-      // Average all points for a given version into a single value.
+    // Average all points for a given version into a single value.
+    function getVersionMap(results, network, cpu) {
       var versionMap = {};
       for (var i = 0; i < results.length; ++i) {
         if (!results[i].total_time) continue;
         if (results[i].network != network) continue;
+        if (results[i].cpu != cpu) continue;
         var point = versionMap[results[i].version] || { avg: 0, count: 0};
         point.avg = (point.avg * point.count + results[i].total_time) / ++point.count;
         versionMap[results[i].version] = point;
@@ -84,7 +142,7 @@
       for (var i = items.length - 1; i >= 0; i--) {
         if (items[i][0] == name) return items[i][1];
       }
-      return 0;
+      return -1;
     }
 
     function drawChart(results) {
@@ -93,15 +151,10 @@
       graph_data.addColumn('string', 'Version');
 
       var params = getParams();
-      var networks = [
-        params["network1"],
-        params["network2"],
-        params["network3"]
-      ];
 
       // Add a column for each network.
-      for (var i = 0; i < networks.length; i++) {
-        graph_data.addColumn('number', networks_map[networks[i]]);
+      for (var i = 0; i < lines.length; i++) {
+        graph_data.addColumn('number', lines[i].network_name + " " + lines[i].cpu_name);
       }
 
       // Sort the versions logically.
@@ -122,8 +175,8 @@
       // Populate the graph data.
       for (var i = 0; i < versions.length; ++i) {
         var row = [versions[i][0].split(" ")[1]];  // Trim leading "Chrome ".
-        for (var j = 0; j < networks.length; ++j) {
-          var versionMap = getVersionMap(results, networks[j]);
+        for (var j = 0; j < lines.length; ++j) {
+          var versionMap = getVersionMap(results, lines[j].network_id, lines[j].cpu_id);
           var point = versionMap[versions[i][1]];
           if (!point || !point.avg) {
             row.push(undefined);
@@ -141,7 +194,8 @@
           width: 800,
           height: 400,
           title: 'Click point for details',
-          legend: 'bottom',
+          legend: 'none',
+          colors: colors,
           vAxis: {
             minValue: 0,
             title: "Page Load Time (ms)",
@@ -153,9 +207,16 @@
         google.visualization.events.addListener(chart, 'select', function() {
           var row = chart.getSelection()[0].row;
           var col = chart.getSelection()[0].column;
+          var versionString = "Chrome " + graph_data.getValue(row, 0);
+          var networkCpuString = graph_data.getColumnLabel(col);
+          var networkCpuParts = networkCpuString.split(' ');
+          var networkString = networkCpuParts[0];
+          networkCpuParts.shift();
+          var cpuString = networkCpuParts.join(' ');
           var url = ("/search.html" +
-                     "#version=" + getId("versions", "Chrome " + graph_data.getValue(row, 0)) +
-                     "&network=" + getId("networks", graph_data.getColumnLabel(col)));
+                     "#version=" + getId("versions", versionString) +
+                     "&network=" + getId("networks", networkString) +
+                     "&cpu=" + getId("cpus", cpuString));
           window.location.href = url;
         });
       } else {
@@ -164,13 +225,21 @@
     }
 
     function filterChanged() {
+      var networks = [];
+      for (var i = 0; i < 10; i++) {
+        var sel = getSelectValue("networks_filter" + i);
+        if (!sel) break;
+        networks.push(sel);
+      }
+      var cpus = [];
+      for (var i = 0; i < 10; i++) {
+        var sel = getSelectValue("cpus_filter" + i);
+        if (!sel) break;
+        cpus.push(sel);
+      }
       var params = {};
-      var networksFilter1 = getSelectValue("networks_filter1");
-      if (networksFilter1) params["network1"] = networksFilter1;
-      var networksFilter2 = getSelectValue("networks_filter2");
-      if (networksFilter2) params["network2"] = networksFilter2;
-      var networksFilter3 = getSelectValue("networks_filter3");
-      if (networksFilter3) params["network3"] = networksFilter3;
+      params["networks_filter"] = networks.join(",");
+      params["cpus_filter"] = cpus.join(",");
       setParams(params);
       loadData();
     }
@@ -178,40 +247,30 @@
     function main() {
       loadFilters();
     }
-
     </script>
 
     <div id='chart_div' style='width: 800px; height: 400px;'></div>
 
     <div id="filters_template">
     <table class="sortable">
-      <tr>
-        <td>Network 1</td>
-        <td>Network 2</td>
-        <td>Network 3</td>
-      </tr>
-      <tr>
-        <td>
-          <select id="networks_filter1" onchange="filterChanged()">
-            <option jsselect="networks" jscontent="$this[0]"
-                    jsvalues=".value:$this[1]"></option>
-          </select>
+      <tr jsselect="lines">
+        <td jsvalues=".style.backgroundColor:colors[$index % colors.length]">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
         </td>
         <td>
-          <select id="networks_filter2" onchange="filterChanged()">
+          <select onchange="filterChanged()" jsvalues=".id:'networks_filter' + $index">
             <option jsselect="networks" jscontent="$this[0]"
                     jsvalues=".value:$this[1]"></option>
           </select>
-        </td>
-        <td>
-          <select id="networks_filter3" onchange="filterChanged()">
-            <option jsselect="networks" jscontent="$this[0]"
+          <select onchange="filterChanged()" jsvalues=".id:'cpus_filter' + $index">>
+            <option jsselect="cpus" jscontent="$this[0]"
                     jsvalues=".value:$this[1]"></option>
           </select>
+          <a href="#" jsvalues=".id:$index" onclick="removeLine(this.id);return false;">Remove</a>
         </td>
       </tr>
     </table>
     </div>
+    <a href="#" onclick="addLine();return false;">Add line</a>
 
   </body>
 </html>

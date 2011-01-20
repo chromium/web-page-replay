@@ -58,6 +58,7 @@ function ci(stderr) {
 function setSelectValue(id, value) {
     if (!id || !value) return;
     var elt = document.getElementById(id);
+    if (!elt) return;
     for (var i = 0; i < elt.options.length; i++) {
         if (elt.options[i].value == value) {
           elt.options[i].selected = true
@@ -70,6 +71,7 @@ function setSelectValue(id, value) {
 // Gets the value of the selected option of the <select> with id=|id|.
 function getSelectValue(id) {
     var elt = document.getElementById(id);
+    if (!elt) return "";
     return elt[elt.selectedIndex].value;
 }
 
