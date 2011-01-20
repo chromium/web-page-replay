@@ -256,7 +256,7 @@ class TestInstance:
   def StopProxy(self):
     if self.proxy_process:
       logging.debug('Stopping Web-Page-Replay')
-      self.proxy_process.send_signal(signal.SIGINT)
+      self.proxy_process.send_signal(signal.SIGKILL)
       self.proxy_process.wait()
 
   def StartSpdyProxy(self):
