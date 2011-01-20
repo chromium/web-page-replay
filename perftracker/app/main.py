@@ -339,7 +339,7 @@ class UploadTestSet(BaseRequestHandler):
                 return
             test_set = models.TestSet.get_by_id(int(set_id))
             if not test_set:
-                self.send_error("Could not find set_id: ", set_id)
+                self.send_error("Could not find set_id: %s", set_id)
                 return
             ApplyStatisticsData(self.request, test_set)
             test_set.iterations = int(self.request.get('iterations'))
@@ -362,9 +362,14 @@ class UploadTestResult(BaseRequestHandler):
         if not set_id:
             self.send_error("Bad request, no set_id param")
             return
-        test_set = models.TestSet.get_by_id(int(set_id))
+        try:
+            set_id = int(set_id)
+        except:
+            self.send_error("Bad request, bad set_id param: %s", set_id)
+            return
+        test_set = models.TestSet.get_by_id(set_id)
         if not test_set:
-            self.send_error("Could not find set_id: ", set_id)
+            self.send_error("Could not find set_id: %s", set_id)
             return
         my_url = self.request.get('url')
 
@@ -388,7 +393,7 @@ class UploadTestSummary(BaseRequestHandler):
             return
         test_set = models.TestSet.get_by_id(int(set_id))
         if not test_set:
-            self.send_error("Could not find set_id: ", set_id)
+            self.send_error("Could not find set_id: %s", set_id)
             return
         my_url = self.request.get('url')
 
