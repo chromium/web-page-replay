@@ -389,11 +389,16 @@ class UploadTestSummary(BaseRequestHandler):
 
         set_id = self.request.get('set_id')
         if not set_id:
-            self.send_error("Bad request, no set_id param")
+            self.send_error('Bad request, no set_id param')
             return
-        test_set = models.TestSet.get_by_id(int(set_id))
+        try:
+            set_id = int(set_id)
+        except:
+            self.send_error('Bad request, bad set_id param: %s', set_id)
+            return
+        test_set = models.TestSet.get_by_id(set_id)
         if not test_set:
-            self.send_error("Could not find set_id: %s", set_id)
+            self.send_error('Could not find set_id: %s', set_id)
             return
         my_url = self.request.get('url')
 
