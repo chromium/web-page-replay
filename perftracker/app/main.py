@@ -96,7 +96,7 @@ class JSONDataPage(BaseRequestHandler):
         if versions:
             query.filter("version IN ",
                 [db.Key.from_path('Version', int(k)) for k in versions.split(",")])
-        cpus = self.request.get("cpu_filter")
+        cpus = self.request.get("cpus_filter")
         if cpus:
             query.filter("cpu IN ",
                 [db.Key.from_path('Cpu', int(k)) for k in cpus.split(",")])
