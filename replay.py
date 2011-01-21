@@ -131,10 +131,6 @@ if __name__ == '__main__':
       action='store',
       type='int',
       help='Maximum number of seconds to run before quiting.')
-  option_parser.add_option('-o', '--port', default=80,
-      action='store',
-      type='int',
-      help='Port number to listen on.')
 
   network_group = optparse.OptionGroup(option_parser,
       'Network Simulation Options',
@@ -155,16 +151,6 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Packet loss rate in range [0..1]. Zero means no loss.')
-  network_group.add_option('-c', '--certfile', default='',
-      action='store',
-      dest='certfile',
-      type='string',
-      help='Certificate file for use with SSL')
-  network_group.add_option('-k', '--keyfile', default='',
-      action='store',
-      dest='keyfile',
-      type='string',
-      help='Key file for use with SSL')
   option_parser.add_option_group(network_group)
 
   harness_group = optparse.OptionGroup(option_parser,
@@ -173,9 +159,9 @@ if __name__ == '__main__':
   harness_group.add_option('-n', '--no-deterministic_script', default=True,
       action='store_false',
       dest='deterministic_script',
-      help=('Don\'t inject JavaScript which makes sources of entropy such as '
-            'Date() and Math.random() deterministic. CAUTION: With this option '
-            'many web pages will not replay properly.'))
+      help='Don\'t inject JavaScript which makes sources of entropy such as '
+           'Date() and Math.random() deterministic. CAUTION: With this option '
+           'many web pages will not replay properly.')
   harness_group.add_option('-P', '--no-dns_private_passthrough', default=True,
       action='store_false',
       dest='dns_private_passthrough',
@@ -188,6 +174,21 @@ if __name__ == '__main__':
       help='Don\'t forward DNS requests to the local replay server.'
            'CAUTION: With this option an external mechanism must be used to '
            'forward traffic to the replay server.')
+  harness_group.add_option('-o', '--port', default=80,
+      action='store',
+      type='int',
+      help='Port number to listen on. CAUTION: Normal replay functionality '
+           'relies on using port 80.')
+  harness_group.add_option('-c', '--certfile', default='',
+      action='store',
+      dest='certfile',
+      type='string',
+      help='Certificate file for use with SSL')
+  harness_group.add_option('-k', '--keyfile', default='',
+      action='store',
+      dest='keyfile',
+      type='string',
+      help='Key file for use with SSL')
   option_parser.add_option_group(harness_group)
 
   options, args = option_parser.parse_args()
