@@ -233,11 +233,19 @@ class TestInstance:
     log_level = 'info'
     if self.log_level:
       log_level = self.log_level
+    # To run SPDY, we use the SPDY-to-HTTP gateway.  The gateway will answer
+    # on port 80, contacting the origin server (the replay server) which
+    # will then run on port 8000.
+    port = 80
+    protocol = self.network['protocol']
+    if protocol == 'spdy' or protocol == 'spdy-nossl':
+        port = 8000
     cmdline = [
         replay_path,
         '-l', log_level,
         '--no-dns_forwarding',
         '--no-deterministic_script',
+        '--port', str(port),
         ]
     if self.network['bandwidth_kbps']['down']:
       cmdline += ['-d', str(self.network['bandwidth_kbps']['down']) + 'KBit/s']
@@ -258,19 +266,19 @@ class TestInstance:
     if self.proxy_process:
       logging.debug('Stopping Web-Page-Replay')
       if self.proxy_process.poll():
-        try:
-          self.proxy_process.kill()
-        except OSError:
-          pass
+        # Use a SIGINT here so that it can do graceful cleanup.
+        # Otherwise we'll leave subprocesses hanging.
+        self.proxy_process.send_signal(signal.SIGINT)
+        self.proxy_process.wait()
 
   def StartSpdyProxy(self):
     proxy_parameters = {
       "listen_host": "",
-      "listen_port": 8000,
+      "listen_port": 80,
       "cert_file": runner_cfg.spdy['certfile'],
       "key_file": runner_cfg.spdy['keyfile'],
       "http_host": "127.0.0.1",
-      "http_port": 80,
+      "http_port": 8000,
       "https_host": "",
       "https_port": "",
       "spdy_only": 0,
@@ -289,9 +297,11 @@ class TestInstance:
       logging.debug('Stopping SPDY Proxy')
       if self.spdy_proxy_process.poll():
         try:
+          # For the SPDY server we kill it, because it has no dependencies.
           self.spdy_proxy_process.kill()
         except OSError:
           pass
+        self.spdy_proxy_process.wait()
 
   def RunChrome(self, chrome_cmdline):
     start_file_url = 'file://' + self.filename
@@ -306,14 +316,6 @@ class TestInstance:
       if use_virtualx:
         StartVirtualX(platform.node(), '/tmp')
 
-      protocol = self.network['protocol']
-      port = 80
-      # To run SPDY, we use the SPDY-to-HTTP gateway, which runs
-      # on port 8000, contacting the origin server (the replay server)
-      # which always runs on port 80.
-      if protocol == 'spdy' or protocol == 'spdy-nossl':
-        port = 8000
-      
       cmdline = [
           runner_cfg.chrome_path,
           '--activate-on-launch',
@@ -325,7 +327,7 @@ class TestInstance:
           
           '--enable-benchmarking',
           '--enable-logging',
-          '--host-resolver-rules=MAP * 127.0.0.1:' + str(port) + ',EXCLUDE ' +
+          '--host-resolver-rules=MAP * 127.0.0.1:80,EXCLUDE ' +
               runner_cfg.appengine_host, 
           '--ignore-certificate-errors',
           '--load-extension=' + perftracker_extension_path,
