@@ -74,7 +74,7 @@ def main(options, replay_file):
                                options.deterministic_script,
                                dns_server.real_dns_lookup,
                                "localhost",
-                               80,
+                               options.port,
                                options.spdy != "no-ssl",
                                options.certfile,
                                options.keyfile):
@@ -131,6 +131,10 @@ if __name__ == '__main__':
       action='store',
       type='int',
       help='Maximum number of seconds to run before quiting.')
+  option_parser.add_option('-o', '--port', default=80,
+      action='store',
+      type='int',
+      help='Port number to listen on.')
 
   network_group = optparse.OptionGroup(option_parser,
       'Network Simulation Options',
