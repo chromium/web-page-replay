@@ -256,8 +256,8 @@ class TestInstance:
   def StopProxy(self):
     if self.proxy_process:
       logging.debug('Stopping Web-Page-Replay')
-      self.proxy_process.send_signal(signal.SIGKILL)
-      self.proxy_process.wait()
+      if self.proxy_process.poll():
+        self.proxy_process.kill()
 
   def StartSpdyProxy(self):
     proxy_parameters = {
@@ -283,8 +283,8 @@ class TestInstance:
   def StopSpdyProxy(self):
     if self.spdy_proxy_process:
       logging.debug('Stopping SPDY Proxy')
-      self.spdy_proxy_process.send_signal(signal.SIGINT)
-      self.spdy_proxy_process.wait()
+      if self.spdy_proxy_process.poll():
+        self.spdy_proxy_process.kill()
 
   def RunChrome(self, chrome_cmdline):
     start_file_url = 'file://' + self.filename
