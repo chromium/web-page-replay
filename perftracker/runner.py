@@ -259,7 +259,7 @@ class TestInstance:
       cmdline.append('-r')
     cmdline.append(runner_cfg.replay_data_archive)
 
-    logging.debug('Starting Web-Page-Replay: %s', str(cmdline))
+    logging.debug('Starting Web-Page-Replay: %s', ' '.join(cmdline))
     self.proxy_process = subprocess.Popen(cmdline)
 
   def StopProxy(self):
@@ -287,7 +287,7 @@ class TestInstance:
     # TODO(mbelshe): Find a way to support "spdy-nossl" protocol.
     #                Right now we only support "spdy" (SSL is on)
     cmdline = [ runner_cfg.spdy_proxy_server_path, proxy_cfg, "--force_spdy"]
-    logging.debug('Starting SPDY proxy: %s', str(cmdline))
+    logging.debug('Starting SPDY proxy: %s', ' '.join(cmdline))
     self.spdy_proxy_process = subprocess.Popen(cmdline,
                                                stdout=subprocess.PIPE,
                                                stderr=subprocess.STDOUT)
@@ -351,7 +351,7 @@ class TestInstance:
         cmdline.extend(chrome_cmdline.split(' '))
       cmdline.append(start_file_url)
   
-      logging.debug('Starting chrome: %s', str(cmdline))
+      logging.debug('Starting Chrome: %s', ' '.join(cmdline))
       chrome = subprocess.Popen(cmdline)
       returncode = chrome.wait();
       if returncode:
