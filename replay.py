@@ -71,7 +71,7 @@ def main(options, replay_file):
     with dnsproxy.DnsProxyServer(options.dns_forwarding,
                                  options.dns_private_passthrough) as dns_server:
       with replay_server_class(replay_file,
-                               options.use_deterministic_script,
+                               options.deterministic_script,
                                dns_server.real_dns_lookup,
                                "localhost",
                                80,
@@ -166,10 +166,10 @@ if __name__ == '__main__':
   harness_group = optparse.OptionGroup(option_parser,
       'Replay Harness Options',
       'These advanced options configure various aspects of the replay harness')
-  harness_group.add_option('-n', '--use-deterministic_script', default=False,
+  harness_group.add_option('-n', '--no-deterministic_script', default=True,
       action='store_false',
-      dest='use_deterministic_script',
-      help=('Inject JavaScript which makes sources of entropy such as '
+      dest='deterministic_script',
+      help=('Don\'t inject JavaScript which makes sources of entropy such as '
             'Date() and Math.random() deterministic. CAUTION: With this option '
             'many web pages will not replay properly.'))
   harness_group.add_option('-P', '--no-dns_private_passthrough', default=True,
@@ -213,7 +213,7 @@ if __name__ == '__main__':
     if options.spdy:
       option_parser.error('Option --spdy cannot be used with --record.')
 
-  if options.spdy and options.use_deterministic_script:
+  if options.spdy and options.deterministic_script:
     logging.warning(
         'Option --deterministic-_script is ignored with --spdy.'
         'See http://code.google.com/p/web-page-replay/issues/detail?id=10')

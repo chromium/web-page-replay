@@ -236,7 +236,8 @@ class TestInstance:
     cmdline = [
         replay_path,
         '-l', log_level,
-        '-x', # Disables DNS intercepting
+        '--no-dns_forwarding',
+        '--no-deterministic_script',
         ]
     if self.network['bandwidth_kbps']['down']:
       cmdline += ['-d', str(self.network['bandwidth_kbps']['down']) + 'KBit/s']
