@@ -130,6 +130,12 @@ class JSONDataPage(BaseRequestHandler):
         summaries_query = test_set.summaries
         summaries_query.order("date")
         json_output['summaries'] = [s for s in summaries_query]
+        # There is no data; go ahead and pull the individual runs.
+        if len(json_output['summaries']) == 0:
+            query = models.TestResult.all()
+            query.filter("set = ", db.Key.from_path('TestSet', int(set_id)))
+            query.order('url')
+            json_output['summaries'] = [r for r in query]
         self.response.out.write(json.encode(json_output))
 
     def do_summary(self):
