@@ -265,11 +265,10 @@ class TestInstance:
   def StopProxy(self):
     if self.proxy_process:
       logging.debug('Stopping Web-Page-Replay')
-      if self.proxy_process.poll():
-        # Use a SIGINT here so that it can do graceful cleanup.
-        # Otherwise we'll leave subprocesses hanging.
-        self.proxy_process.send_signal(signal.SIGINT)
-        self.proxy_process.wait()
+      # Use a SIGINT here so that it can do graceful cleanup.
+      # Otherwise we'll leave subprocesses hanging.
+      self.proxy_process.send_signal(signal.SIGINT)
+      self.proxy_process.wait()
 
   def StartSpdyProxy(self):
     proxy_parameters = {
@@ -295,13 +294,12 @@ class TestInstance:
   def StopSpdyProxy(self):
     if self.spdy_proxy_process:
       logging.debug('Stopping SPDY Proxy')
-      if self.spdy_proxy_process.poll():
-        try:
-          # For the SPDY server we kill it, because it has no dependencies.
-          self.spdy_proxy_process.kill()
-        except OSError:
-          pass
-        self.spdy_proxy_process.wait()
+      try:
+        # For the SPDY server we kill it, because it has no dependencies.
+        self.spdy_proxy_process.kill()
+      except OSError:
+        pass
+      self.spdy_proxy_process.wait()
 
   def RunChrome(self, chrome_cmdline):
     start_file_url = 'file://' + self.filename
