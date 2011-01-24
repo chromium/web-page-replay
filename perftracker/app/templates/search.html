@@ -15,6 +15,7 @@
     <script>
     data = {}
     networks_map = {};   // maps from db.Key to pretty name.
+    cpus_map = {};   // maps from db.Key to pretty name.
 
     function loadFilters() {
       // Fetch data for the filters.
@@ -29,11 +30,16 @@
         var params = getParams();
         setSelectValue("version_filter", params["version"]);
         setSelectValue("networks_filter", params["network"]);
+        setSelectValue("cpus_filter", params["cpu"]);
 
         // Populate the networks list
         for (index in data.filters.networks) {
           networks_map[data.filters.networks[index][1]] =
               data.filters.networks[index][0];
+        }
+        for (index in data.filters.cpus) {
+          cpus_map[data.filters.cpus[index][1]] =
+              data.filters.cpus[index][0];
         }
         ProcessResults();
       });
@@ -44,6 +50,7 @@
       var params = getParams();
       if (params["version"]) url += "&version_filter=" + params["version"];
       if (params["network"]) url += "&networks_filter=" + params["network"];
+      if (params["cpu"]) url += "&cpus_filter=" + params["cpu"];
 
       new XHRGet(url, function(result) {
         data.results = JSON.parse(result);
@@ -92,6 +99,8 @@
       if (versionFilter) params["version"] = versionFilter;
       var networksFilter = getSelectValue("networks_filter");
       if (networksFilter) params["network"] = networksFilter;
+      var cpusFilter = getSelectValue("cpus_filter");
+      if (cpusFilter) params["cpu"] = cpusFilter;
       setParams(params);
       loadData();
     }
@@ -113,6 +122,7 @@
         <tr>
           <td>Version</td>
           <td>Network</td>
+          <td>CPU</td>
         </tr>
         <tr>
         <td>
@@ -128,6 +138,12 @@
                     jsvalues=".value:$this[1]"></option>
           </select>
         </td>
+        <td><select id="cpus_filter" onchange="filterChanged()">
+            <option></option>
+            <option jsselect="cpus" jscontent="$this[0]"
+                    jsvalues=".value:$this[1]"></option>
+          </select>
+        </td>
         </tr>
         </table>
       </div>
@@ -140,6 +156,7 @@
       <tr>
         <th>Date</th>
         <th>Machine</th>
+        <th>CPU</th>
         <th>Network</th>
         <th>URLs</th>
         <th>Iterations</th>
@@ -151,7 +168,8 @@
       </tr>
         <tr jsselect="results">
         <td><span jseval="$val = '/do_view_set?id=' + key"></span><a jsvalues="href:$val" jscontent="date"></a></td>
-        <td jscontent="client_hostname"></td>
+        <td jscontent="client_hostname.split('.')[0]"></td>
+        <td jscontent="cpus_map[cpu]"></td>
         <td jscontent="networks_map[network]"></td>
         <td class="righttext" jscontent="url_count"></td>
         <td class="righttext" jscontent="iterations"></td>
