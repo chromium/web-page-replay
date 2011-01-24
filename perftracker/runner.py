@@ -220,9 +220,21 @@ class TestInstance:
     f.write("""
 <body>
 <h3>Running benchmark...</h3>
+<script>
+// Sometimes the extension doesn't load.
+// Set a timer, if the extension didn't write an ACK into the status
+// box, then reload this page.
+setTimeout(function() {
+  var status = document.getElementById("status");
+  if (status.textContent != "ACK") {
+    window.location.reload(true);
+  }
+}, 3000);
+</script>
 <textarea id=json style="width:100%%;height:80%%;">
 %s
 </textarea>
+<textarea id=status></textarea>
 </body>
 """ % json.dumps(benchmark, indent=2))
 

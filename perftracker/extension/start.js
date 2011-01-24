@@ -12,10 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+function TryStart() {
+  try {
+    var raw_json_data = document.getElementById('json').textContent;
+    var json = JSON.parse(raw_json_data);
+    var port = chrome.extension.connect();
+    port.postMessage({message: 'start', benchmark: json});
+  }
+  catch(err) {
+    setTimeout(TryStart, 1000);
+  }
+
+  var status_element = document.getElementById('status');
+  status_element.textContent = "ACK";
+}
+
 // We wait 1s before starting the test just to let chrome warm up better.
-setTimeout(function() {
-  var raw_json_data = document.getElementById('json').textContent;
-  var json = JSON.parse(raw_json_data);
-  var port = chrome.extension.connect();
-  port.postMessage({message: 'start', benchmark: json});
-}, 1000);
+setTimeout(TryStart, 250);
