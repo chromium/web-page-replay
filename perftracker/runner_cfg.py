@@ -44,10 +44,9 @@ appengine_url = 'http://%s:%d/' % (appengine_host, appengine_port)
 inter_run_cleanup_script = None
 
 #
-# SPDY network options
+# SSL network options
 #
-spdy = {
-  'ssl': False,
+ssl = {
   'certfile': '../cert.pem',
   'keyfile': '../key.pem',
 }

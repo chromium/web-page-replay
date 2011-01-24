@@ -283,11 +283,18 @@ setTimeout(function() {
       self.proxy_process.wait()
 
   def StartSpdyProxy(self):
+    certfile = ""
+    keyfile = ""
+    protocol = self.network['protocol']
+    if protocol == "spdy":
+      certfile = runner_cfg.ssl['certfile']
+      keyfile = runner_cfg.ssl['keyfile']
+
     proxy_parameters = {
       "listen_host": "",
       "listen_port": 80,
-      "cert_file": runner_cfg.spdy['certfile'],
-      "key_file": runner_cfg.spdy['keyfile'],
+      "cert_file": certfile,
+      "key_file": keyfile,
       "http_host": "127.0.0.1",
       "http_port": 8000,
       "https_host": "",
