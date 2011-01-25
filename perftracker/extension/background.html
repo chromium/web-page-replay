@@ -8,7 +8,7 @@ window.iterations = 10;
 window.interval = 300;
 window.loadCheck = 0;
 window.timeout = 20000;  // Kill page after 20s.
-window.maxLoadChecks = window.timeout / window.interval;
+window.maxLoadChecks = Math.round(window.timeout / window.interval);
 window.clearConnections = true;
 window.clearCache = true;
 window.enableSpdy = false;
@@ -140,14 +140,6 @@ function Benchmark(url) {
   // Called when the test run completes.
   this.pageFinished = function() {
     console.log("running pageFinished for: " + me_.url());
-
-    if (!isActive_) {
-      // The page is already dead.  It was probably killed and finished
-      // at the same time.
-      console.log("page is no longer active!");
-      return;
-    }
-    isActive_ = false;
     runCount_--;
 
     var benchmark = nextBenchmark();
@@ -272,6 +264,15 @@ function Benchmark(url) {
   // Called when a page finishes loading.
   this.pageLoaded = function(load_times) {
     console.log("pageLoaded");
+
+    if (!isActive_) {
+      // The page is already dead.  It was probably killed and finished
+      // at the same time.
+      console.log("page is no longer active!");
+      return;
+    }
+    isActive_ = false;
+
     // Make sure the content can be fetched via spdy if it is enabled.
     if (window.enableSpdy && !load_times.wasFetchedViaSpdy) {
       alert("Can not fetch current url via spdy.\n" +
