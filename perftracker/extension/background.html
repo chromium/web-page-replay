@@ -5,9 +5,10 @@
 
 // Configuration and results are stored globally.
 window.iterations = 10;
-window.interval = 200;
+window.interval = 300;
 window.loadCheck = 0;
-window.maxLoadChecks = 25;
+window.timeout = 20000;  // Kill page after 20s.
+window.maxLoadChecks = window.timeout / window.interval;
 window.clearConnections = true;
 window.clearCache = true;
 window.enableSpdy = false;
