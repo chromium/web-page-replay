@@ -171,5 +171,15 @@ urls = [
   "http://www.nytimes.com/",
   "http://www.cnn.com/",
   "http://www.apple.com/",
-  "http://www.bbc.co.uk/"
+  "http://www.bbc.co.uk/",
+  "http://www.imdb.com/",
+  "http://sfbay.craigslist.org/",
+  "http://www.sohu.com/",
+  "http://go.com/",
+  "http://search.yahoo.com/search?p=disney",
+  "http://espn.go.com/",
+  "http://ameblo.jp/",
+  "http://en.rakuten.co.jp/",
+  "http://www.adobe.com/",
+  "http://www.cnet.com/"
 ]
