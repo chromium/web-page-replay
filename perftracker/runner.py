@@ -261,7 +261,7 @@ setTimeout(function() {
         ]
     if self.network['bandwidth_kbps']['down']:
       cmdline += ['-d', str(self.network['bandwidth_kbps']['down']) + 'KBit/s']
-    if self.network['bandwidth_kbps']:
+    if self.network['bandwidth_kbps']['up']:
       cmdline += ['-u', str(self.network['bandwidth_kbps']['up']) + 'KBit/s']
     if self.network['round_trip_time_ms']:
       cmdline += ['-m', str(self.network['round_trip_time_ms'])]
@@ -402,13 +402,13 @@ def main(options):
     runner_cfg.iterations = 1
     runner_cfg.networks = [
       {
-        bandwidth_kbps: {
-          up: 0,
-          down: 0
+        'bandwidth_kbps': {
+          'up': 0,
+          'down': 0
         },
-        round_trip_time_ms: 0,
-        packet_loss_percent: 0,
-        protocol: 'http',
+        'round_trip_time_ms': 0,
+        'packet_loss_percent': 0,
+        'protocol': 'http',
       }
     ]
 
