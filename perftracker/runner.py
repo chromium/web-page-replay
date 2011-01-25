@@ -229,7 +229,7 @@ setTimeout(function() {
   if (status.textContent != "ACK") {
     window.location.reload(true);
   }
-}, 3000);
+}, 30000);
 </script>
 <textarea id=json style="width:100%%;height:80%%;">
 %s
