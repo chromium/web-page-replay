@@ -49,17 +49,25 @@ indexes:
 
 - kind: TestSummary
   properties:
-  - name: set
-  - name: date
-
-- kind: TestSummary
-  properties:
-  - name: set
-  - name: date
-    direction: desc
-
-- kind: TestSummary
-  properties:
   - name: cpu
   - name: date
     direction: desc
+
+- kind: TestSummary
+  properties:
+  - name: set
+  - name: date
+
+- kind: TestSummary
+  properties:
+  - name: set
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: cpu
+  - name: version
+  - name: date
+    direction: desc
+
