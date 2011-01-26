@@ -13,6 +13,14 @@
     <h1><div id="header">Chromium Page Tracker View Test Set</div></h1>
 
     <script>
+    function getArray(data, key) {
+      var arr = [];
+      for (var i = 0; i < data.results.length; i++) {
+        arr.push(data.results[i][key]);
+      }
+      return arr;
+    }
+
     function loadData() {
       var url = "/json?type=summary";
       var set_id = location.queryString()["id"];
@@ -25,19 +33,29 @@
       new XHRGet(url, function(result) {
         data = JSON.parse(result);
         var context = new JsEvalContext(data);
+        context.setVariable('num_connects_mode',
+			    getArray(data, 'num_connects').mode());
+        context.setVariable('num_sessions_mode',
+			    getArray(data, 'num_sessions').mode());
+        context.setVariable('num_requests_mode',
+			    getArray(data, 'num_requests').mode());
+        context.setVariable('read_bytes_kb_mode',
+			    getArray(data, 'read_bytes_kb').mode());
+        context.setVariable('write_bytes_kb_mode',
+			    getArray(data, 'write_bytes_kb').mode());
         var template = document.getElementById("template");
         jstProcess(context, template);
         drawChart(data.results);
       });
     }
 
+    // http://code.google.com/apis/visualization/documentation/gallery/linechart.html
     google.load('visualization', '1', {'packages':['corechart']});
 
     function drawChart(results) {
       var graph_data = new google.visualization.DataTable();
       graph_data.addColumn('number', 'PLT');
       graph_data.addColumn('number', 'LLT');
-      console.log(results);
       for (var i = 0; i < results.length; ++i) {
         graph_data.addRow([results[i].total_time,
                           results[i].last_load_time,
@@ -55,6 +73,15 @@
                                   title: "ms"
                                 },
                                });
+        google.visualization.events.addListener(chart, 'onmouseover', function(e) {
+          var tr = document.getElementById('data').rows[e.row+1];
+          tr.style.backgroundColor = "yellow";
+        });
+        google.visualization.events.addListener(chart, 'onmouseout', function(e) {
+          var tr = document.getElementById('data').rows[e.row+1];
+          tr.style.backgroundColor = "";
+        });
+
       } else {
         chart_div.innerHTML = "No data";
       }
@@ -84,7 +111,7 @@
 
       <div id='chart_div' style='width: 700px; height: 240px;'></div>
 
-      <table class="sortable">
+      <table class="sortable" id="data">
       <tr>
         <th>URL</th>
         <th>SPDY</th>
@@ -100,7 +127,7 @@
         <th>Read KB</th>
         <th>Write KB</th>
       </tr>
-        <tr jsselect="results">
+      <tr jsselect="results">
         <td><span jscontent="url"></span></td>
         <td class="righttext" jscontent="using_spdy"></td>
         <td class="righttext" jscontent="start_load_time"></td>
@@ -109,11 +136,11 @@
         <td class="righttext" jscontent="paint_time"></td>
         <td class="righttext" jscontent="total_time"></td>
         <td class="righttext" jscontent="last_load_time"></td>
-        <td class="righttext" jscontent="num_connects"></td>
-        <td class="righttext" jscontent="num_sessions"></td>
-        <td class="righttext" jscontent="num_requests"></td>
-        <td class="righttext" jscontent="read_bytes_kb"></td>
-        <td class="righttext" jscontent="write_bytes_kb"></td>
+        <td class="righttext" jscontent="num_connects" jsvalues=".style.color:num_connects == num_connects_mode ? 'black' : 'red'"></td>
+        <td class="righttext" jscontent="num_sessions" jsvalues=".style.color:num_sessions == num_sessions_mode ? 'black' : 'red'"></td>
+        <td class="righttext" jscontent="num_requests" jsvalues=".style.color:num_requests == num_requests_mode ? 'black' : 'red'"></td>
+        <td class="righttext" jscontent="read_bytes_kb" jsvalues=".style.color:read_bytes_kb == read_bytes_kb_mode ? 'black' : 'red'"></td>
+        <td class="righttext" jscontent="write_bytes_kb" jsvalues=".style.color:write_bytes_kb == write_bytes_kb_mode ? 'black' : 'red'"></td>
       </table>
     </div>
   </body>

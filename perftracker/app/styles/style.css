@@ -52,7 +52,7 @@ table.sortable {
   table-layout: fixed;
 }
 
-table.sortable:not([class*='filtered']) tr:nth-child(even) td:not([class*='filtered']) {
+table.sortable:not([class*='filtered']) tr:nth-child(even) {
   background: #eff3ff;
 }
 

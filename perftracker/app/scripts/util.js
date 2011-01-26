@@ -8,6 +8,26 @@ Array.prototype.contains = function(obj) {
   return false;
 }
 
+Array.prototype.mode = function () {
+  var histogram = {};
+  for (var i = 0; i < this.length; i++) {
+    if (histogram[this[i]]) {
+      histogram[this[i]]++;
+    } else {
+      histogram[this[i]] = 1;
+    }
+  }
+  var maxIndex = 0;
+  var maxValue = 0;
+  for (var key in histogram) {
+    if (histogram[key] > maxValue) {
+      maxIndex = key;
+      maxValue = histogram[key];
+    }
+  }
+  return maxIndex;
+}
+
 window.location.queryString = function() {
   var result = {};
   var raw_string = decodeURI(location.search);
