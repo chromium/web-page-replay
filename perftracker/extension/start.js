@@ -20,6 +20,7 @@ function TryStart() {
     port.postMessage({message: 'start', benchmark: json});
   }
   catch(err) {
+    console.log("TryStart retring after exception: " + err);
     setTimeout(TryStart, 1000);
   }
 

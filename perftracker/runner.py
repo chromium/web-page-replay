@@ -227,6 +227,7 @@ class TestInstance:
 setTimeout(function() {
   var status = document.getElementById("status");
   if (status.textContent != "ACK") {
+    console.log("Benchmark stuck?  Reloading.");
     window.location.reload(true);
   }
 }, 30000);
