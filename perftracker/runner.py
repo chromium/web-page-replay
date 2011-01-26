@@ -303,9 +303,18 @@ setTimeout(function() {
       "spdy_only": 0,
     }
     proxy_cfg = "--proxy1=%(listen_host)s,%(listen_port)d,%(cert_file)s,%(key_file)s,%(http_host)s,%(http_port)d,%(https_host)s,%(https_port)s,%(spdy_only)d" % proxy_parameters
-    # TODO(mbelshe): Find a way to support "spdy-nossl" protocol.
-    #                Right now we only support "spdy" (SSL is on)
-    cmdline = [ runner_cfg.spdy_proxy_server_path, proxy_cfg, "--force_spdy"]
+    # TODO(mbelshe): Remove the logfile when done with debugging the flipserver.
+    logfile = "/tmp/flipserver.log"
+    try:
+      os.remove(logfile)
+    except:
+      pass
+    cmdline = [ 
+      runner_cfg.spdy_proxy_server_path, proxy_cfg, 
+      "--force_spdy",
+      "--v=2",
+      "--logfile=" + logfile
+    ]
     logging.debug('Starting SPDY proxy: %s', ' '.join(cmdline))
     self.spdy_proxy_process = subprocess.Popen(cmdline,
                                                stdout=subprocess.PIPE,
