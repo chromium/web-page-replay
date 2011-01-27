@@ -15,6 +15,18 @@ window.enableSpdy = false;
 window.windowId = 0;
 window.submitter;
 
+// Map the WebTiming property to the name we use to log it.
+window.loggedTimings = {
+  fetchStart: 'start_load_time',
+  domainLookupEnd: 'dns_time',
+  connectEnd: 'connect_time',
+  responseStart: 'first_byte_time',
+  responseEnd: 'last_byte_time',
+  domInteractive: 'doc_load_time',
+  domContentLoadedEventEnd: 'dcl_time',
+  loadEventEnd: 'total_time',
+};
+
 // This is to be provided by the benchmark starter
 window.benchmarkConfiguration = {};
 
@@ -74,12 +86,9 @@ function nextBenchmark() {
 global_counter = {}
 global_counter.url_count = 0;
 global_counter.iterations = 0;
-global_counter.start_load_time = 0;
-global_counter.commit_load_time = 0;
-global_counter.doc_load_time = 0;
-global_counter.paint_time = 0;
-global_counter.total_time = 0;
-global_counter.last_load_time = 0;
+for (var prop in loggedTimings) {
+  global_counter[loggedTimings[prop]] = 0;
+}
 global_counter.read_bytes_kb = 0;
 global_counter.write_bytes_kb = 0;
 global_counter.num_requests = 0;
@@ -102,12 +111,9 @@ function Benchmark(url) {
   current_.url = url;
   current_.iterations = 0;
   current_.using_spdy = false;
-  current_.start_load_time = [];  // times to start
-  current_.commit_load_time = [];  // times to commit
-  current_.doc_load_time = [];  // times to docload
-  current_.paint_time = [];    // times to paint
-  current_.total_time = [];    // times to complete load
-  current_.last_load_time = [];
+  for (var prop in loggedTimings) {
+    current_[loggedTimings[prop]] = [];
+  }
   current_.read_bytes_kb = [];
   current_.write_bytes_kb = [];
   current_.num_requests = [];
@@ -247,22 +253,22 @@ function Benchmark(url) {
       if (response.timing.loadEventEnd && response.loadTimes.finishLoadTime) {
         clearInterval(me_.checkForLoadId);
         console.log("Load complete for tab: " + tab.id);
-        var load_times = response.loadTimes;
-        load_times.lastLoadTime = response.timing.loadEventEnd - response.timing.navigationStart;
 
         // If it record mode, wait here another 10 seconds to be absolutely
         // sure that any lazy loaded resources are recorded.
         if (benchmarkConfiguration.record) {
-          setTimeout(function() { me_.pageLoaded(load_times); }, 10000);
+          setTimeout(function() {
+            me_.pageLoaded(response.loadTimes, response.timing);
+          }, 10000);
         } else {
-          me_.pageLoaded(load_times);
+          me_.pageLoaded(response.loadTimes, response.timing);
         }
       }
     });
   }
 
   // Called when a page finishes loading.
-  this.pageLoaded = function(load_times) {
+  this.pageLoaded = function(load_times, timing) {
     console.log("pageLoaded");
 
     if (!isActive_) {
@@ -293,52 +299,15 @@ function Benchmark(url) {
       return;
     }
 
-    var requested = load_times.requestTime;
-    if (requested == 0) {
-      requested = load_times.startLoadTime;
-    }
-    var started = load_times.startLoadTime;
-    var startLoadTime =
-        Math.round((load_times.startLoadTime - requested) * 1000.0);
-    var commitLoadTime =
-        Math.round((load_times.commitLoadTime - started) * 1000.0);
-    var docLoadTime =
-        Math.round((load_times.finishDocumentLoadTime - started) * 1000.0);
-    var paintTime =
-        Math.round((load_times.firstPaintTime - started) * 1000.0);
-    var totalTime =
-        Math.round((load_times.finishLoadTime - started) * 1000.0);
-    var lastLoadTime = load_times.lastLoadTime;
-    var firstPaintAfterLoadTime =
-        Math.round((load_times.firstPaintAfterLoadTime - started) * 1000.0);
-
-    // NOTE(mbelshe): Sometimes we get 0 for these timers from 0 loadTimes().
-    //     We need to not record big negative values for these cases.
-    if (startLoadTime < 0) {
-      startLoadTime = 0;
-    }
-    if (commitLoadTime < 0) {
-      commitLoadTime = 0;
-    }
-    if (docLoadTime < 0) {
-      docLoadTime = 0;
-    }
-    if (paintTime < 0) {
-      // In this case, the time-to-first paint is effectively the same as the
-      // time to onLoad().
-      paintTime = totalTime;
-    }
-
     // Record the individual result
-    var result = {};
+    var result = {}
+    var baseTime = timing.navigationStart;
+    CHECK(baseTime);
+    for (var prop in loggedTimings) {
+      result[loggedTimings[prop]] = timing[prop] - baseTime;
+    }
     result.url = current_.url;
     result.using_spdy = load_times.wasFetchedViaSpdy;
-    result.start_load_time = startLoadTime;
-    result.commit_load_time = commitLoadTime;
-    result.doc_load_time = docLoadTime;
-    result.paint_time = paintTime;
-    result.total_time = totalTime;
-    result.last_load_time = lastLoadTime;
     var bytesRead = chrome.benchmarking.counter(kTCPReadBytes) -
                                                 initialReadBytes_;
     var bytesWrite = chrome.benchmarking.counter(kTCPWriteBytes) - 
@@ -355,12 +324,9 @@ function Benchmark(url) {
     // Record the aggregate result for this URL.
     current_.using_spdy = load_times.wasFetchedViaSpdy;
     current_.iterations++;
-    current_.start_load_time.push(startLoadTime);
-    current_.commit_load_time.push(commitLoadTime);
-    current_.doc_load_time.push(docLoadTime);
-    current_.paint_time.push(paintTime);
-    current_.total_time.push(totalTime);
-    current_.last_load_time.push(lastLoadTime);
+    for (var prop in loggedTimings) {
+      current_[loggedTimings[prop]].push(result[loggedTimings[prop]]);
+    }
     current_.read_bytes_kb.push(bytesRead / 1024);
     current_.write_bytes_kb.push(bytesWrite / 1024);
     current_.num_requests.push(chrome.benchmarking.counter(kRequestCount) -
@@ -372,12 +338,9 @@ function Benchmark(url) {
 
     // Record the aggregate result globally.
     global_counter.iterations++;
-    global_counter.start_load_time += startLoadTime;
-    global_counter.commit_load_time += commitLoadTime;
-    global_counter.doc_load_time += docLoadTime;
-    global_counter.paint_time += paintTime;
-    global_counter.total_time += totalTime;
-    global_counter.last_load_time += lastLoadTime;
+    for (var prop in loggedTimings) {
+      global_counter[loggedTimings[prop]] += result[loggedTimings[prop]];
+    }
     global_counter.read_bytes_kb += (bytesRead / 1024);
     global_counter.write_bytes_kb += (bytesWrite / 1024);
     global_counter.num_requests += (chrome.benchmarking.counter(kRequestCount) -

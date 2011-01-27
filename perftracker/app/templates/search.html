@@ -117,7 +117,6 @@
     </div>
     <div id="filters_template">
       <div id="filter" style="border:1px solid black">
-      Filters:
       <table class="sortable">
         <tr>
           <td>Version</td>
@@ -161,10 +160,13 @@
         <th>URLs</th>
         <th>Iterations</th>
         <th>Start</th>
-        <th>Commit</th>
-        <th>Doc</th>
-        <th>Paint</th>
-        <th>PLT</th>
+        <th>DNS</th>
+        <th>Connect</th>
+        <th>First Byte</th>
+        <th>Last Byte</th>
+        <th>Interactive</th>
+        <th>DCL</th>
+        <th>Load</th>
       </tr>
         <tr jsselect="results">
         <td><span jseval="$val = '/do_view_set?id=' + key"></span><a jsvalues="href:$val" jscontent="date"></a></td>
@@ -174,9 +176,12 @@
         <td class="righttext" jscontent="url_count"></td>
         <td class="righttext" jscontent="iterations"></td>
         <td class="righttext" jscontent="start_load_time"></td>
-        <td class="righttext" jscontent="commit_load_time"></td>
+        <td class="righttext" jscontent="dns_time"></td>
+        <td class="righttext" jscontent="connect_time"></td>
+        <td class="righttext" jscontent="first_byte_time"></td>
+        <td class="righttext" jscontent="last_byte_time"></td>
         <td class="righttext" jscontent="doc_load_time"></td>
-        <td class="righttext" jscontent="paint_time"></td>
+        <td class="righttext" jscontent="dcl_time"></td>
         <td class="righttext" jscontent="total_time"></td>
       </table>
     </div>

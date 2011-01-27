@@ -48,12 +48,14 @@
       <tr><td>Network</td> <td jscontent="data.network.network_type"></td></tr>
       <tr><td># of URLS</td> <td jscontent="url_count"></td></tr>
       <tr><td># of Iterations</td> <td jscontent="iterations"></td></tr>
-      <tr><td>Start Load Time</td><td jscontent="start_load_time"></td></tr>
-      <tr><td>Commit Load Time</td><td jscontent="commit_load_time"></td></tr>
-      <tr><td>Doc Load Time</td><td jscontent="doc_load_time"></td></tr>
-      <tr><td>Paint Time</td><td jscontent="paint_time"></td></tr>
-      <tr><td>Total Time</td><td jscontent="total_time"></td></tr>
-      <tr><td>Last Load Time</td><td jscontent="last_load_time"></td></tr>
+      <tr><td>Fetch Start</td><td jscontent="start_load_time"></td></tr>
+      <tr><td>Root DNS Complete</td><td jscontent="dns_time"></td></tr>
+      <tr><td>Root Connection Established</td><td jscontent="connect_time"></td></tr>
+      <tr><td>Root Doc First Byte Received</td><td jscontent="first_byte_time"></td></tr>
+      <tr><td>Root Doc Last Byte Received</td><td jscontent="last_byte_time"></td></tr>
+      <tr><td>DOM readyState Interactive</td><td jscontent="doc_load_time"></td></tr>
+      <tr><td>DOMContentLoaded Event</td><td jscontent="dcl_time"></td></tr>
+      <tr><td>Load Event</td><td jscontent="total_time"></td></tr>
       </table>
       </div>
 
@@ -63,25 +65,29 @@
         <th>URL</th>
         <th>Iterations</th>
         <th>Start</th>
-        <th>Commit</th>
-        <th>Doc</th>
-        <th>Paint</th>
-        <th>PLT</th>
-        <th>LLT</th>
+        <th>DNS</th>
+        <th>Connect</th>
+        <th>First Byte</th>
+        <th>Last Byte</th>
+        <th>Interactive</th>
+        <th>DCL</th>
+        <th>Load</th>
         <th>stddev</th>
         <th>stderr</th>
-        <th>ci</th>
+        <th>95% ci</th>
       </tr>
         <tr jsselect="summaries">
         <td><span jseval="$val = '/do_view_summary?id=' + key"></span><a jsvalues="href:$val" jscontent="date"></a></td>
         <td><span jscontent="url"></span></td>
         <td class="righttext" jscontent="iterations"></td>
         <td class="righttext" jscontent="start_load_time"></td>
-        <td class="righttext" jscontent="commit_load_time"></td>
+        <td class="righttext" jscontent="dns_time"></td>
+        <td class="righttext" jscontent="connect_time"></td>
+        <td class="righttext" jscontent="first_byte_time"></td>
+        <td class="righttext" jscontent="last_byte_time"></td>
         <td class="righttext" jscontent="doc_load_time"></td>
-        <td class="righttext" jscontent="paint_time"></td>
+        <td class="righttext" jscontent="dcl_time"></td>
         <td class="righttext" jscontent="total_time"></td>
-        <td class="righttext" jscontent="last_load_time"></td>
         <td class="righttext" jseval="val = total_time_stddev.toFixed(1)" jscontent="val"></td>
         <td class="righttext" jseval="$stderr = stderr(total_time_stddev, iterations).toFixed(1)" jscontent="$stderr"></td>
         <td class="righttext" jseval="$ci = ci($stderr); $lo=total_time - $ci; $hi=total_time + $ci; val=$lo.toFixed(1) + ' - ' + $hi.toFixed(1)" jscontent="val"></td>

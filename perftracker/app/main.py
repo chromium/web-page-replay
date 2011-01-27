@@ -27,17 +27,19 @@ from google.appengine.ext import db
 
 def ApplyStatisticsData(request, obj):
     """Applies statistics uploaded via the request to the object."""
-    obj.start_load_time = int(request.get('start_load_time'))
-    obj.commit_load_time = int(request.get('commit_load_time'))
-    obj.doc_load_time = int(request.get('doc_load_time'))
-    obj.paint_time = int(request.get('paint_time'))
-    obj.total_time = int(request.get('total_time'))
-    obj.last_load_time = int(request.get('last_load_time'))
-    obj.num_requests = int(request.get('num_requests'))
-    obj.num_connects = int(request.get('num_connects'))
-    obj.num_sessions = int(request.get('num_sessions'))
-    obj.read_bytes_kb = int(float(request.get('read_bytes_kb')))
-    obj.write_bytes_kb = int(float(request.get('write_bytes_kb')))
+    obj.start_load_time = int(request.get('start_load_time', 0))
+    obj.dns_time = int(request.get('dns_time', 0))
+    obj.connect_time = int(request.get('connect_time', 0))
+    obj.first_byte_time = int(request.get('first_byte_time', 0))
+    obj.last_byte_time = int(request.get('last_byte_time', 0))
+    obj.doc_load_time = int(request.get('doc_load_time', 0))
+    obj.dcl_time = int(request.get('dcl_time', 0))
+    obj.total_time = int(request.get('total_time', 0))
+    obj.num_requests = int(request.get('num_request', 0))
+    obj.num_connects = int(request.get('num_connects', 0))
+    obj.num_sessions = int(request.get('num_sessions', 0))
+    obj.read_bytes_kb = int(float(request.get('read_bytes_kb', 0)))
+    obj.write_bytes_kb = int(float(request.get('write_bytes_kb', 0)))
 
 def BandwidthPrettyString(bandwidth_kbps):
     if bandwidth_kbps >= 1000:
