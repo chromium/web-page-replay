@@ -157,8 +157,17 @@
         graph_data.addColumn('number', lines[i].network_name + " " + lines[i].cpu_name);
       }
 
-      // Sort the versions logically.
       var versions = data.filters.versions;
+
+      // Trim out any custom versions.
+      for (var i = versions.length - 1; i >= 0; i--) {
+        console.log(versions[i])
+	if (versions[i][0].indexOf('custom') >= 0) {
+	  versions.splice(i, 1);
+        }
+      }
+
+      // Sort the versions logically.
       versions = versions.sort(function(a, b) {
         if (a == b) return 0;
         a = a[0].split(" ")[1];  // Trim leading "Chrome "
