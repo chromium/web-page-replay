@@ -35,7 +35,7 @@ def ApplyStatisticsData(request, obj):
     obj.doc_load_time = int(request.get('doc_load_time', 0))
     obj.dcl_time = int(request.get('dcl_time', 0))
     obj.total_time = int(request.get('total_time', 0))
-    obj.num_requests = int(request.get('num_request', 0))
+    obj.num_requests = int(request.get('num_requests', 0))
     obj.num_connects = int(request.get('num_connects', 0))
     obj.num_sessions = int(request.get('num_sessions', 0))
     obj.read_bytes_kb = int(float(request.get('read_bytes_kb', 0)))
