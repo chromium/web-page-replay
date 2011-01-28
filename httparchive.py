@@ -13,14 +13,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""View and edit HTTP Archives.
+
+To list all URLs in an archive:
+  $ ./httparchive.py ls archive.wpr
+
+To view the content of all URLs from example.com:
+  $ ./httparchive.py cat --host example.com archive.wpr
+
+To view the content of a particular URL:
+  $ ./httparchive.py cat --host www.example.com --path /foo archive.wpr
+
+To view the content of all URLs:
+  $ ./httparchive.py cat archive.wpr
+
+To edit a particular URL:
+  $ ./httparchive.py edit --host www.example.com --path /foo archive.wpr
+"""
 
 import cPickle
 import gzip
 import logging
+import optparse
+import os
 import persistentmixin
-import StringIO
-import sys
 import re
+import StringIO
+import subprocess
+import sys
+import tempfile
 import zlib
 
 
@@ -68,11 +89,23 @@ def _InsertScriptAfter(matchobj):
 class HttpArchive(dict, persistentmixin.PersistentMixin):
   """Dict with ArchivedHttpRequest keys and ArchivedHttpResponse values."""
 
-  def debug_str(self):
-    """Return an archive as a string excluding binary data."""
-
-    out = StringIO.StringIO()
+  def get_requests(self, command=None, host=None, path=None):
+    """Yields all requests matching giving params."""
     for request in self.keys():
+      if request.matches(command, host, path):
+        yield request    
+
+  def ls(self, command=None, host=None, path=None):
+    """List all URLs that match given params."""
+    out = StringIO.StringIO()
+    for request in self.get_requests(command, host, path):
+      print >>out, '%s %s%s' % (request.command, request.host, request.path)
+    return out.getvalue()
+
+  def cat(self, command=None, host=None, path=None):
+    """Print the contents of all URLs that match given params."""
+    out = StringIO.StringIO()
+    for request in self.get_requests(command, host, path):
       print >>out, request.command, request.host, request.path
       if request.request_body:
         print >>out, request.request_body
@@ -83,23 +116,36 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       for k, v in sorted(response.headers):
         print >>out, "    %s: %s" % (k, v)
       headers = dict(response.headers)
-      content_type = headers.get('content-type', '')
-      if (content_type.startswith('text/') or
-          content_type == 'application/x-javascript'):
+      body = response.get_body_as_text()
+      if body:
         print >>out, '-' * 70
-        # Concatenate the chunks so we can decompress it.
-        raw_data = ""
-        for item in response.response_data:
-          raw_data += item
-        if headers.get('content-encoding', '') == 'gzip':
-          compressed_response_data = StringIO.StringIO(raw_data)
-          print >>out, gzip.GzipFile(fileobj=compressed_response_data).read()
-        elif headers.get('content-encoding', '') == 'deflate':
-          print >>out, zlib.decompress(raw_data, -zlib.MAX_WBITS)
-        else:
-          print >>out, raw_data
+        print >>out, body
       print >>out, '=' * 70
     return out.getvalue()
+
+  def edit(self, command=None, host=None, path=None):
+    """Edits the single request which matches given params."""
+    editor = os.getenv('EDITOR')
+    if not editor:
+      print 'You must set the EDITOR environmental variable.'
+      return
+
+    matching_requests = [r for r in self.get_requests(command, host, path)]
+    if not matching_requests:
+      print 'Failed to find any requests matching given command, host, path.'
+      return
+
+    if len(matching_requests) > 1:
+      print 'Found multiple matching requests. Please refine.'
+      print self.ls(command, host, path)
+
+    response = self[matching_requests[0]]
+    tmp_file = tempfile.NamedTemporaryFile(delete=False)
+    tmp_file.write(response.get_body_as_text())
+    tmp_file.close()
+    subprocess.check_call([editor, tmp_file.name])
+    response.set_body_text(''.join(open(tmp_file.name).readlines()))
+    os.remove(tmp_file.name)
 
 
 class ArchivedHttpRequest(object):
@@ -117,6 +163,16 @@ class ArchivedHttpRequest(object):
 
   def __eq__(self, other):
     return self.__repr__() == other.__repr__()
+
+  def matches(self, command=None, host=None, path=None):
+    """Returns true iff the request matches all parameters."""
+    if command and command != self.command:
+      return False
+    if host and host != self.host:
+      return False
+    if path and path != self.path:
+      return False
+    return True
 
 
 class ArchivedHttpResponse(object):
@@ -146,21 +202,58 @@ class ArchivedHttpResponse(object):
         self.headers.pop(i)
         return
 
-  def inject_deterministic_script(self):
+  # TODO(tonyg): get_body_as_text/set_body_text destory chunking.
+
+  def get_body_as_text(self):
     content_type = self.get_header('content-type')
-    if not content_type or not content_type.startswith('text/html'):
-      return
+    if (not content_type or 
+        not (content_type.startswith('text/') or
+             content_type == 'application/x-javascript')):
+      return None
 
     # Concatenate the chunks so we can decompress it.
     raw_data = ''.join(self.response_data)
 
     is_gzip = self.get_header('content-encoding') == 'gzip'
     is_deflate = self.get_header('content-encoding') == 'deflate'
+    try:
+      if is_gzip:
+        compressed_data = StringIO.StringIO(raw_data)
+        raw_data = gzip.GzipFile(fileobj=compressed_data).read()
+      elif is_deflate:
+        raw_data = zlib.decompress(raw_data, -zlib.MAX_WBITS)
+    except:
+      logging.warning('Could not decompress')
+      return None
+
+    return raw_data
+
+  def set_body_text(self, raw_data):
+    is_gzip = self.get_header('content-encoding') == 'gzip'
+    is_deflate = self.get_header('content-encoding') == 'deflate'
     if is_gzip:
-      compressed_data = StringIO.StringIO(raw_data)
-      raw_data = gzip.GzipFile(fileobj=compressed_data).read()
+      compressed_response = StringIO.StringIO()
+      gzip.GzipFile(fileobj=compressed_response, mode='w').write(raw_data)
+      raw_data = compressed_response.getvalue()
     elif is_deflate:
-      raw_data = zlib.decompress(raw_data, -zlib.MAX_WBITS)
+      raw_data = zlib.compress(raw_data)  # Discard zlib header+checksum.
+
+    self.response_data = []
+    self.response_data.append(raw_data)
+    self.response_data.append('')  # Append a null chunk
+
+    if not self.get_header('transfer-encoding'):
+      len_raw_data = len(self.response_data[0])
+      self.set_header('content-length', len_raw_data)
+    else:
+      logging.warning('Chunking stripped')
+
+  def inject_deterministic_script(self):
+    content_type = self.get_header('content-type')
+    if not content_type or not content_type.startswith('text/html'):
+      return
+
+    raw_data = self.get_body_as_text()
 
     # First try to insert immediately after <head> then try <html>.
     if raw_data:
@@ -171,23 +264,55 @@ class ArchivedHttpResponse(object):
           logging.debug(raw_data)
           raise
 
-    if is_gzip:
-      compressed_response = StringIO.StringIO()
-      gzip.GzipFile(fileobj=compressed_response, mode='w').write(raw_data)
-      raw_data = compressed_response.getvalue()
-    elif is_deflate:
-      raw_data = zlib.compress(raw_data)#[2:-4]  # Discard zlib header+checksum.
-
-    self.response_data = []
-    self.response_data.append(raw_data)
-    self.response_data.append('')  # Append a null chunk
-
-    if not self.get_header('transfer-encoding'):
-      len_raw_data = len(self.response_data[0])
-      self.set_header('content-length', len_raw_data)
+    self.set_body_text(raw_data)
 
 
 if __name__ == '__main__':
-  wpr_file = sys.argv[1]
-  http_archive = HttpArchive.Create(wpr_file)
-  print http_archive.debug_str()
+  class PlainHelpFormatter(optparse.IndentedHelpFormatter):
+    def format_description(self, description):
+      if description:
+        return description + '\n'
+      else:
+        return ''
+
+  option_parser = optparse.OptionParser(
+      usage='%prog [ls|cat|edit] [options] replay_file',
+      formatter=PlainHelpFormatter(),
+      description=__doc__,
+      epilog='http://code.google.com/p/web-page-replay/')
+
+  option_parser.add_option('-c', '--command', default=None,
+      action='store',
+      type='string',
+      help='Only show URLs matching this command.')
+  option_parser.add_option('-o', '--host', default=None,
+      action='store',
+      type='string',
+      help='Only show URLs matching this host.')
+  option_parser.add_option('-p', '--path', default=None,
+      action='store',
+      type='string',
+      help='Only show URLs matching this path.')
+
+  options, args = option_parser.parse_args()
+
+  if len(args) != 2:
+    print 'args: %s' % args
+    option_parser.error('Must specify a command and replay_file')
+
+  command = args[0]
+  replay_file = args[1]
+
+  if not os.path.exists(replay_file):
+    option_parser.error('Replay file "%s" does not exist' % replay_file)
+
+  http_archive = HttpArchive.Create(replay_file)
+  if command == 'ls':
+    print http_archive.ls(options.command, options.host, options.path)
+  elif command == 'cat':
+    print http_archive.cat(options.command, options.host, options.path)
+  elif command == 'edit':
+    http_archive.edit(options.command, options.host, options.path)
+    http_archive.Persist(replay_file)
+  else:
+    option_parser.error('Unknown command "%s"' % command)
