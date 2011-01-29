@@ -36,17 +36,11 @@
     function drawChart(results) {
       var graph_data = new google.visualization.DataTable();
       graph_data.addColumn('string', 'URL');
-      graph_data.addColumn('number', 'Last byte');
       graph_data.addColumn('number', 'Paint');
-      graph_data.addColumn('number', 'Interactive');
-      graph_data.addColumn('number', 'DCL');
       graph_data.addColumn('number', 'Load');
       for (var i = 0; i < results.length; ++i) {
         graph_data.addRow([results[i].url,
-                           results[i].last_byte_time,
                            results[i].paint_time,
-                           results[i].doc_load_time,
-                           results[i].dcl_time,
                            results[i].total_time,
                           ]);
       }
@@ -65,13 +59,15 @@
                                });
         google.visualization.events.addListener(chart, 'onmouseover', function(e) {
           var tr = document.getElementById('data').rows[e.row+1];
-          var td = tr.cells[e.column+6];
+          var col = e.column == 1 ? 8 : 11;
+          var td = tr.cells[col];
           tr.style.backgroundColor = "#ffe87c";
           td.style.backgroundColor = "#fbb117";
         });
         google.visualization.events.addListener(chart, 'onmouseout', function(e) {
           var tr = document.getElementById('data').rows[e.row+1];
-          var td = tr.cells[e.column+6];
+          var col = e.column == 1 ? 8 : 11;
+          var td = tr.cells[col];
           tr.style.backgroundColor = "";
           td.style.backgroundColor = "";
         });
@@ -113,7 +109,7 @@
       </table>
       </div>
 
-      <div id="chart_div" style="width:800px;height:240px"></div>
+      <div id="chart_div" style="width:1024px;height:240px"></div>
 
       <table class="sortable" id="data">
       <tr>
