@@ -34,21 +34,20 @@
     google.load('visualization', '1', {'packages':['corechart']});
 
     function drawChart(results) {
-console.log(results)
       var graph_data = new google.visualization.DataTable();
       graph_data.addColumn('string', 'URL');
-      graph_data.addColumn('number', 'Load');
-      graph_data.addColumn('number', 'DCL');
-      graph_data.addColumn('number', 'Interactive');
-      graph_data.addColumn('number', 'Paint');
       graph_data.addColumn('number', 'Last byte');
+      graph_data.addColumn('number', 'Paint');
+      graph_data.addColumn('number', 'Interactive');
+      graph_data.addColumn('number', 'DCL');
+      graph_data.addColumn('number', 'Load');
       for (var i = 0; i < results.length; ++i) {
         graph_data.addRow([results[i].url,
-                           results[i].total_time,
-                           results[i].dcl_time,
-                           results[i].doc_load_time,
-                           results[i].paint_time,
                            results[i].last_byte_time,
+                           results[i].paint_time,
+                           results[i].doc_load_time,
+                           results[i].dcl_time,
+                           results[i].total_time,
                           ]);
       }
 
@@ -66,11 +65,15 @@ console.log(results)
                                });
         google.visualization.events.addListener(chart, 'onmouseover', function(e) {
           var tr = document.getElementById('data').rows[e.row+1];
-          tr.style.backgroundColor = "yellow";
+          var td = tr.cells[e.column+6];
+          tr.style.backgroundColor = "#ffe87c";
+          td.style.backgroundColor = "#fbb117";
         });
         google.visualization.events.addListener(chart, 'onmouseout', function(e) {
           var tr = document.getElementById('data').rows[e.row+1];
+          var td = tr.cells[e.column+6];
           tr.style.backgroundColor = "";
+          td.style.backgroundColor = "";
         });
 
       } else {

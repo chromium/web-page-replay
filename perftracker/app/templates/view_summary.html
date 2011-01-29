@@ -83,11 +83,15 @@
                                });
         google.visualization.events.addListener(chart, 'onmouseover', function(e) {
           var tr = document.getElementById('data').rows[e.row+1];
-          tr.style.backgroundColor = "yellow";
+          var td = tr.cells[11-e.column];
+          tr.style.backgroundColor = "#ffe87c";
+          td.style.backgroundColor = "#fbb117";
         });
         google.visualization.events.addListener(chart, 'onmouseout', function(e) {
           var tr = document.getElementById('data').rows[e.row+1];
+          var td = tr.cells[11-e.column];
           tr.style.backgroundColor = "";
+          td.style.backgroundColor = "";
         });
 
       } else {
