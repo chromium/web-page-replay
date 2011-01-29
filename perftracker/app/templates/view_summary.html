@@ -57,12 +57,14 @@
       graph_data.addColumn('number', 'Load');
       graph_data.addColumn('number', 'DCL');
       graph_data.addColumn('number', 'Interactive');
+      graph_data.addColumn('number', 'Paint');
       graph_data.addColumn('number', 'Last byte');
       graph_data.addColumn('number', 'First byte');
       for (var i = 0; i < results.length; ++i) {
         graph_data.addRow([results[i].total_time,
                           results[i].dcl_time,
                           results[i].doc_load_time,
+                          results[i].paint_time,
                           results[i].last_byte_time,
                           results[i].first_byte_time,
                           ]);
@@ -111,6 +113,7 @@
       <tr><td>Root Connection Established</td><td jscontent="connect_time"></td></tr>
       <tr><td>Root Doc First Byte Received</td><td jscontent="first_byte_time"></td></tr>
       <tr><td>Root Doc Last Byte Received</td><td jscontent="last_byte_time"></td></tr>
+      <tr><td>First paint</td><td jscontent="paint_time"></td></tr>
       <tr><td>DOM readyState Interactive</td><td jscontent="doc_load_time"></td></tr>
       <tr><td>DOMContentLoaded Event</td><td jscontent="dcl_time"></td></tr>
       <tr><td>Load Event</td><td jscontent="total_time"></td></tr>
@@ -128,6 +131,7 @@
         <th>Connect</th>
         <th>First Byte</th>
         <th>Last Byte</th>
+        <th>Paint</th>
         <th>Interactive</th>
         <th>DCL</th>
         <th>Load</th>
@@ -145,6 +149,7 @@
         <td class="righttext" jscontent="connect_time"></td>
         <td class="righttext" jscontent="first_byte_time"></td>
         <td class="righttext" jscontent="last_byte_time"></td>
+        <td class="righttext" jscontent="paint_time"></td>
         <td class="righttext" jscontent="doc_load_time"></td>
         <td class="righttext" jscontent="dcl_time"></td>
         <td class="righttext" jscontent="total_time"></td>

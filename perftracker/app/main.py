@@ -32,6 +32,7 @@ def ApplyStatisticsData(request, obj):
     obj.connect_time = max(int(request.get('connect_time', 0)), 0)
     obj.first_byte_time = max(int(request.get('first_byte_time', 0)), 0)
     obj.last_byte_time = max(int(request.get('last_byte_time', 0)), 0)
+    obj.paint_time = max(int(request.get('paint_time', 0)), 0)
     obj.doc_load_time = max(int(request.get('doc_load_time', 0)), 0)
     obj.dcl_time = max(int(request.get('dcl_time', 0)), 0)
     obj.total_time = max(int(request.get('total_time', 0)), 0)
