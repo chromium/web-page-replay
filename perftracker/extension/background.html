@@ -89,6 +89,7 @@ global_counter.iterations = 0;
 for (var prop in loggedTimings) {
   global_counter[loggedTimings[prop]] = 0;
 }
+global_counter.paint_time = 0;
 global_counter.read_bytes_kb = 0;
 global_counter.write_bytes_kb = 0;
 global_counter.num_requests = 0;
@@ -114,6 +115,7 @@ function Benchmark(url) {
   for (var prop in loggedTimings) {
     current_[loggedTimings[prop]] = [];
   }
+  current_.paint_time = [];
   current_.read_bytes_kb = [];
   current_.write_bytes_kb = [];
   current_.num_requests = [];
@@ -306,6 +308,7 @@ function Benchmark(url) {
     for (var prop in loggedTimings) {
       result[loggedTimings[prop]] = timing[prop] - baseTime;
     }
+    result.paint_time = load_times.firstPaintTime ? Math.round((1000.0 * load_times.firstPaintTime) - baseTime) : 0;
     result.url = current_.url;
     result.using_spdy = load_times.wasFetchedViaSpdy;
     var bytesRead = chrome.benchmarking.counter(kTCPReadBytes) -
@@ -322,33 +325,29 @@ function Benchmark(url) {
         initialSpdySessionCount_;
 
     // Record the aggregate result for this URL.
-    current_.using_spdy = load_times.wasFetchedViaSpdy;
     current_.iterations++;
     for (var prop in loggedTimings) {
       current_[loggedTimings[prop]].push(result[loggedTimings[prop]]);
     }
-    current_.read_bytes_kb.push(bytesRead / 1024);
-    current_.write_bytes_kb.push(bytesWrite / 1024);
-    current_.num_requests.push(chrome.benchmarking.counter(kRequestCount) -
-        initialRequestCount_);
-    current_.num_connects.push(chrome.benchmarking.counter(kConnectCount) -
-        initialConnectCount_);
-    current_.num_sessions.push(chrome.benchmarking.counter(kSpdySessionCount) -
-        initialSpdySessionCount_);
+    current_.paint_time.push(result.paint_time);
+    current_.using_spdy = result.using_spdy;
+    current_.read_bytes_kb.push(result.read_bytes_kb);
+    current_.write_bytes_kb.push(result.write_bytes_kb);
+    current_.num_requests.push(result.num_requests);
+    current_.num_connects.push(result.num_connects);
+    current_.num_sessions.push(result.num_sessions);
 
     // Record the aggregate result globally.
     global_counter.iterations++;
     for (var prop in loggedTimings) {
       global_counter[loggedTimings[prop]] += result[loggedTimings[prop]];
     }
-    global_counter.read_bytes_kb += (bytesRead / 1024);
-    global_counter.write_bytes_kb += (bytesWrite / 1024);
-    global_counter.num_requests += (chrome.benchmarking.counter(kRequestCount) -
-                         initialRequestCount_);
-    global_counter.num_connects += (chrome.benchmarking.counter(kConnectCount) -
-                         initialConnectCount_);
-    global_counter.num_sessions += (chrome.benchmarking.counter(kSpdySessionCount) -
-                         initialSpdySessionCount_);
+    global_counter.paint_time += result.paint_time;
+    global_counter.read_bytes_kb += result.read_bytes_kb;
+    global_counter.write_bytes_kb += result.write_bytes_kb;
+    global_counter.num_requests += result.num_requests;
+    global_counter.num_connects += result.num_connects;
+    global_counter.num_sessions += result.num_sessions;
 
     // Submit the result.
     window.submitter.PostResult(result, function(response) {
