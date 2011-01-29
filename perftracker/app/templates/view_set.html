@@ -6,6 +6,7 @@
   <script src="jst/util.js" type="text/javascript"></script>
   <script src="jst/jsevalcontext.js" type="text/javascript"></script>
   <script src="jst/jstemplate.js" type="text/javascript"></script>
+  <script type="text/javascript" src="https://www.google.com/jsapi"></script>
   </head>
 
   <body onLoad="loadData()">
@@ -26,7 +27,55 @@
         var context = new JsEvalContext(data);
         var template = document.getElementById("template");
         jstProcess(context, template);
+        drawChart(data.summaries);
       });
+    }
+    // http://code.google.com/apis/visualization/documentation/gallery/columnchart.html
+    google.load('visualization', '1', {'packages':['corechart']});
+
+    function drawChart(results) {
+console.log(results)
+      var graph_data = new google.visualization.DataTable();
+      graph_data.addColumn('string', 'URL');
+      graph_data.addColumn('number', 'Load');
+      graph_data.addColumn('number', 'DCL');
+      graph_data.addColumn('number', 'Interactive');
+      graph_data.addColumn('number', 'Paint');
+      graph_data.addColumn('number', 'Last byte');
+      for (var i = 0; i < results.length; ++i) {
+        graph_data.addRow([results[i].url,
+                           results[i].total_time,
+                           results[i].dcl_time,
+                           results[i].doc_load_time,
+                           results[i].paint_time,
+                           results[i].last_byte_time,
+                          ]);
+      }
+
+      var chart_div = document.getElementById('chart_div');
+      if (graph_data.getNumberOfRows()) {
+        var chart = new google.visualization.ColumnChart(chart_div);
+        chart.draw(graph_data, {displayAnnotations: true,
+                                legend: 'bottom',
+                                hAxis: {
+                                  title: "URL"
+                                },
+                                vAxis: {
+                                  title: "ms"
+                                },
+                               });
+        google.visualization.events.addListener(chart, 'onmouseover', function(e) {
+          var tr = document.getElementById('data').rows[e.row+1];
+          tr.style.backgroundColor = "yellow";
+        });
+        google.visualization.events.addListener(chart, 'onmouseout', function(e) {
+          var tr = document.getElementById('data').rows[e.row+1];
+          tr.style.backgroundColor = "";
+        });
+
+      } else {
+        chart_div.innerHTML = "No data";
+      }
     }
     </script>
 
@@ -61,7 +110,9 @@
       </table>
       </div>
 
-      <table class="sortable">
+      <div id="chart_div" style="width:800px;height:240px"></div>
+
+      <table class="sortable" id="data">
       <tr>
         <th>Date</th>
         <th>URL</th>
@@ -79,7 +130,7 @@
         <th>stderr</th>
         <th>95% ci</th>
       </tr>
-        <tr jsselect="summaries">
+      <tr jsselect="summaries">
         <td><span jseval="$val = '/do_view_summary?id=' + key"></span><a jsvalues="href:$val" jscontent="date"></a></td>
         <td><span jscontent="url"></span></td>
         <td class="righttext" jscontent="iterations"></td>
