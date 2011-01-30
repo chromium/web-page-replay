@@ -7,7 +7,7 @@
 window.iterations = 10;
 window.interval = 300;
 window.loadCheck = 0;
-window.timeout = 20000;  // Kill page after 20s.
+window.timeout = 15000;  // Max ms before killing page.
 window.maxLoadChecks = Math.round(window.timeout / window.interval);
 window.clearConnections = true;
 window.clearCache = true;
