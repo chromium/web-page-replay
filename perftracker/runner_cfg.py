@@ -54,7 +54,7 @@ ssl = {
 #
 # Number of times to load each URL for each network.
 #
-iterations = 20
+iterations = 15
 
 #
 # The configuration to use in the runner
