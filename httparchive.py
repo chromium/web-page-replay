@@ -90,10 +90,8 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
   """Dict with ArchivedHttpRequest keys and ArchivedHttpResponse values."""
 
   def get_requests(self, command=None, host=None, path=None):
-    """Yields all requests matching giving params."""
-    for request in self.keys():
-      if request.matches(command, host, path):
-        yield request    
+    """Retruns a list of all requests matching giving params."""
+    return [r for r in self if r.matches(command, host, path)]
 
   def ls(self, command=None, host=None, path=None):
     """List all URLs that match given params."""
@@ -130,7 +128,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       print 'You must set the EDITOR environmental variable.'
       return
 
-    matching_requests = [r for r in self.get_requests(command, host, path)]
+    matching_requests = self.get_requests(command, host, path)
     if not matching_requests:
       print 'Failed to find any requests matching given command, host, path.'
       return
@@ -166,13 +164,9 @@ class ArchivedHttpRequest(object):
 
   def matches(self, command=None, host=None, path=None):
     """Returns true iff the request matches all parameters."""
-    if command and command != self.command:
-      return False
-    if host and host != self.host:
-      return False
-    if path and path != self.path:
-      return False
-    return True
+    return ((command is None or command == self.command) and
+            (host is None or host == self.host) and
+            (path is None or path == self.path))
 
 
 class ArchivedHttpResponse(object):
