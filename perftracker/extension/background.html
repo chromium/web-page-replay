@@ -139,6 +139,7 @@ function Benchmark(url) {
   }
 
   this.abortPageLoad = function() {
+    console.log("running abortPageLoad for: " + me_.url());
     me_.pageFinished();
   }
 
@@ -197,10 +198,25 @@ function Benchmark(url) {
     var benchmark = currentBenchmark();
     console.log("openNextPage called. current = " + benchmark.url());
     benchmark.pageStart();
+
+    // We don't trust the tab creation to succeed, so start a timer
+    // that is cleared when the tab is created.
+    var hangTimer = setTimeout(function() {
+      // It is unlikely but possible for this to get enqueued after
+      // create tabs completes. In this case, loadCheck will have
+      // been cleared, but checkForLoad will not have fired yet.
+      // So, bail out if loadCheck is zero.
+      if (!window.loadCheck) return;
+
+      console.log("chrome.tabs.create failed for " + benchmark.url());
+      benchmark.abortPageLoad();
+    }, window.timeout);
+
     chrome.tabs.create({"url": benchmark.url(),
                         "selected": true
                        },
                        function(tab) {
+                         clearTimeout(hangTimer);
                          benchmarkWindow = tab;
                          console.log("Created benchmark tab: " + tab.id);
                          window.loadCheck = 0;
