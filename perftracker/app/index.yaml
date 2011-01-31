@@ -24,6 +24,21 @@ indexes:
 
 - kind: TestSet
   properties:
+  - name: cpu
+  - name: network
+  - name: version
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
+  - name: cpu
+  - name: version
+  - name: date
+    direction: desc
+
+- kind: TestSet
+  properties:
   - name: network
   - name: date
     direction: desc
@@ -63,11 +78,3 @@ indexes:
   - name: set
   - name: date
     direction: desc
-
-- kind: TestSet
-  properties:
-  - name: cpu
-  - name: version
-  - name: date
-    direction: desc
-
