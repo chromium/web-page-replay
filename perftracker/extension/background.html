@@ -44,6 +44,7 @@ var benchmarkWindow = 0;
 
 function CHECK(expr, comment) {
   if (!expr) {
+    console.log(comment);
     alert(comment);
   }
 }
@@ -140,6 +141,7 @@ function Benchmark(url) {
 
   this.abortPageLoad = function() {
     console.log("running abortPageLoad for: " + me_.url());
+    isActive_ = false;
     me_.pageFinished();
   }
 
