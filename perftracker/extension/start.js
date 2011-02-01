@@ -20,8 +20,11 @@ function TryStart() {
     port.postMessage({message: 'start', benchmark: json});
   }
   catch(err) {
-    console.log("TryStart retring after exception: " + err);
+    console.log("TryStart retrying after exception: " + err);
     setTimeout(TryStart, 1000);
+    // TODO(mbelshe): remove me!  This is for debugging.
+    console.log("Body is: " + document.body.innerHTML);
+    return;
   }
 
   var status_element = document.getElementById('status');
