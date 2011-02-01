@@ -118,7 +118,7 @@ networks += [
   ]
 ]
 
-# Vary packet loss rate against a slow network.
+# Packet loss and a slow network.
 networks += [
   {
     'bandwidth_kbps': {
@@ -126,11 +126,10 @@ networks += [
       'up': 400,
     },
     'round_trip_time_ms': 40,
-    'packet_loss_percent': packet_losses,
+    'packet_loss_percent': 1,
     'protocol': protocols,
   }
   for protocols in ['http', 'spdy']
-  for packet_losses in [1, 2]
 ]
 
 #
