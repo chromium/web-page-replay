@@ -43,6 +43,13 @@ div#header p {
   display: inline;
 }
 
+div#footer {
+  color: #666;
+  font-size: 84%;
+  margin-top: 2em;
+  text-align: center;
+}
+
 .righttext {
   text-align: right;
 }
