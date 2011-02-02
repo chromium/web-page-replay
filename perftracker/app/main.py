@@ -94,15 +94,15 @@ class JSONDataPage(BaseRequestHandler):
         networks = self.request.get("networks_filter")
         if networks:
             query.filter("network IN ",
-                [db.Key.from_path('Network', int(k)) for k in networks.split(",")])
+                [db.Key.from_path('Network', int(k)) for k in set(networks.split(","))])
         versions = self.request.get("version_filter")
         if versions:
             query.filter("version IN ",
-                [db.Key.from_path('Version', int(k)) for k in versions.split(",")])
+                [db.Key.from_path('Version', int(k)) for k in set(versions.split(","))])
         cpus = self.request.get("cpus_filter")
         if cpus:
             query.filter("cpu IN ",
-                [db.Key.from_path('Cpu', int(k)) for k in cpus.split(",")])
+                [db.Key.from_path('Cpu', int(k)) for k in set(cpus.split(","))])
         if self.request.get("set_id"):
             test_set = models.TestSet.get_by_id(int(self.request.get("set_id")))
             results = test_set.summaries
