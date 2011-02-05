@@ -1,0 +1,190 @@
+<html>
+  <head>
+  <title>Chromium Perf Tracker</title>
+  <link rel="stylesheet" href="styles/style.css">
+  <script src="scripts/util.js"></script>
+  <script src="jst/util.js" type="text/javascript"></script>
+  <script src="jst/jsevalcontext.js" type="text/javascript"></script>
+  <script src="jst/jstemplate.js" type="text/javascript"></script>
+  <script type="text/javascript" src="https://www.google.com/jsapi"></script>
+  </head>
+
+  <body onload="loadData()">
+    <h1><div id="header">Chromium Page Tracker View Test Set</div></h1>
+
+    <script>
+    var datas = [];
+
+    function getName(allObjs, obj) {
+      var date = obj.obj.date;
+      var cpu = obj.cpu.cpu;
+      var network = obj.network.network_type;
+      var notes = obj.obj.notes;
+      var use_date = false;
+      var use_cpu = false;
+      var use_network = false;
+      var use_notes = false;
+      for (var i = 0; i < allObjs.length; i++) {
+        use_date |= date != allObjs[i].obj.date;
+        use_cpu |= cpu != allObjs[i].cpu.cpu;
+        use_network |= network != allObjs[i].network.network_type;
+        use_notes |= notes != allObjs[i].obj.notes;
+      }
+      var parts = [];
+      if (use_date) parts.push(date);
+      if (use_cpu) parts.push(cpu);
+      if (use_network) parts.push(network);
+      if (use_notes) parts.push(notes);
+      return parts.join(' ');
+    }
+
+    function loadData() {
+      var baseUrl = "/json?type=set";
+      var set_ids = location.queryString()["id"];
+      if (set_ids == undefined) {
+        alert("missing id=");
+        return;
+      }
+      set_ids = set_ids.split(",");
+      for (var i = 0; i < set_ids.length; i++) {
+        var url = baseUrl + "&id=" + set_ids[i];
+        new XHRGet(url, function(result) {
+          datas.push(JSON.parse(result));
+	  if (datas.length == set_ids.length) {
+	    var cols = [];
+	    var rows = [];
+
+            cols.push('URL');
+            for (var i = 0; i < datas.length; i++) {
+              var result = datas[i];
+              cols.push(getName(datas, result));
+              for (var j = 0; j < result.summaries.length; j++) {
+                if (j >= rows.length) rows[j] = [result.summaries[j].url];
+
+		// TODO(tonyg): Do something smarter here to allow comparison
+		// of partially overlapping sets.
+		if (result.summaries[j].url != rows[j][0])
+		  alert("Cannot compare sets of different URLs");
+                rows[j].push(result.summaries[j].total_time);
+              }
+            }
+            drawTables(cols, rows);
+            drawCharts(cols, rows);
+          }
+        });
+      }
+    }
+
+    function drawCharts(cols, rows) {
+      drawChart(cols, rows, 'total_time', 'Load');
+    }
+
+    function drawTables(cols, rows) {
+      // TODO(tonyg): Populate min/max/avg/med.
+      var stats = [];
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+	for (var j = 0; j < row.length; j++) {
+          if (!stats[j]) stats[j] = [];
+          stats[j].push(row[j]);
+        }
+      }
+      console.log(stats)
+
+      var context = new JsEvalContext({
+        cols: cols,
+        rows: rows,
+      });
+      var template = document.getElementById("template");
+      jstProcess(context, template);
+    }
+
+    // http://code.google.com/apis/visualization/documentation/gallery/columnchart.html
+    google.load('visualization', '1', {'packages':['corechart']});
+
+    function drawChart(cols, rows, field, display) {
+      var graph_data = new google.visualization.DataTable();
+      for (var i = 0; i < cols.length; i++) {
+	if (i == 0)
+          graph_data.addColumn('string', cols[i]);
+        else
+          graph_data.addColumn('number', cols[i]);
+      }
+      for (var i = 0; i < rows.length; i++) {
+        graph_data.addRow(rows[i]);
+      }
+
+      var chart_div = document.getElementById('chart_div');
+      if (graph_data.getNumberOfRows()) {
+        var chart = new google.visualization.ColumnChart(chart_div);
+        chart.draw(graph_data, {displayAnnotations: true,
+                                legend: 'bottom',
+			        title: display,
+                                hAxis: {
+                                  title: "URL"
+                                },
+                                vAxis: {
+                                  title: "ms"
+                                },
+                               });
+        google.visualization.events.addListener(chart, 'onmouseover', function(e) {
+          var tr = document.getElementById('data').rows[e.row+1];
+          var td = tr.cells[e.column+1];
+          tr.style.backgroundColor = "#ffe87c";
+          td.style.backgroundColor = "#fbb117";
+        });
+        google.visualization.events.addListener(chart, 'onmouseout', function(e) {
+          var tr = document.getElementById('data').rows[e.row+1];
+          var td = tr.cells[e.column+1];
+          tr.style.backgroundColor = "";
+          td.style.backgroundColor = "";
+        });
+
+      } else {
+        chart_div.innerHTML = "No data";
+      }
+    }
+    </script>
+
+    <div id="template">
+      <div id="chart_div" style="width:1024px;height:240px"></div>
+
+      <table class="sortable" id="data">
+      <tr>
+        <th jsselect="cols"><span jscontent="$this"></span></th>
+        <th>Delta</th>
+        <th>Percent</th>
+      </tr>
+      <tr jsselect="rows" jseval="$delta = $this[2] - $this[1]">
+	<td jsselect="summaries"><span jscontent="total_time"></span></td>
+        <!-- TODO(tonyg): Link to details page here. -->
+        <td jscontent="$this[0]"></td>
+        <td class="righttext" jscontent="$this[1]"></td>
+        <td class="righttext" jscontent="$this[2]"></td>
+        <td class="righttext" jscontent="$delta" jsvalues=".style.color:$delta < 0 ? 'red' : 'black'"></td>
+        <td class="righttext" jscontent="Math.round(10000 * $delta / $this[2]) / 100 + '%'" jsvalues=".style.color:$delta < 0 ? 'red' : 'black'"></td>
+      </tr>
+      <tr style="font-weight:bold">
+        <td>Min</td>
+        <td class="righttext"></td>
+        <td class="righttext"></td>
+        <td class="righttext"></td>
+        <td class="righttext"></td>
+      </tr>
+      <tr style="font-weight:bold">
+        <td>Max</td>
+      </tr>
+      <tr style="font-weight:bold">
+        <td>Average</td>
+      </tr>
+      <tr style="font-weight:bold">
+        <td>Median</td>
+      </tr>
+      </table>
+    </div>
+    <div id="footer">
+      &copy;2011 Google - <a href="http://code.google.com/p/web-page-replay/wiki/ChromeBenchmarkMetrics">Metric definitions</a> | <a href="http://code.google.com/p/web-page-replay/wiki/ChromeBenchmark">Running the benchmark</a><br>
+      Powered by <a href="http://code.google.com/p/web-page-replay/">Web Page Replay</a>
+    </div>
+  </body>
+</html>

@@ -151,6 +151,7 @@
     <div id='chart_div' style='width: 700px; height: 240px;'></div>
 
     <div id="data_template">
+      <form method="GET" action="/do_compare_set">
       <table class="sortable">
       <tr>
         <th>Date</th>
@@ -168,6 +169,7 @@
         <th>Interactive</th>
         <th>DCL</th>
         <th>Load</th>
+        <th><a href="#" onclick="document.forms[0].submit()">Compare</a></th>
       </tr>
         <tr jsselect="results">
         <td><span jseval="$val = '/do_view_set?id=' + key"></span><a jsvalues="href:$val" jscontent="date"></a></td>
@@ -185,7 +187,9 @@
         <td class="righttext" jscontent="doc_load_time"></td>
         <td class="righttext" jscontent="dcl_time"></td>
         <td class="righttext" jscontent="total_time"></td>
+        <td class="righttext"><input type="checkbox" name="id" jsvalues="value:key"></td>
       </table>
+      </form>
     </div>
     <div id="footer">
       &copy;2011 Google - <a href="http://code.google.com/p/web-page-replay/wiki/ChromeBenchmarkMetrics">Metric definitions</a> | <a href="http://code.google.com/p/web-page-replay/wiki/ChromeBenchmark">Running the benchmark</a><br>

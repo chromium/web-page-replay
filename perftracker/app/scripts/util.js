@@ -28,6 +28,27 @@ Array.prototype.mode = function () {
   return maxIndex;
 }
 
+Array.prototype.max = function() {
+  return Math.max.apply(Math, this);
+};
+
+Array.prototype.min = function() {
+  return Math.min.apply(Math, this);
+};
+
+Array.prototype.sum = function() {
+  var sum = 0;
+  for (var i = this.length - 1; i >= 0; i--) {
+    sum += this[i];
+  }
+  return sum;
+};
+
+Array.prototype.average = function() {
+  if (!this.length) return 0;
+  this.sum() / this.length;
+};
+
 window.location.queryString = function() {
   var result = {};
   var raw_string = decodeURI(location.search);
@@ -41,7 +62,10 @@ window.location.queryString = function() {
   var name_values = raw_string.split("&");
   for (var i = 0; i < name_values.length; ++i) {
     var elts = name_values[i].split('=');
-    result[elts[0]] = elts[1];
+    if (result[elts[0]])
+      result[elts[0]] += "," + elts[1];
+    else
+      result[elts[0]] = elts[1];
   }
 
   return result;
