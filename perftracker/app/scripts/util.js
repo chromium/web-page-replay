@@ -46,7 +46,29 @@ Array.prototype.sum = function() {
 
 Array.prototype.average = function() {
   if (!this.length) return 0;
-  this.sum() / this.length;
+  return this.sum() / this.length;
+};
+
+Array.prototype.median = function() {
+  if (!this.length) return 0;
+  var sorted = this.sort();
+  var lower = sorted[(sorted.length + 1) / 2 - 1];
+  if (sorted.length == 1) {
+    return sorted[0];
+  } else if (sorted.length % 2) {
+    return lower;
+  } else {
+    var upper = sorted[(sorted.length + 1) / 2];
+    return (lower + upper) / 2;
+  }
+};
+
+Array.prototype.clone = function() {
+  var newArr = [];
+  for (var i = 0; i < this.length; i++) {
+    newArr.push(this[i]);
+  }
+  return newArr;
 };
 
 window.location.queryString = function() {

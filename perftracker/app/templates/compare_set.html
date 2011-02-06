@@ -50,9 +50,9 @@
         var url = baseUrl + "&id=" + set_ids[i];
         new XHRGet(url, function(result) {
           datas.push(JSON.parse(result));
-	  if (datas.length == set_ids.length) {
-	    var cols = [];
-	    var rows = [];
+	      if (datas.length == set_ids.length) {
+            var cols = [];
+            var rows = [];
 
             cols.push('URL');
             for (var i = 0; i < datas.length; i++) {
@@ -61,10 +61,10 @@
               for (var j = 0; j < result.summaries.length; j++) {
                 if (j >= rows.length) rows[j] = [result.summaries[j].url];
 
-		// TODO(tonyg): Do something smarter here to allow comparison
-		// of partially overlapping sets.
-		if (result.summaries[j].url != rows[j][0])
-		  alert("Cannot compare sets of different URLs");
+                // TODO(tonyg): Do something smarter here to allow comparison
+                // of partially overlapping sets.
+                if (result.summaries[j].url != rows[j][0])
+                  alert("Cannot compare sets of different URLs");
                 rows[j].push(result.summaries[j].total_time);
               }
             }
@@ -80,20 +80,36 @@
     }
 
     function drawTables(cols, rows) {
-      // TODO(tonyg): Populate min/max/avg/med.
       var stats = [];
       for (var i = 0; i < rows.length; i++) {
         var row = rows[i];
-	for (var j = 0; j < row.length; j++) {
+        for (var j = 0; j < row.length; j++) {
           if (!stats[j]) stats[j] = [];
           stats[j].push(row[j]);
         }
       }
-      console.log(stats)
+
+      var rowsWithStats = rows.clone();
+      if (rows.length > 1) {
+        var mins = ["Min"];
+        var maxs = ["Max"];
+        var avgs = ["Average"];
+        var meds = ["Medians"];
+        for (var i = 1; i < stats.length; i++) {
+          mins.push(stats[i].min());
+          maxs.push(stats[i].max());
+          avgs.push(stats[i].average());
+          meds.push(stats[i].median());
+        }
+        rowsWithStats.push(mins);
+        rowsWithStats.push(maxs);
+        rowsWithStats.push(avgs);
+        rowsWithStats.push(meds);
+      }
 
       var context = new JsEvalContext({
         cols: cols,
-        rows: rows,
+        rows: rowsWithStats,
       });
       var template = document.getElementById("template");
       jstProcess(context, template);
@@ -105,7 +121,7 @@
     function drawChart(cols, rows, field, display) {
       var graph_data = new google.visualization.DataTable();
       for (var i = 0; i < cols.length; i++) {
-	if (i == 0)
+      if (i == 0)
           graph_data.addColumn('string', cols[i]);
         else
           graph_data.addColumn('number', cols[i]);
@@ -119,7 +135,7 @@
         var chart = new google.visualization.ColumnChart(chart_div);
         chart.draw(graph_data, {displayAnnotations: true,
                                 legend: 'bottom',
-			        title: display,
+                                title: display,
                                 hAxis: {
                                   title: "URL"
                                 },
@@ -155,30 +171,12 @@
         <th>Delta</th>
         <th>Percent</th>
       </tr>
-      <tr jsselect="rows" jseval="$delta = $this[2] - $this[1]">
-	<td jsselect="summaries"><span jscontent="total_time"></span></td>
-        <!-- TODO(tonyg): Link to details page here. -->
-        <td jscontent="$this[0]"></td>
-        <td class="righttext" jscontent="$this[1]"></td>
-        <td class="righttext" jscontent="$this[2]"></td>
+      <tr jsselect="rows" jseval="$delta = $this[2] - $this[1]" jsvalues=".style.fontWeight:$this[0].indexOf('http:') ? 'bold' : 'normal'">
+        <td jsselect="summaries"><span jscontent="total_time"></span></td>
+        <!-- TODO(tonyg): Link to details page for each URL. -->
+        <td jsselect="$this" jsvalues="class:$index > 0 ? 'righttext' : ''"><span jscontent="$this"></span></td>
         <td class="righttext" jscontent="$delta" jsvalues=".style.color:$delta < 0 ? 'red' : 'black'"></td>
         <td class="righttext" jscontent="Math.round(10000 * $delta / $this[2]) / 100 + '%'" jsvalues=".style.color:$delta < 0 ? 'red' : 'black'"></td>
-      </tr>
-      <tr style="font-weight:bold">
-        <td>Min</td>
-        <td class="righttext"></td>
-        <td class="righttext"></td>
-        <td class="righttext"></td>
-        <td class="righttext"></td>
-      </tr>
-      <tr style="font-weight:bold">
-        <td>Max</td>
-      </tr>
-      <tr style="font-weight:bold">
-        <td>Average</td>
-      </tr>
-      <tr style="font-weight:bold">
-        <td>Median</td>
       </tr>
       </table>
     </div>
