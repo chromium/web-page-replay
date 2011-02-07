@@ -14,6 +14,16 @@
 
     <script>
     var datas = [];
+    var metricTitles = {
+      dns_time: "Root DNS Complete",
+      connect_time: "Root Connection Established",
+      first_byte_time: "Root Document First Byte Received",
+      last_byte_time: "Root Document Last Byte Received",
+      paint_time: "First Paint Time",
+      doc_load_time: "DOM readyState Interactive",
+      dcl_time: "DOMContendLoaded Event",
+      total_time: "Page Load Time",
+    };
 
     function getName(allObjs, obj) {
       var date = obj.obj.date;
@@ -50,36 +60,38 @@
         var url = baseUrl + "&id=" + set_ids[i];
         new XHRGet(url, function(result) {
           datas.push(JSON.parse(result));
-	      if (datas.length == set_ids.length) {
-            var cols = [];
-            var rows = [];
-
-            cols.push('URL');
-            for (var i = 0; i < datas.length; i++) {
-              var result = datas[i];
-              cols.push(getName(datas, result));
-              for (var j = 0; j < result.summaries.length; j++) {
-                if (j >= rows.length) rows[j] = [result.summaries[j].url];
-
-                // TODO(tonyg): Do something smarter here to allow comparison
-                // of partially overlapping sets.
-                if (result.summaries[j].url != rows[j][0])
-                  alert("Cannot compare sets of different URLs");
-                rows[j].push(result.summaries[j].total_time);
-              }
-            }
-            drawTables(cols, rows);
-            drawCharts(cols, rows);
+          if (datas.length == set_ids.length) {
+            var metric = getParams()["metric"] || "total_time";
+            setSelectValue("metric", metric)
+            compareMetric(datas, metric, metricTitles[metric]);
           }
         });
       }
     }
 
-    function drawCharts(cols, rows) {
-      drawChart(cols, rows, 'total_time', 'Load');
+    function compareMetric(datas, metric, title) {
+      var cols = [];
+      var rows = [];
+
+      cols.push('URL');
+      for (var i = 0; i < datas.length; i++) {
+        var result = datas[i];
+        cols.push(getName(datas, result));
+        for (var j = 0; j < result.summaries.length; j++) {
+          if (j >= rows.length) rows[j] = [result.summaries[j].url];
+
+          // TODO(tonyg): Math up URLs to allow comparison of partially
+          // overlapping sets.
+          if (result.summaries[j].url != rows[j][0])
+            alert("Cannot compare sets of different URLs");
+          rows[j].push(result.summaries[j][metric]);
+        }
+      }
+      drawTable(cols, rows);
+      drawChart(cols, rows, title);
     }
 
-    function drawTables(cols, rows) {
+    function drawTable(cols, rows) {
       var stats = [];
       for (var i = 0; i < rows.length; i++) {
         var row = rows[i];
@@ -118,7 +130,7 @@
     // http://code.google.com/apis/visualization/documentation/gallery/columnchart.html
     google.load('visualization', '1', {'packages':['corechart']});
 
-    function drawChart(cols, rows, field, display) {
+    function drawChart(cols, rows, title) {
       var graph_data = new google.visualization.DataTable();
       for (var i = 0; i < cols.length; i++) {
       if (i == 0)
@@ -135,7 +147,7 @@
         var chart = new google.visualization.ColumnChart(chart_div);
         chart.draw(graph_data, {displayAnnotations: true,
                                 legend: 'bottom',
-                                title: display,
+                                title: title,
                                 hAxis: {
                                   title: "URL"
                                 },
@@ -160,7 +172,26 @@
         chart_div.innerHTML = "No data";
       }
     }
+
+    function metricChanged() {
+      var metric = getSelectValue("metric");
+      var params = {};
+      params["metric"] = metric;
+      setParams(params);
+      compareMetric(datas, metric, metricTitles[metric]);
+    }
     </script>
+
+    Compare:&nbsp;<select id="metric" onchange="metricChanged()">
+      <option value="dns_time">Root DNS Complete</option>
+      <option value="connect_time">Root Connection Established</option>
+      <option value="first_byte_time">Root Document First Byte Received</option>
+      <option value="last_byte_time">Root Document Last Byte Received</option>
+      <option value="paint_time">First Paint Time</option>
+      <option value="doc_load_time">DOM readyState Interactive</option>
+      <option value="dcl_time">DOMContendLoaded Event</option>
+      <option value="total_time">Page Load Time</option>
+    </select>
 
     <div id="template">
       <div id="chart_div" style="width:1024px;height:240px"></div>
