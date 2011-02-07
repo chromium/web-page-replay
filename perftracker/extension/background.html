@@ -60,7 +60,7 @@ function closeAllTabs() {
 
 function addBenchmark(benchmark) {
   benchmarks.push(benchmark);
-  global_counter.url_count++;
+  set_summary_stats.url_count++;
 }
 
 // Array Remove - By John Resig (MIT Licensed)
@@ -94,18 +94,18 @@ function nextBenchmark() {
   return benchmarks[benchmarkIndex];
 }
 
-global_counter = {}
-global_counter.url_count = 0;
-global_counter.iterations = 0;
+set_summary_stats = {}
+set_summary_stats.url_count = 0;
+set_summary_stats.iterations = 0;
 for (var prop in loggedTimings) {
-  global_counter[loggedTimings[prop]] = 0;
+  set_summary_stats[loggedTimings[prop]] = 0;
 }
-global_counter.paint_time = 0;
-global_counter.read_bytes_kb = 0;
-global_counter.write_bytes_kb = 0;
-global_counter.num_requests = 0;
-global_counter.num_connects = 0;
-global_counter.num_sessions = 0;
+set_summary_stats.paint_time = 0;
+set_summary_stats.read_bytes_kb = 0;
+set_summary_stats.write_bytes_kb = 0;
+set_summary_stats.num_requests = 0;
+set_summary_stats.num_connects = 0;
+set_summary_stats.num_sessions = 0;
 
 function Benchmark(url) {
   var runCount_ = 0;
@@ -206,12 +206,26 @@ function Benchmark(url) {
     }
 
     if (!me_.hasMoreIterations()) {
+      // Update the overall set to include this summary.
+      set_summary_stats.iterations++;
+      for (var prop in loggedTimings) {
+        set_summary_stats[loggedTimings[prop]] +=
+          Array.mean(current_[loggedTimings[prop]]);
+      }
+      set_summary_stats.paint_time += Array.mean(current_.paint_time);
+      set_summary_stats.read_bytes_kb += Array.mean(current_.read_bytes_kb);
+      set_summary_stats.write_bytes_kb += Array.mean(current_.write_bytes_kb);
+      set_summary_stats.num_requests += Array.mean(current_.num_requests);
+      set_summary_stats.num_connects += Array.mean(current_.num_connects);
+      set_summary_stats.num_sessions += Array.mean(current_.num_sessions);
+
       window.submitter.PostSummary(current_, function(response) {
         console.log("Posted summary: " + response);
         if (finished) {
           // If we're the last benchmark, close the window.
           console.log("removing benchmark window: " + benchmarkWindow.id);
-          window.submitter.UpdateSetSummary(global_counter, function(response) {
+          window.submitter.UpdateSetSummary(set_summary_stats,
+                                            function(response) {
             console.log("Posted set summary: " + response);
             chrome.tabs.remove(benchmarkWindow.id);
             benchmarkWindow = 0;
@@ -399,18 +413,6 @@ function Benchmark(url) {
     current_.num_requests.push(result.num_requests);
     current_.num_connects.push(result.num_connects);
     current_.num_sessions.push(result.num_sessions);
-
-    // Record the aggregate result globally.
-    global_counter.iterations++;
-    for (var prop in loggedTimings) {
-      global_counter[loggedTimings[prop]] += result[loggedTimings[prop]];
-    }
-    global_counter.paint_time += result.paint_time;
-    global_counter.read_bytes_kb += result.read_bytes_kb;
-    global_counter.write_bytes_kb += result.write_bytes_kb;
-    global_counter.num_requests += result.num_requests;
-    global_counter.num_connects += result.num_connects;
-    global_counter.num_sessions += result.num_sessions;
 
     // Submit the result.
     window.submitter.PostResult(result, function(response) {

@@ -135,41 +135,6 @@ Array.sum = function(array) {
   return sum;
 };
 
-// Returns the average value of the array, excluding the min and max values.
-Array.trimmedMean = function(array) {
-  var count = array.length;
-  if (count == 0) {
-    return 0;
-  }
-
-  var sum = Array.sum(array);
-  if (count > 2) {
-    sum -= Array.min(array) + Array.max(array);
-    count -= 2;
-  }
-  return Math.round(sum / count);
-}
-
-// Returns the standard deviation of the array, excluding the min and max values.
-Array.trimmedStdDev = function(array) {
-  var count = array.length;
-  if (count == 0) {
-    return 0;
-  }
-  var trimmedMean = Array.trimmedMean(array);
-  var min = Array.min(array);
-  var max = Array.max(array);
-  var variance = 0;
-  for (var i = 0; i < count; i++) {
-    if (count > 2 && (array[i] == min || array[i] == max)) continue;
-    var deviation = trimmedMean - array[i];
-    variance += deviation * deviation;
-  }
-  if (count > 2) count -= 2;
-  variance /= count;
-  return Math.sqrt(variance);
-}
-
 // Returns the mean of the array.
 Array.mean = function(array) {
   var count = array.length;
@@ -299,7 +264,7 @@ function TestResultSubmitter(config) {
     url = config.server_url + kServerPostResultUrl;
     user_callback = callback;
     new XHRPost(url, jsonToPostData(data),
-		function(result) { user_callback(result); });
+                function(result) { user_callback(result); });
   }
 
   // Post the rollup summary of a set of data
@@ -309,16 +274,16 @@ function TestResultSubmitter(config) {
     // Average everything except the special properties.
     for (var prop in result) {
       if (prop == "url" || prop == "using_spdy" || prop == "iterations")
-	continue;
-      result[prop] = Array.trimmedMean(result[prop]);
+        continue;
+      result[prop] = Array.mean(result[prop]);
     }
     result["set_id"] = test_id;
-    result["total_time_stddev"] = Array.trimmedStdDev(data.total_time);
+    result["total_time_stddev"] = Array.stddev(data.total_time);
 
     url = config.server_url + kServerPostSummaryUrl;
     user_callback = callback;
     new XHRPost(url, jsonToPostData(result),
-		function(result) { user_callback(result); });
+                function(result) { user_callback(result); });
   }
 
   // Update the set with its summary data
@@ -328,11 +293,11 @@ function TestResultSubmitter(config) {
     // Divide everything by iterations except the special properties.
     for (var prop in result) {
       if (prop == "iterations") {
-	result.iterations = Math.round(data.iterations / data.url_count);
-	continue;
+        result.iterations = Math.round(data.iterations / data.url_count);
+        continue;
       }
       if (prop == "url_count")
-	continue;
+        continue;
       result[prop] = Math.round(result[prop] / data.iterations);
     }
     result["cmd"] = "update";
@@ -341,7 +306,7 @@ function TestResultSubmitter(config) {
     url = config.server_url + kServerPostSetUrl;
     user_callback = callback;
     new XHRPost(url, jsonToPostData(result),
-		function(result) { user_callback(result); });
+                function(result) { user_callback(result); });
   }
 
 }
