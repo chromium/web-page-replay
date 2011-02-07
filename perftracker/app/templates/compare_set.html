@@ -94,12 +94,12 @@
         var mins = ["Min"];
         var maxs = ["Max"];
         var avgs = ["Average"];
-        var meds = ["Medians"];
+        var meds = ["Median"];
         for (var i = 1; i < stats.length; i++) {
           mins.push(stats[i].min());
           maxs.push(stats[i].max());
-          avgs.push(stats[i].average());
-          meds.push(stats[i].median());
+          avgs.push(Math.round(stats[i].average()));
+          meds.push(Math.round(stats[i].median()));
         }
         rowsWithStats.push(mins);
         rowsWithStats.push(maxs);
