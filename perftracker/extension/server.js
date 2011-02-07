@@ -170,6 +170,29 @@ Array.trimmedStdDev = function(array) {
   return Math.sqrt(variance);
 }
 
+// Returns the mean of the array.
+Array.mean = function(array) {
+  var count = array.length;
+  if (count == 0) { return 0; }
+  var sum = Array.sum(array);
+  return Math.round(sum / count);
+}
+
+// Returns the standard deviation of the array
+Array.stddev = function(array) {
+  var count = array.length;
+  if (count == 0) { return 0; }
+
+  var mean = Array.mean(array);
+  var variance = 0;
+  for (var i = 0; i < count; i++) {
+    var deviation = mean - array[i];
+    variance += deviation * deviation;
+  }
+  variance /= (count - 1);
+  return Math.sqrt(variance);
+}
+
 function XHRGet(url, callback) {
   var self = this;
   var xhr = new XMLHttpRequest();
@@ -187,18 +210,22 @@ function XHRGet(url, callback) {
 }
 
 function XHRPost(url, data, callback) {
-  var self = this;
   var xhr = new XMLHttpRequest();
   xhr.open("POST", url, true);
   xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
   xhr.send(data);
+  var callback_complete = false;
 
   xhr.onreadystatechange = function() {
     if (xhr.readyState == 4) {
       if (xhr.status != 200)  {
         console.log("XHR error posting url " + url + ", error: " + xhr.status);
       }
+      if (callback_complete) {
+        alert("Error! Double XHR callback.");
+      }
       callback(xhr.responseText);
+      callback_complete = true;
     }
   }
 }
