@@ -77,10 +77,20 @@ function currentBenchmark() {
   return benchmarks[benchmarkIndex];
 }
 
+// Find the next benchmark with iterations to run.
+// Return null if all benchmarks are done.
 function nextBenchmark() {
   CHECK(benchmarks.length > 0, "nextBenchmark has no benchmarks to run");
-  benchmarkIndex = (benchmarkIndex + 1) % benchmarks.length;
-  console.log("incremented benchmark Index to " + benchmarkIndex);
+  var index = benchmarkIndex;
+  do {
+    benchmarkIndex = (benchmarkIndex + 1) % benchmarks.length;
+    console.log("incremented benchmark Index to " + benchmarkIndex);
+  } while (index != benchmarkIndex &&
+           !benchmarks[benchmarkIndex].hasMoreIterations());
+  if (!benchmarks[benchmarkIndex].hasMoreIterations()) {
+    console.log("nextBenchmark: everything is done!");
+    return null;   // We looped through the entire list!
+  }
   return benchmarks[benchmarkIndex];
 }
 
@@ -128,7 +138,42 @@ function Benchmark(url) {
 
   // Is the benchmark currently in progress.
   this.hasMoreIterations = function() {
-    return runCount_ > 0;
+    if (runCount_ <= 0) { return false; }
+
+    // Dynamically look at the current results and see if the variance is low
+    // enough to warrant no longer testing this page.  To do this, we're
+    // using a normal approximate to the distribution of the sample variance.
+    // You can read more about this here:
+    // http://en.wikipedia.org/wiki/Normal_distribution#Estimation_of_parameters
+    // Basically this means we're using a metric similar to the stderr, but
+    // which requires twice the samples:
+    //     error = stddev / sqrt(n/2)
+    var kMinIterationsBeforeStop = 5;
+    var kMinErrorBeforeStop = .02;  // 2%
+
+    var results = current_[loggedTimings['loadEventEnd']];
+    var num_iterations = results.length;
+    if (num_iterations >= kMinIterationsBeforeStop) {
+      var mean = Array.mean(results);
+      var stddev = Array.stddev(results);
+      var error = stddev / Math.sqrt(num_iterations / 2);
+      var ratio = error / mean;
+
+      console.log(url + ": CHECKED EARLY BAIL: " + num_iterations +
+                  " iterations, stddev=" + stddev + ", error=" + error);
+
+      if (ratio <= kMinErrorBeforeStop) {
+        console.log("Variance is good enough for url: " + this.url() + 
+                    ", iterations: " + num_iterations +
+                    ", stddev: " + stddev +
+                    ", error: " + error +
+                    ", ratio: " + ratio);
+        runCount_ = 0;
+        return false;
+      }
+    }
+    
+    return true;
   }
 
   this.isActive = function() {
@@ -155,7 +200,7 @@ function Benchmark(url) {
 
     var benchmark = nextBenchmark();
     var finished = false;
-    if (!me_.hasMoreIterations() && !benchmark.hasMoreIterations()) {
+    if (benchmark == null) {
       console.log("Benchmark is finished!");
       finished = true;
     }
