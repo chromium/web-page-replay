@@ -104,12 +104,16 @@ def ClobberTmpDirectory(tmpdir):
   if len(tmpdir) == 0 or not tmpdir.startswith('/tmp/'):
     return
 
-  for root, dirs, files in os.walk(tmpdir, topdown=False):
-    for name in files:
-      os.remove(os.path.join(root, name))
-    for name in dirs:
-      os.rmdir(os.path.join(root, name))
-  os.rmdir(tmpdir)
+  try:
+    for root, dirs, files in os.walk(tmpdir, topdown=False):
+      for name in files:
+        os.remove(os.path.join(root, name))
+      for name in dirs:
+        os.rmdir(os.path.join(root, name))
+    os.rmdir(tmpdir)
+  except:
+    logging.error("Could not delete: " + tmpdir)
+    pass
 
 def _XvfbPidFilename(slave_build_name):
   """Returns the filename to the Xvfb pid file.  This name is unique for each
@@ -253,12 +257,18 @@ setTimeout(function() {
     protocol = self.network['protocol']
     if protocol == 'spdy' or protocol == 'spdy-nossl':
         port = 8000
+
+    init_cwnd = 10
+    if protocol == 'spdy' or protocol == 'spdy-nossl':
+        init_cwnd = 32
+
     cmdline = [
         replay_path,
         '-l', log_level,
         '--no-dns_forwarding',
         '--no-deterministic_script',
         '--port', str(port),
+        '--init_cwnd', str(init_cwnd),
         ]
     if self.network['bandwidth_kbps']['down']:
       cmdline += ['-d', str(self.network['bandwidth_kbps']['down']) + 'KBit/s']
