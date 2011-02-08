@@ -338,6 +338,7 @@ class UploadTestSet(BaseRequestHandler):
             test_set.cmdline  = self.request.get('cmdline')
             test_set.platform  = self.request.get('platform')
             test_set.client_hostname  = self.request.get('client_hostname')
+            test_set.harness_version  = "$Rev$"
             key = test_set.put()
             self.response.out.write(key.id())
 

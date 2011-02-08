@@ -49,6 +49,7 @@ class TestSet(db.Model):
     platform = db.StringProperty()
     client_hostname = db.StringProperty()
     cpu = db.ReferenceProperty(Cpu, indexed=True)
+    harness_version = db.StringProperty()
     cmdline = db.StringProperty()
 
     network = db.ReferenceProperty(Network, indexed=True)
