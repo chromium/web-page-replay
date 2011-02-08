@@ -289,12 +289,12 @@ function TestResultSubmitter(config) {
     // Divide everything by iterations except the special properties.
     for (var prop in result) {
       if (prop == "iterations") {
-        result.iterations = data.iterations;
+        result.iterations = data.url_count;
         continue;
       }
       if (prop == "url_count")
         continue;
-      result[prop] = result[prop] / data.iterations;
+      result[prop] = result[prop] / data.url_count;
     }
     result["cmd"] = "update";
     result["set_id"] = test_id;
