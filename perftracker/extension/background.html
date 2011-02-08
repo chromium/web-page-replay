@@ -207,7 +207,8 @@ function Benchmark(url) {
 
     if (!me_.hasMoreIterations()) {
       // Update the overall set to include this summary.
-      set_summary_stats.iterations++;
+      set_summary_stats.iterations = Math.max(set_summary_stats.iterations,
+                                              current_.iterations);
       for (var prop in loggedTimings) {
         set_summary_stats[loggedTimings[prop]] +=
           Array.mean(current_[loggedTimings[prop]]);

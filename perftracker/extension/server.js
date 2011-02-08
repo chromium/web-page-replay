@@ -140,7 +140,7 @@ Array.mean = function(array) {
   var count = array.length;
   if (count == 0) { return 0; }
   var sum = Array.sum(array);
-  return Math.round(sum / count);
+  return sum / count;
 }
 
 // Returns the standard deviation of the array
@@ -293,12 +293,12 @@ function TestResultSubmitter(config) {
     // Divide everything by iterations except the special properties.
     for (var prop in result) {
       if (prop == "iterations") {
-        result.iterations = Math.round(data.iterations / data.url_count);
+        result.iterations = data.iterations;
         continue;
       }
       if (prop == "url_count")
         continue;
-      result[prop] = Math.round(result[prop] / data.iterations);
+      result[prop] = result[prop] / data.iterations;
     }
     result["cmd"] = "update";
     result["set_id"] = test_id;
