@@ -74,18 +74,19 @@
       var rows = [];
 
       cols.push('URL');
+      var url_map = {};
       for (var i = 0; i < datas.length; i++) {
         var result = datas[i];
         cols.push(getName(datas, result));
         for (var j = 0; j < result.summaries.length; j++) {
-          if (j >= rows.length) rows[j] = [result.summaries[j].url];
-
-          // TODO(tonyg): Math up URLs to allow comparison of partially
-          // overlapping sets.
-          if (result.summaries[j].url != rows[j][0])
-            alert("Cannot compare sets of different URLs");
-          rows[j].push(result.summaries[j][metric]);
+          if (!url_map[result.summaries[j].url])
+            url_map[result.summaries[j].url] = [result.summaries[j].url];
+          url_map[result.summaries[j].url].push(result.summaries[j][metric]);
         }
+      }
+      for (var url in url_map) {
+        if (url_map[url].length == cols.length)
+        rows.push(url_map[url]);
       }
       drawTable(cols, rows);
       drawChart(cols, rows, title);
