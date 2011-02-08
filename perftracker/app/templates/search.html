@@ -170,7 +170,7 @@
       </tr>
         <tr jsselect="results">
         <td><span jseval="$val = '/do_view_set?id=' + key"></span><a jsvalues="href:$val" jscontent="date"></a></td>
-        <td jscontent="client_hostname.split('.')[0]"></td>
+        <td jscontent="client_hostname.split('.')[0] + (notes ? ' ' + notes : '')"></td>
         <td jscontent="cpus_map[cpu]"></td>
         <td jscontent="networks_map[network]"></td>
         <td class="righttext" jscontent="url_count"></td>
