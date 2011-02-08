@@ -289,7 +289,7 @@ function TestResultSubmitter(config) {
     // Divide everything by iterations except the special properties.
     for (var prop in result) {
       if (prop == "iterations") {
-        result.iterations = data.url_count;
+        result.iterations = data.iterations;
         continue;
       }
       if (prop == "url_count")
