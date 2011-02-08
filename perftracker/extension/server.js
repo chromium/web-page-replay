@@ -262,9 +262,7 @@ function TestResultSubmitter(config) {
     data["set_id"] = test_id;
 
     url = config.server_url + kServerPostResultUrl;
-    user_callback = callback;
-    new XHRPost(url, jsonToPostData(data),
-                function(result) { user_callback(result); });
+    new XHRPost(url, jsonToPostData(data), callback);
   }
 
   // Post the rollup summary of a set of data
@@ -281,9 +279,7 @@ function TestResultSubmitter(config) {
     result["total_time_stddev"] = Array.stddev(data.total_time);
 
     url = config.server_url + kServerPostSummaryUrl;
-    user_callback = callback;
-    new XHRPost(url, jsonToPostData(result),
-                function(result) { user_callback(result); });
+    new XHRPost(url, jsonToPostData(result), callback);
   }
 
   // Update the set with its summary data
@@ -304,9 +300,6 @@ function TestResultSubmitter(config) {
     result["set_id"] = test_id;
 
     url = config.server_url + kServerPostSetUrl;
-    user_callback = callback;
-    new XHRPost(url, jsonToPostData(result),
-                function(result) { user_callback(result); });
+    new XHRPost(url, jsonToPostData(result), callback);
   }
-
 }
