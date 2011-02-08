@@ -15,6 +15,10 @@
     <script>
     var datas = [];
     var metricTitles = {
+      num_connects: "Number of connections",
+      num_requests: "Number of requests",
+      read_bytes_kb: "KB downloaded",
+      write_bytes_kb: "KB uploaded",
       dns_time: "Root DNS Complete",
       connect_time: "Root Connection Established",
       first_byte_time: "Root Document First Byte Received",
@@ -184,6 +188,10 @@
     </script>
 
     Compare:&nbsp;<select id="metric" onchange="metricChanged()">
+      <option value="num_connects">Number of Connections</option>
+      <option value="num_requests">Number of Requests</option>
+      <option value="read_bytes_kb">KB Downloaded</option>
+      <option value="write_bytes_kb">KB Uploaded</option>
       <option value="dns_time">Root DNS Complete</option>
       <option value="connect_time">Root Connection Established</option>
       <option value="first_byte_time">Root Document First Byte Received</option>
