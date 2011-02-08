@@ -36,7 +36,8 @@ class TrafficShaper(object):
                up_bandwidth = '0',
                down_bandwidth = '0',
                delay_ms = '0',
-               packet_loss_rate = '0'):
+               packet_loss_rate = '0',
+               init_cwnd = 0):
     """Start shaping traffic.
 
     Args:
@@ -54,6 +55,7 @@ class TrafficShaper(object):
     self.down_bandwidth = down_bandwidth
     self.delay_ms = delay_ms
     self.packet_loss_rate = packet_loss_rate
+    self.init_cwnd = init_cwnd
     self.is_traffic_shaping = False
 
   def __enter__(self):
@@ -138,6 +140,10 @@ class TrafficShaper(object):
           'src-port', '80',
       ])
 
+      if self.init_cwnd > 0:
+        self.original_cwnd = self.platformsettings.get_cwnd()
+        self.platformsettings.set_cwnd(self.init_cwnd)
+
       logging.info('Started shaping traffic')
       self.is_traffic_shaping = True
     except Exception, e:
@@ -148,6 +154,8 @@ class TrafficShaper(object):
       return
     try:
       self.platformsettings.ipfw(['delete', self._RULE_SET])
+      if self.init_cwnd > 0:
+        self.platformsettings.set_cwnd(self.original_cwnd)
       logging.info('Stopped shaping traffic')
     except Exception, e:
       raise TrafficShaperException('Unable to shape traffic: %s ' % e)

@@ -57,6 +57,12 @@ class PlatformSettings(object):
   def ipfw(self, args):
     raise NotImplementedError()
 
+  def set_cwnd(self, args):
+    logging.error("Platform does not support setting cwnd.")
+
+  def get_cwnd(self):
+    logging.error("Platform does not support getting cwnd.")
+
   def get_ipfw_queue_slots(self):
     return 500
 
@@ -172,6 +178,16 @@ class LinuxPlatformSettings(PosixPlatformSettings):
     if not is_first_nameserver_replaced:
       raise DnsUpdateError('Could not find a suitable namserver entry in %s' %
                            self.RESOLV_CONF)
+
+  def set_cwnd(self, args):
+    value = args
+    command = [ "sysctl", "-w", "net.ipv4.tcp_init_cwnd=" + str(value) ]
+    logging.info(command)
+    subprocess.check_call(command)
+
+  def get_cwnd(self):
+    f = file("/proc/sys/net/ipv4/tcp_init_cwnd")
+    return int(f.read())
 
 class WindowsPlatformSettings(PlatformSettings):
   def _netsh_set_dns(self, args):

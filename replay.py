@@ -82,7 +82,8 @@ def main(options, replay_file):
                                          options.up,
                                          options.down,
                                          options.delay_ms,
-                                         options.packet_loss_rate):
+                                         options.packet_loss_rate,
+                                         options.init_cwnd):
           start = time.time()
           while (not options.time_limit or
                  time.time() - start < options.time_limit):
@@ -151,6 +152,10 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Packet loss rate in range [0..1]. Zero means no loss.')
+  network_group.add_option('-w', '--init_cwnd', default='0',
+      action='store',
+      type='string',
+      help='Set initial cwnd (linux only, requires kernel patch)')
   option_parser.add_option_group(network_group)
 
   harness_group = optparse.OptionGroup(option_parser,
