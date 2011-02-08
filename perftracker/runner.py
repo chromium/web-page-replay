@@ -336,8 +336,8 @@ setTimeout(function() {
     profile_dir = tempfile.mkdtemp(prefix='chrome.profile.');
 
     use_virtualx = False
-    if platform.system() == 'Linux':
-      use_virtualx = True
+    #if platform.system() == 'Linux':
+    #  use_virtualx = True
 
     try:
       if use_virtualx:
@@ -384,7 +384,7 @@ setTimeout(function() {
       if returncode:
         logging.error('Chrome returned status code %d. It may have crashed.' % returncode)
     finally:
-      ClobberTmpDirectory(profile_dir)
+      #ClobberTmpDirectory(profile_dir)
       if use_virtualx:
         StopVirtualX(platform.node())
 

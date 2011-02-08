@@ -417,7 +417,7 @@ function Benchmark(url) {
 
     // Submit the result.
     window.submitter.PostResult(result, function(response) {
-      console.log("Posted result: " + response);
+      console.log("Posted result for " + me_.url + ": " + response);
       me_.pageFinished();
     });
   }
