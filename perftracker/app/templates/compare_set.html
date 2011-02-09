@@ -210,7 +210,8 @@
     }
     </script>
 
-    Compare:&nbsp;<select id="metric" onchange="metricChanged()">
+    <div id="template">
+      Compare:&nbsp;<select id="metric" onchange="metricChanged()">
       <option value="num_connects">Number of Connections</option>
       <option value="num_requests">Number of Requests</option>
       <option value="read_bytes_kb">KB Downloaded</option>
@@ -223,14 +224,16 @@
       <option value="doc_load_time">DOM readyState Interactive</option>
       <option value="dcl_time">DOMContendLoaded Event</option>
       <option value="total_time">Page Load Time</option>
-    </select>
+      </select>&nbsp;<a jsvalues="href:'/do_compare_set?id='+sets.clone().reverse().join(',')">swap sets</a>
 
-    <div id="template">
       <div id="chart_div" style="width:1024px;height:240px"></div>
 
       <table class="sortable" id="data">
       <tr>
-        <th jsselect="cols"><span jscontent="$this"></span></th>
+        <th jsselect="cols">
+          <span jscontent="$this" jsdisplay="!$index"></span>
+          <a jscontent="$this" jsdisplay="$index" jsvalues="href:'/do_view_set?id=' + sets[$index-1]"></a>
+        </th>
         <th>Delta</th>
         <th>Percent</th>
       </tr>
@@ -238,8 +241,8 @@
         <td jsselect="summaries"><span jscontent="total_time"></span></td>
         <!-- TODO(tonyg): Link to details page for each URL. -->
         <td jsselect="$this" jsvalues="class:$index > 0 ? 'righttext' : ''"><span jscontent="$this"></span></td>
-        <td class="righttext" jscontent="$delta" jsvalues=".style.color:$index > isSignificants.length - 1 || isSignificants[$index-1] ? ($delta < 0 ? 'red' : 'black') : 'gray'"></td>
-        <td class="righttext" jscontent="Math.round(10000 * $delta / $this[2]) / 100 + '%'" jsvalues=".style.color:$index > isSignificants.length - 1 || isSignificants[$index-1] ? ($delta < 0 ? 'red' : 'black') : 'gray'"></td>
+        <td class="righttext" jscontent="$delta" jsvalues=".style.color:$index > isSignificants.length - 1 || isSignificants[$index] ? ($delta < 0 ? 'red' : 'black') : 'gray'"></td>
+        <td class="righttext" jscontent="Math.round(10000 * $delta / $this[2]) / 100 + '%'" jsvalues=".style.color:$index > isSignificants.length - 1 || isSignificants[$index] ? ($delta < 0 ? 'red' : 'black') : 'gray'"></td>
       </tr>
       </table>
     </div>
