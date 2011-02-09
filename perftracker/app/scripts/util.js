@@ -51,14 +51,14 @@ Array.prototype.average = function() {
 
 Array.prototype.median = function() {
   if (!this.length) return 0;
-  var sorted = this.sort();
-  var lower = sorted[(sorted.length + 1) / 2 - 1];
+  var sorted = this.clone().sort();
+  var lower = sorted[Math.floor((sorted.length + 1) / 2) - 1];
   if (sorted.length == 1) {
     return sorted[0];
   } else if (sorted.length % 2) {
     return lower;
   } else {
-    var upper = sorted[(sorted.length + 1) / 2];
+    var upper = sorted[Math.floor((sorted.length + 1) / 2)];
     return (lower + upper) / 2;
   }
 };
@@ -115,9 +115,17 @@ function stderr(stddev, sample_count) {
   return stddev / Math.sqrt(sample_count);
 }
 
-// Given a stderr, compute the confidence interval
+// Given a stderr, compute the 95% confidence interval
 function ci(stderr) {
   return 1.96 * stderr;
+}
+
+// Returns true if the given averages have a statistically significant
+// difference based on their standard deviations.
+function isSignificant(avg1, stddev1, len1, avg2, stddev2, len2) {
+    var ci1 = ci(stderr(stddev1, len1));
+    var ci2 = ci(stderr(stddev2, len2));
+    return (avg1 + ci1) < (avg2 - ci2) || (avg1 - ci1) > (avg2 + ci2);
 }
 
 // Sets the selected option of the <select> with id=|id|.
