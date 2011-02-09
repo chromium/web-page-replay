@@ -384,7 +384,9 @@ function Benchmark(url) {
     var baseTime = timing.navigationStart;
     CHECK(baseTime);
     for (var prop in loggedTimings) {
-      result[loggedTimings[prop]] = timing[prop] - baseTime;
+      if (prop in timing) {
+        result[loggedTimings[prop]] = timing[prop] - baseTime;
+      }
     }
     result.paint_time = load_times.firstPaintTime ? Math.round((1000.0 * load_times.firstPaintTime) - baseTime) : 0;
     result.url = current_.url;
@@ -405,7 +407,9 @@ function Benchmark(url) {
     // Record the aggregate result for this URL.
     current_.iterations++;
     for (var prop in loggedTimings) {
-      current_[loggedTimings[prop]].push(result[loggedTimings[prop]]);
+      if (loggedTimings[prop] in result) {
+        current_[loggedTimings[prop]].push(result[loggedTimings[prop]]);
+      }
     }
     current_.paint_time.push(result.paint_time);
     current_.using_spdy = result.using_spdy;
