@@ -231,6 +231,11 @@ function Benchmark(url) {
             chrome.tabs.remove(benchmarkWindow.id);
             benchmarkWindow = 0;
             closeAllTabs();
+
+            // On mac, closing all tabs doesn't close Chrome, so crash after a timeout.
+            setTimeout(function() {
+              chrome.windows.create({"url": "about:inducebrowsercrashforrealz"});
+            }, 1000);
           });
         }
       });
