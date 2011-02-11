@@ -339,7 +339,7 @@ function Benchmark(url, setIds) {
 
     chrome.benchmarking.clearCache();
     chrome.benchmarking.closeConnections();
-    //me_.asyncClearCookies();
+    me_.asyncClearCookies();
 
     // Go back to the browser so that tasks can run.
     setTimeout(function() { coldLoad.run(0, me_.handleLoadFinished); },
@@ -466,7 +466,12 @@ function Benchmark(url, setIds) {
   this.asyncClearCookies = function() {
     chrome.cookies.getAll({}, function(cookies) {
       for (var i = cookies.length - 1; i >= 0; i--) {
-        chrome.cookies.remove(cookies[i])
+        var cookie = cookies[i];
+        chrome.cookies.remove({
+          url: 'http' + (cookie.secure ? 's' : '') + '://' + cookie.domain + cookie.path,
+          name: cookie.name,
+          storeId: cookie.storeId,
+        });
       }
     });
   }
