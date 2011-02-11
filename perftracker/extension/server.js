@@ -213,8 +213,6 @@ function jsonToPostData(json) {
 // Submits a set of test runs up to the server.
 function TestResultSubmitter(config) {
   var self = this;
-  var test_id;
-  var create_test_started = false;
   var user_callback;
 
   this.AppEngineLogin = function(callback) {
@@ -222,23 +220,18 @@ function TestResultSubmitter(config) {
       callback();
     });
   }
-  
-  // Creates the test.  This should only be called once.
+
+  // Creates a test.
   // Upon test creation, the callback will be called with a single argument
   // containing the status of the creation.
-  this.CreateTest = function(callback) {
-    if (create_test_started) {
-      callback(test_id);
-      return;
-    }
-
+  this.CreateTest = function(loadType, callback) {
     self.AppEngineLogin(function() {
       if (config.record) { setTimeout(callback, 0); return; }
-      create_test_started = true;
       var data = copy(config);
       data["cmd"] = "create";
       data["version"] = BrowserDetect.browser + " " + BrowserDetect.version;
       data["platform"] = BrowserDetect.OS;
+      data["load_type"] = loadType;
 
       url = config.server_url + kServerPostSetUrl;
 
@@ -249,8 +242,7 @@ function TestResultSubmitter(config) {
 
       user_callback = callback;
       new XHRPost(url, jsonToPostData(data), function(result) {
-        test_id = result;
-        user_callback(result);
+        user_callback(loadType, result);
       });
     });
   }
@@ -259,7 +251,6 @@ function TestResultSubmitter(config) {
   this.PostResult = function (result, callback) {
     if (config.record) { setTimeout(callback, 0); return; }
     var data = copy(result);
-    data["set_id"] = test_id;
 
     url = config.server_url + kServerPostResultUrl;
     new XHRPost(url, jsonToPostData(data), callback);
@@ -269,15 +260,6 @@ function TestResultSubmitter(config) {
   this.PostSummary = function(data, callback) {
     if (config.record) { setTimeout(callback, 0); return; }
     var result = copy(data);
-    // Average everything except the special properties.
-    for (var prop in result) {
-      if (prop == "url" || prop == "using_spdy" || prop == "iterations")
-        continue;
-      result[prop] = Array.mean(result[prop]);
-    }
-    result["set_id"] = test_id;
-    result["total_time_stddev"] = Array.stddev(data.total_time);
-
     url = config.server_url + kServerPostSummaryUrl;
     new XHRPost(url, jsonToPostData(result), callback);
   }
@@ -286,19 +268,7 @@ function TestResultSubmitter(config) {
   this.UpdateSetSummary = function(data, callback) {
     if (config.record) { setTimeout(callback, 0); return; }
     var result = copy(data);
-    // Divide everything by iterations except the special properties.
-    for (var prop in result) {
-      if (prop == "iterations") {
-        result.iterations = data.iterations;
-        continue;
-      }
-      if (prop == "url_count")
-        continue;
-      result[prop] = result[prop] / data.url_count;
-    }
     result["cmd"] = "update";
-    result["set_id"] = test_id;
-
     url = config.server_url + kServerPostSetUrl;
     new XHRPost(url, jsonToPostData(result), callback);
   }

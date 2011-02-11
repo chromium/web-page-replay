@@ -3,18 +3,21 @@
 <script>
 // TODO(mbelshe): Remove all these console.log statements
 
+var LoadType = { "cold": 0, "hot": 1, "warm": 2} ;
+
 // Configuration and results are stored globally.
 window.iterations = 10;
 window.interval = 300;
 window.loadCheck = 0;
 window.timeout = 15000;  // Max ms before killing page.
 window.maxLoadChecks = Math.round(window.timeout / window.interval);
-window.clearConnections = true;
-window.clearCache = true;
-window.clearCookies = true;
 window.enableSpdy = false;
 window.windowId = 0;
 window.submitter;
+
+// TODO(simonjam): This must be in the same order as LoadType is defined.
+// TODO(simonjam): Figure out how to skip cold and/or hot if desired.
+window.kTestsToRun = [ LoadType.cold ]; // TODO(simonjam): Enable cache tests.
 
 // Map the WebTiming property to the name we use to log it.
 window.loggedTimings = {
@@ -38,10 +41,7 @@ var kRequestCount = "HttpNetworkTransaction.Count";
 var kConnectCount = "tcp.connect";
 var kSpdySessionCount = "spdy.sessions";
 
-// The list of currently running benchmarks
-var benchmarks = [];
-var benchmarkIndex = 0;
-var benchmarkWindow = 0;
+var globalTestSetResults = [];
 
 function CHECK(expr, comment) {
   if (!expr) {
@@ -50,107 +50,357 @@ function CHECK(expr, comment) {
   }
 }
 
-function asyncExitBrowser() {
-  // Close all open tabs
-  chrome.tabs.getAllInWindow(null, function(tabs) {
-    tabs.forEach(function(tab) {
-      chrome.tabs.remove(tab.id);
-    });
-  });
-
-  // On mac, closing all tabs doesn't close Chrome, so crash after a timeout.
-  setTimeout(function() {
-    chrome.windows.create({"url": "about:inducebrowsercrashforrealz"});
-  }, 1000);
+function Result() {
+  this.url = "";
+  this.set_id = 0;
+  this.load_type = "";
+  this.paint_time = 0;
+  this.read_bytes_kb = 0;
+  this.write_bytes_kb = 0;
+  this.num_requests = 0;
+  this.num_connects = 0;
+  this.num_sessions = 0;
 }
 
-function asyncClearCookies() {
-  chrome.cookies.getAll({}, function(cookies) {
-    for (var i = cookies.length - 1; i >= 0; i--) {
-      chrome.cookies.remove(cookies[i])
+function ResultCollection() {
+  var results_ = [];
+
+  this.addResult = function(result) {
+    results_.push(result);
+  }
+
+  this.numResults = function() {
+    return results_.length;
+  }
+
+  this.summarize = function() {
+    CHECK(results_.length, "there are no results");
+
+    var unique_urls = {};
+    var total_time_array = []
+    var num = results_.length;
+    var max_iterations = 0;
+
+    var summary = new Result();
+
+    summary.set_id = results_[0].set_id;
+    summary.load_type = results_[0].load_type;
+    summary.iterations = 0;
+
+    for (var i in results_) {
+      var result = results_[i];
+
+      CHECK(summary.set_id == result.set_id, "set_id doesn't match");
+      CHECK(summary.load_type == result.load_type, "load_type doesn't match");
+
+      for (var prop in loggedTimings) {
+        if (loggedTimings[prop] in result) {
+          if (!(loggedTimings[prop] in summary)) {
+            summary[loggedTimings[prop]] = 0;
+          }
+          summary[loggedTimings[prop]] += result[loggedTimings[prop]] / num;
+        }
+      }
+      summary.paint_time += result.paint_time / num;
+      summary.read_bytes_kb += result.read_bytes_kb / num;
+      summary.write_bytes_kb += result.write_bytes_kb / num;
+      summary.num_requests += result.num_requests / num;
+      summary.num_connects += result.num_connects / num;
+      summary.num_sessions += result.num_sessions / num;
+      summary.url = result.url;
+      unique_urls[result.url] = 1;
+      total_time_array.push(result.total_time);
+      max_iterations = Math.max(max_iterations,
+                                result.iterations ?  result.iterations : 0);
     }
-  });  
-}
 
-function addBenchmark(benchmark) {
-  benchmarks.push(benchmark);
-  set_summary_stats.url_count++;
-}
+    var num_unique_urls = 0;
+    for (var url in unique_urls) {
+      num_unique_urls++;
+    }
+    if (num_unique_urls > 1) {
+      summary.iterations = max_iterations;
+      summary.url = "<multiple>";
+    } else {
+      summary.iterations = results_.length;
+    }
+    summary.url_count = num_unique_urls;
+    summary.total_time_stddev = Array.stddev(total_time_array);
 
-// Array Remove - By John Resig (MIT Licensed)
-Array.prototype.remove = function(from, to) {
-  var rest = this.slice((to || from) + 1 || this.length);
-  this.length = from < 0 ? this.length + from : from;
-  return this.push.apply(this, rest);
-};
-
-function currentBenchmark() {
-  if (benchmarkIndex >= benchmarks.length) {
-    return undefined;
+    return summary;
   }
-  return benchmarks[benchmarkIndex];
 }
 
-// Find the next benchmark with iterations to run.
-// Return null if all benchmarks are done.
-function nextBenchmark() {
-  CHECK(benchmarks.length > 0, "nextBenchmark has no benchmarks to run");
-  var index = benchmarkIndex;
-  do {
-    benchmarkIndex = (benchmarkIndex + 1) % benchmarks.length;
-    console.log("incremented benchmark Index to " + benchmarkIndex);
-  } while (index != benchmarkIndex &&
-           !benchmarks[benchmarkIndex].hasMoreIterations());
-  if (!benchmarks[benchmarkIndex].hasMoreIterations()) {
-    console.log("nextBenchmark: everything is done!");
-    return null;   // We looped through the entire list!
-  }
-  return benchmarks[benchmarkIndex];
-}
-
-set_summary_stats = {}
-set_summary_stats.url_count = 0;
-set_summary_stats.iterations = 0;
-for (var prop in loggedTimings) {
-  set_summary_stats[loggedTimings[prop]] = 0;
-}
-set_summary_stats.paint_time = 0;
-set_summary_stats.read_bytes_kb = 0;
-set_summary_stats.write_bytes_kb = 0;
-set_summary_stats.num_requests = 0;
-set_summary_stats.num_connects = 0;
-set_summary_stats.num_sessions = 0;
-
-function Benchmark(url) {
-  var runCount_ = 0;
+function BenchmarkLoad(url, loadType, setId) {
   var me_ = this;
-  var current_;
-  var initialRequestCount_;
+  var url_ = url;
+  var loadType_ = loadType;
+  var setId_ = setId;
+  var callbackWhenFinished_;
+
+  var tab_;
+  var result_;
+
+  var hasBeenRun_ = false;
+  var checkForLoadId_;
+  var loadCheck_ = 0;
+  var finished_ = false;
+
   var initialReadBytes_;
   var initialWriteBytes_;
-  var isActive_ = false;  // True only when this benchmark has a page running.
-  var startTime_ = new Date();
+  var initialRequestCount_;
+  var initialConnectCount_;
+  var initialSpdySessionCount_;
+  var startTime_;
 
-  console.log("Benchmark testing url: " + url);
-  runCount_ = window.iterations;
-  current_ = {};
-  current_.url = url;
-  current_.iterations = 0;
-  current_.using_spdy = false;
-  for (var prop in loggedTimings) {
-    current_[loggedTimings[prop]] = [];
+  this.tab = function() { return tab_; }
+  this.loadType = function() { return loadType_; }
+  this.result = function() { return result_; }
+
+  this.run = function(tabToReuse, callbackWhenFinished) {
+    console.log("Running " + url_ + " on tab " +
+                (tabToReuse ? tabToReuse.id : 'new'));
+
+    CHECK(!hasBeenRun_, "This BenchmarkLoad has already run");
+    hasBeenRun_ = true;
+
+    callbackWhenFinished_ = callbackWhenFinished;
+
+    initialReadBytes_ = chrome.benchmarking.counter(kTCPReadBytes);
+    initialWriteBytes_ = chrome.benchmarking.counter(kTCPWriteBytes);
+    initialRequestCount_ = chrome.benchmarking.counter(kRequestCount);
+    initialConnectCount_ = chrome.benchmarking.counter(kConnectCount);
+    initialSpdySessionCount_ = chrome.benchmarking.counter(kSpdySessionCount);
+    startTime_ = new Date();
+
+    var navigationProperties = {
+        "url": url_,
+        "selected": true
+    };
+
+    if (tabToReuse == 0) {
+      // We don't trust the tab creation to succeed, so start a timer
+      // that is cleared when the tab is created.
+      var hangTimer = setTimeout(function() {
+        // It is unlikely but possible for this to get enqueued after
+        // create tabs completes. In this case, loadCheck will have
+        // been cleared, but checkForLoad will not have fired yet.
+        // So, bail out if loadCheck is zero.
+        if (!window.loadCheck) return;
+
+        console.log("chrome.tabs.create failed for " + url_);
+        finished_ = true;
+        callbackWhenFinished_(me_);
+      }, window.timeout);
+
+      chrome.tabs.create(navigationProperties, function(tab) {
+          clearTimeout(hangTimer);
+          me_.startMonitoringLoad(tab);
+      });
+    } else {
+      chrome.tabs.update(tabToReuse.id,
+                         navigationProperties,
+                         me_.startMonitoringLoad);
+    }
   }
-  current_.paint_time = [];
-  current_.read_bytes_kb = [];
-  current_.write_bytes_kb = [];
-  current_.num_requests = [];
-  current_.num_connects = [];
-  current_.num_sessions = [];
 
-  // Add this benchmark to the list of benchmarks running.
-  addBenchmark(this);
+  this.startMonitoringLoad = function(tab) {
+    console.log("Assigned " + url_ + " to tab " + tab.id);
+    tab_ = tab;
+    checkForLoadId_ = setInterval(function() {
+      me_.checkForLoad(tab);
+    }, window.interval);
+  }
 
-  // Is the benchmark currently in progress.
+  this.checkForLoad = function(tab) {
+    loadCheck_++;
+    if (loadCheck_ > window.maxLoadChecks) {
+      console.log("load failed");
+      finished_ = true;
+      clearInterval(checkForLoadId_);
+      callbackWhenFinished_(me_);
+      return;
+    }
+
+    chrome.tabs.sendRequest(tab.id, {}, me_.handlePossiblePageLoad);
+  }
+
+  this.handlePossiblePageLoad = function(response) {
+    if (finished_) {
+      return;
+    }
+
+    if (response.timing.loadEventEnd && response.loadTimes.finishLoadTime) {
+      finished_ = true;
+      clearInterval(checkForLoadId_);
+
+      // If it record mode, wait here another 10 seconds to be absolutely
+      // sure that any lazy loaded resources are recorded.
+      if (benchmarkConfiguration.record) {
+        setTimeout(function() { me_.handlePageLoaded(response); }, 10000);
+      } else {
+        me_.handlePageLoaded(response);
+      }
+    }
+  }
+
+  this.handlePageLoaded = function(response) {
+    console.log("Page loaded: " + url_ + " on tab " + tab_.id);
+
+    var load_times = response.loadTimes;
+    var timing = response.timing;
+
+    // Make sure the content was fetched via spdy if it is enabled.
+    if (window.enableSpdy && !load_times.wasFetchedViaSpdy) {
+      alert("Did not fetch current url via spdy.\n" +
+            "Ending current test.");
+      callbackWhenFinished_(me_);
+      return;
+    }
+
+    // Record the individual result
+    var result = new Result()
+    var baseTime = timing.navigationStart;
+    CHECK(baseTime);
+    for (var prop in loggedTimings) {
+      if (prop in timing) {
+        result[loggedTimings[prop]] = timing[prop] - baseTime;
+      }
+    }
+    result.paint_time =
+        load_times.firstPaintTime ?
+        Math.round((1000.0 * load_times.firstPaintTime) - baseTime) : 0;
+    result.set_id = setId_;
+    result.url = url_;
+    result.load_type = loadType_;
+    result.using_spdy = load_times.wasFetchedViaSpdy;
+    var bytesRead = chrome.benchmarking.counter(kTCPReadBytes) -
+        initialReadBytes_;
+    var bytesWrite = chrome.benchmarking.counter(kTCPWriteBytes) -
+        initialWriteBytes_;
+    result.read_bytes_kb = bytesRead / 1024;
+    result.write_bytes_kb = bytesWrite / 1024;
+    result.num_requests = chrome.benchmarking.counter(kRequestCount) -
+        initialRequestCount_;
+    result.num_connects = chrome.benchmarking.counter(kConnectCount) -
+        initialConnectCount_;
+    result.num_sessions = chrome.benchmarking.counter(kSpdySessionCount) -
+        initialSpdySessionCount_;
+
+    result_ = result;
+    window.submitter.PostResult(result,
+                                function() { callbackWhenFinished_(me_); });
+  }
+}
+
+function Benchmark(url, setIds) {
+  var me_ = this;
+  var url_ = url;
+  var setIds_ = setIds;
+  var runCount_ = window.iterations;
+  var resultsByLoadType_ = [];
+  var numSummariesInFlight_ = 0;
+  var callbackWhenFinished_;
+  var state_;
+  var stateActions_ = [];
+
+  this.run = function(callbackWhenFinished) {
+    callbackWhenFinished_ = callbackWhenFinished;
+
+    for (var i in kTestsToRun) {
+      resultsByLoadType_[i] = new ResultCollection();
+    }
+    me_.buildStateMachine();
+
+    me_.startNextIteration();
+  }
+
+  this.buildStateMachine = function() {
+    // TODO(simonjam): Support skipping cold and/or hot.
+    stateActions_[LoadType.cold] = me_.runCold;
+    stateActions_[LoadType.hot] = me_.runHot;
+    stateActions_[LoadType.warm] = me_.runWarm;
+    stateActions_[kTestsToRun.length] = me_.handleIterationFinished;
+  }
+
+  this.startNextIteration = function() {
+    state_ = LoadType.cold;
+    me_.advanceStateMachine(0);
+  }
+
+  this.advanceStateMachine = function(tab) {
+    stateActions_[state_++](tab);
+  }
+
+  this.runCold = function(unusedTab) {
+    console.log("starting cold");
+    var coldLoad = new BenchmarkLoad(url_, LoadType.cold,
+                                     setIds_[LoadType.cold]);
+
+    chrome.benchmarking.clearCache();
+    chrome.benchmarking.closeConnections();
+    //me_.asyncClearCookies();
+
+    // Go back to the browser so that tasks can run.
+    setTimeout(function() { coldLoad.run(0, me_.handleLoadFinished); },
+               window.interval);
+  }
+
+  this.runHot = function(tab) {
+    console.log("starting hot on tab " + tab.id);
+    var hotLoad = new BenchmarkLoad(url_, LoadType.hot,
+                                    setIds_[LoadType.hot]);
+
+    chrome.tabs.update(
+        tab.id,
+        // We need to navigate away to perform this test, but we still want to
+        // keep the same renderer. Navigating to a bogus site seems to have the
+        // desired effect.
+        { "url": "http://hurchoeatoeuhsrcuhs.com", "selected": true },
+        function(tab) {
+          setTimeout(function() { hotLoad.run(tab, me_.handleLoadFinished); },
+                     window.interval);
+        });
+  }
+
+  this.runWarm = function(tab) {
+    console.log("starting warm and closing tab " + tab.id);
+    var warmLoad = new BenchmarkLoad(url_, LoadType.warm,
+                                     setIds_[LoadType.warm]);
+
+    chrome.benchmarking.closeConnections();
+
+    chrome.tabs.remove(
+        tab.id,
+        function() {
+            setTimeout(function() { warmLoad.run(0, me_.handleLoadFinished); },
+                       window.interval)
+        });
+  }
+
+  this.handleLoadFinished = function(benchmarkLoad) {
+    var loadType = benchmarkLoad.loadType();
+    console.log("Posted result for " + url_ + " " + loadType + " from tab " +
+                benchmarkLoad.tab().id);
+    var result = benchmarkLoad.result();
+    if (result != null) {
+      resultsByLoadType_[loadType].addResult(result);
+    }
+
+    me_.advanceStateMachine(benchmarkLoad.tab());
+  }
+
+  this.handleIterationFinished = function(tab) {
+    runCount_--;
+    console.log("all load types complete, closing " + tab.id);
+    chrome.tabs.remove(tab.id);
+    if (me_.hasMoreIterations()) {
+      me_.startNextIteration();
+    } else {
+      me_.handleBenchmarkComplete();
+    }
+  }
+
   this.hasMoreIterations = function() {
     if (runCount_ <= 0) { return false; }
 
@@ -165,11 +415,11 @@ function Benchmark(url) {
     var kMinIterationsBeforeStop = 5;
     var kMinErrorBeforeStop = .02;  // 2%
 
-    var results = current_[loggedTimings['loadEventEnd']];
-    var num_iterations = results.length;
+    var num_iterations = resultsByLoadType_[LoadType.cold].numResults();
     if (num_iterations >= kMinIterationsBeforeStop) {
-      var mean = Array.mean(results);
-      var stddev = Array.stddev(results);
+      var results = resultsByLoadType_[LoadType.cold].summarize();
+      var mean = results.total_time;
+      var stddev = results.total_time_stddev;
       var error = stddev / Math.sqrt(num_iterations / 2);
       var ratio = error / mean;
 
@@ -177,7 +427,7 @@ function Benchmark(url) {
                   " iterations, stddev=" + stddev + ", error=" + error);
 
       if (ratio <= kMinErrorBeforeStop) {
-        console.log("Variance is good enough for url: " + this.url() + 
+        console.log("Variance is good enough for url: " + url_ +
                     ", iterations: " + num_iterations +
                     ", stddev: " + stddev +
                     ", error: " + error +
@@ -186,262 +436,135 @@ function Benchmark(url) {
         return false;
       }
     }
-    
+
     return true;
   }
 
-  this.isActive = function() {
-    return isActive_;
-  }
-
-  this.startTime = function() {
-    return startTime_;
-  }
-
-  this.abortPageLoad = function() {
-    console.log("running abortPageLoad for: " + me_.url());
-    isActive_ = false;
-    me_.pageFinished();
-  }
-
-  // The url which this benchmark is running.
-  this.url = function() { return current_.url; }
-
-  // Called when the test run completes.
-  this.pageFinished = function() {
-    console.log("running pageFinished for: " + me_.url());
-    runCount_--;
-
-    var benchmark = nextBenchmark();
-    var finished = false;
-    if (benchmark == null) {
-      console.log("Benchmark is finished!");
-      finished = true;
-    }
-
-    if (!me_.hasMoreIterations()) {
-      // Update the overall set to include this summary.
-      set_summary_stats.iterations = Math.max(set_summary_stats.iterations,
-                                              current_.iterations);
-      for (var prop in loggedTimings) {
-        set_summary_stats[loggedTimings[prop]] +=
-          Array.mean(current_[loggedTimings[prop]]);
+  this.handleBenchmarkComplete = function() {
+    console.log("Posting summaries");
+    for (var i in kTestsToRun) {
+      if (resultsByLoadType_[i].numResults()) {
+        numSummariesInFlight_++;
+        var summary = resultsByLoadType_[i].summarize();
+        globalTestSetResults[i].addResult(summary);
+        window.submitter.PostSummary(summary, me_.handleSummaryPosted);
       }
-      set_summary_stats.paint_time += Array.mean(current_.paint_time);
-      set_summary_stats.read_bytes_kb += Array.mean(current_.read_bytes_kb);
-      set_summary_stats.write_bytes_kb += Array.mean(current_.write_bytes_kb);
-      set_summary_stats.num_requests += Array.mean(current_.num_requests);
-      set_summary_stats.num_connects += Array.mean(current_.num_connects);
-      set_summary_stats.num_sessions += Array.mean(current_.num_sessions);
-
-      window.submitter.PostSummary(current_, function(response) {
-        console.log("Posted summary: " + response);
-        if (finished) {
-          // If we're the last benchmark, close the window.
-          console.log("removing benchmark window: " + benchmarkWindow.id);
-          window.submitter.UpdateSetSummary(set_summary_stats,
-                                            function(response) {
-            console.log("Posted set summary: " + response);
-            chrome.tabs.remove(benchmarkWindow.id);
-            benchmarkWindow = 0;
-            asyncExitBrowser();
-          });
-        }
-      });
-    } 
-
-    if (!finished) {
-      // Move on to next benchmarked pages.
-      setTimeout(benchmark.runPage, window.interval);
+    }
+    if (numSummariesInFlight_ == 0) {
+      me_.handleSummaryPosted();
     }
   }
 
-  // Called before starting a page load.
-  this.pageStart = function() {
-    console.log("pageStart for " + this.url());
-    initialReadBytes_ = chrome.benchmarking.counter(kTCPReadBytes);
-    initialWriteBytes_ = chrome.benchmarking.counter(kTCPWriteBytes);
-    initialRequestCount_ = chrome.benchmarking.counter(kRequestCount);
-    initialConnectCount_ = chrome.benchmarking.counter(kConnectCount);
-    initialSpdySessionCount_ = chrome.benchmarking.counter(kSpdySessionCount);
-
-    startTime_ = new Date();
-    CHECK(!isActive_, "activating already active benchmark");
-    isActive_ = true;
-  }
-
-  this.openNextPage = function() {
-    var benchmark = currentBenchmark();
-    console.log("openNextPage called. current = " + benchmark.url());
-    benchmark.pageStart();
-
-    // We don't trust the tab creation to succeed, so start a timer
-    // that is cleared when the tab is created.
-    var hangTimer = setTimeout(function() {
-      // It is unlikely but possible for this to get enqueued after
-      // create tabs completes. In this case, loadCheck will have
-      // been cleared, but checkForLoad will not have fired yet.
-      // So, bail out if loadCheck is zero.
-      if (!window.loadCheck) return;
-
-      console.log("chrome.tabs.create failed for " + benchmark.url());
-      benchmark.abortPageLoad();
-    }, window.timeout);
-
-    chrome.tabs.create({"url": benchmark.url(),
-                        "selected": true
-                       },
-                       function(tab) {
-                         clearTimeout(hangTimer);
-                         benchmarkWindow = tab;
-                         console.log("Created benchmark tab: " + tab.id);
-                         window.loadCheck = 0;
-                         me_.checkForLoadId = setInterval(function(){
-                           benchmark.checkForLoad(tab);
-                         }, window.interval);
-                       });
-  }
-
-  this.prepareToOpenPage = function() {
-    console.log("prepareToOpenPage called");
-    // After the previous page is closed, this function will apply
-    // any settings needed to prepare for opening a new page.
-    // Note: the previous page must be closed, otherwise, the cache
-    // clearing and connection clearing may not be thorough.
-
-    if (window.clearCache) {
-      chrome.benchmarking.clearCache();
-    }
-
-    if (window.clearConnections) {
-      chrome.benchmarking.closeConnections();
-    }
-
-    if (window.clearCookies) {
-      asyncClearCookies();
-    }
-
-    // Go back to the browser so that tasks can run.
-    setTimeout(me_.openNextPage, window.interval);
-  }
-
-  // Run a single page in the benchmark
-  this.runPage = function() {
-    if (benchmarkWindow) {
-      console.log("Closing benchmark window: " + benchmarkWindow.id);
-      var tab_id = benchmarkWindow.id;
-      benchmarkWindow = 0;
-      chrome.tabs.remove(tab_id, function() {
-        me_.prepareToOpenPage();
-      });
-    } else {
-      me_.prepareToOpenPage();
+  this.handleSummaryPosted = function(response) {
+    console.log("Posted summary: " + response);
+    numSummariesInFlight_--;
+    if (numSummariesInFlight_ <= 0) {
+      callbackWhenFinished_();
     }
   }
 
-  this.checkForLoad = function(tab) {
-    console.log("Sending load time request to tab: " + tab.id);
-    window.loadCheck++;
-    if (window.loadCheck > window.maxLoadChecks) {
-      clearInterval(me_.checkForLoadId);
-      me_.abortPageLoad();
-      return;
-    }      
-    chrome.tabs.sendRequest(tab.id, {}, function(response) {
-      if (response.timing.loadEventEnd && response.loadTimes.finishLoadTime) {
-        clearInterval(me_.checkForLoadId);
-        console.log("Load complete for tab: " + tab.id);
-
-        // If it record mode, wait here another 10 seconds to be absolutely
-        // sure that any lazy loaded resources are recorded.
-        if (benchmarkConfiguration.record) {
-          setTimeout(function() {
-            me_.pageLoaded(response.loadTimes, response.timing);
-          }, 10000);
-        } else {
-          me_.pageLoaded(response.loadTimes, response.timing);
-        }
+  this.asyncClearCookies = function() {
+    chrome.cookies.getAll({}, function(cookies) {
+      for (var i = cookies.length - 1; i >= 0; i--) {
+        chrome.cookies.remove(cookies[i])
       }
     });
   }
+}
 
-  // Called when a page finishes loading.
-  this.pageLoaded = function(load_times, timing) {
-    console.log("pageLoaded");
+function BenchmarkManager() {
+  var me_ = this;
+  var setIds_ = [];
+  var benchmarks_ = [];
+  var currentBenchmarkIndex_ = 0;
+  var numSummariesInFlight_ = 0;
+  var numTestsToCreate_;
 
-    if (!isActive_) {
-      // The page is already dead.  It was probably killed and finished
-      // at the same time.
-      console.log("page is no longer active!");
-      return;
+  this.run = function() {
+    me_.createTests();
+  }
+
+  this.createTests = function() {
+    numTestsToCreate_ = kTestsToRun.length;
+    CHECK(numTestsToCreate_, "There are no tests to run");
+    for (var i in kTestsToRun) {
+      globalTestSetResults[i] = new ResultCollection();
+      window.submitter.CreateTest(kTestsToRun[i], me_.handleTestCreated);
     }
-    isActive_ = false;
+  }
 
-    // Make sure the content can be fetched via spdy if it is enabled.
-    if (window.enableSpdy && !load_times.wasFetchedViaSpdy) {
-      alert("Can not fetch current url via spdy.\n" +
-            "Ending current test.");
-      runCount_ = 0;  // Stop running this test.
-      me_.pageFinished();
-      return;
+  this.handleTestCreated = function(loadType, setId) {
+    numTestsToCreate_--;
+    setIds_[loadType] = setId;
+    if (numTestsToCreate_ <= 0) {
+      me_.createBenchmarks();
+      me_.runNextBenchmark();
     }
+  }
 
-    // If last fetch was via spdy, current fetch should use spdy too. Same
-    // for vise versa.
-    if (current_.iterations > 0 &&
-        current_.using_spdy != load_times.wasFetchedViaSpdy) {
-      alert("Error: viaSpdy for current fetch is different from last fetch!\n" +
-            "Ending current test.");
-      runCount_ = 0;  // Stop running this test.
-      me_.pageFinished();
-      return;
-    }
+  this.createBenchmarks = function() {
+    var urls = benchmarkConfiguration.urls;
+    for (var i = 0; i < urls.length; i++) {
+      // Remove extra space at the beginning or end of a url.
+      urls[i] = removeSpace(urls[i]);
 
-    // Record the individual result
-    var result = {}
-    var baseTime = timing.navigationStart;
-    CHECK(baseTime);
-    for (var prop in loggedTimings) {
-      if (prop in timing) {
-        result[loggedTimings[prop]] = timing[prop] - baseTime;
+      // Alert about and ignore blank page which does not get loaded.
+      if (urls[i] == "about:blank") {
+        alert("blank page loaded!");
+      } else if (!checkScheme(urls[i])) {
+        // Alert about url that is not in scheme http:// or https://.
+        alert(urls[i] + " does not start with http:// or https://.");
+      } else {
+        var benchmark = new Benchmark(urls[i], setIds_);
+        benchmarks_.push(benchmark);
       }
     }
-    result.paint_time = load_times.firstPaintTime ? Math.round((1000.0 * load_times.firstPaintTime) - baseTime) : 0;
-    result.url = current_.url;
-    result.using_spdy = load_times.wasFetchedViaSpdy;
-    var bytesRead = chrome.benchmarking.counter(kTCPReadBytes) -
-                                                initialReadBytes_;
-    var bytesWrite = chrome.benchmarking.counter(kTCPWriteBytes) - 
-                                                 initialWriteBytes_;
-    result.read_bytes_kb = bytesRead / 1024;
-    result.write_bytes_kb = bytesWrite / 1024;
-    result.num_requests = chrome.benchmarking.counter(kRequestCount) -
-        initialRequestCount_;
-    result.num_connects = chrome.benchmarking.counter(kConnectCount) -
-        initialConnectCount_;
-    result.num_sessions = chrome.benchmarking.counter(kSpdySessionCount) -
-        initialSpdySessionCount_;
+  }
 
-    // Record the aggregate result for this URL.
-    current_.iterations++;
-    for (var prop in loggedTimings) {
-      if (loggedTimings[prop] in result) {
-        current_[loggedTimings[prop]].push(result[loggedTimings[prop]]);
+  this.runNextBenchmark = function() {
+    var benchmark = benchmarks_[currentBenchmarkIndex_];
+    setTimeout(function() {
+        benchmark.run(me_.handleBenchmarkFinished);
+      }, window.interval);
+    currentBenchmarkIndex_++;
+  }
+
+  this.handleBenchmarkFinished = function() {
+    for (var i in kTestsToRun) {
+      if (globalTestSetResults[i].numResults()) {
+        numSummariesInFlight_++;
+        window.submitter.UpdateSetSummary(
+            globalTestSetResults[i].summarize(),
+            me_.handleSummaryPosted);
       }
     }
-    current_.paint_time.push(result.paint_time);
-    current_.using_spdy = result.using_spdy;
-    current_.read_bytes_kb.push(result.read_bytes_kb);
-    current_.write_bytes_kb.push(result.write_bytes_kb);
-    current_.num_requests.push(result.num_requests);
-    current_.num_connects.push(result.num_connects);
-    current_.num_sessions.push(result.num_sessions);
+    if (numSummariesInFlight_ == 0) {
+      me_.handleSummaryPosted();
+    }
+  }
 
-    // Submit the result.
-    window.submitter.PostResult(result, function(response) {
-      console.log("Posted result for " + me_.url + ": " + response);
-      me_.pageFinished();
+  this.handleSummaryPosted = function(response) {
+    console.log("Posted set summary: " + response);
+    numSummariesInFlight_--;
+    if (numSummariesInFlight_ <= 0) {
+      if (currentBenchmarkIndex_ == benchmarks_.length) {
+        me_.asyncExitBrowser();
+      } else {
+        me_.runNextBenchmark();
+      }
+    }
+  }
+
+  this.asyncExitBrowser = function() {
+    chrome.tabs.getAllInWindow(null, function(tabs) {
+      tabs.forEach(function(tab) {
+        chrome.tabs.remove(tab.id);
+      });
     });
+    // On mac, closing all tabs doesn't close Chrome, so crash after a timeout.
+    setTimeout(function() {
+      chrome.windows.create({"url": "about:inducebrowsercrashforrealz"});
+    }, 1000);
   }
 }
 
@@ -450,8 +573,7 @@ chrome.extension.onConnect.addListener(function(port) {
     if (data.message == "start") {
       window.benchmarkConfiguration = data.benchmark;
       window.submitter = new TestResultSubmitter(benchmarkConfiguration);
-      window.submitter.CreateTest(function() { run(); });
-      return;
+      run();
     }
   });
 });
@@ -472,23 +594,8 @@ function run() {
     }
   }
 
-  benchmarks = [];
-  var urls = benchmarkConfiguration.urls;
-  for (var i = 0; i < urls.length; i++) {
-    // Remove extra space at the beginning or end of a url.
-    urls[i] = removeSpace(urls[i]);
-
-    // Alert about and ignore blank page which does not get loaded. 
-    if (urls[i] == "about:blank") {
-      alert("blank page loaded!");
-    } else if (!checkScheme(urls[i])) {
-      // Alert about url that is not in scheme http:// or https://.
-      alert(urls[i] + " does not start with http:// or https://.");
-    } else {  
-      var benchmark = new Benchmark(urls[i]);
-    }
-  }
-  benchmarks[0].runPage();
+  var benchmarkManager = new BenchmarkManager();
+  benchmarkManager.run();
 }
 
 // Remove extra whitespace in the beginning or end of a url string.
@@ -509,11 +616,11 @@ function checkScheme(url) {
   var httpsStr = "https://";
   var urlSubStr1 = url.substring(0, httpStr.length);
   var urlSubStr2 = url.substring(0, httpsStr.length);
-  
+
   if ( (urlSubStr1 == httpStr) || (urlSubStr2 == httpsStr) ) {
     return true;
-  } 
-  return false; 
+  }
+  return false;
 }
 
 // Run at startup
