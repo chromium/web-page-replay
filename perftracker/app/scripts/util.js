@@ -49,9 +49,13 @@ Array.prototype.average = function() {
   return this.sum() / this.length;
 };
 
+function sortNumber(a, b) {
+  return a - b;
+}
+
 Array.prototype.median = function() {
   if (!this.length) return 0;
-  var sorted = this.clone().sort();
+  var sorted = this.clone().sort(sortNumber);
   var lower = sorted[Math.floor((sorted.length + 1) / 2) - 1];
   if (sorted.length == 1) {
     return sorted[0];
