@@ -116,48 +116,6 @@ var BrowserDetect = {
 };
 BrowserDetect.init();
 
-// Returns the max value in the array.
-Array.max = function(array) {
-  return Math.max.apply(Math, array);
-};
-
-// Returns the min value in the array.
-Array.min = function(array) {
-  return Math.min.apply(Math, array);
-};
-
-// Returns the sum of all values in the array.
-Array.sum = function(array) {
-  var sum = 0;
-  for (var i = array.length - 1; i >= 0; i--) {
-    sum += array[i];
-  }
-  return sum;
-};
-
-// Returns the mean of the array.
-Array.mean = function(array) {
-  var count = array.length;
-  if (count == 0) { return 0; }
-  var sum = Array.sum(array);
-  return sum / count;
-}
-
-// Returns the standard deviation of the array
-Array.stddev = function(array) {
-  var count = array.length;
-  if (count == 0) { return 0; }
-
-  var mean = Array.mean(array);
-  var variance = 0;
-  for (var i = 0; i < count; i++) {
-    var deviation = mean - array[i];
-    variance += deviation * deviation;
-  }
-  variance /= (count - 1);
-  return Math.sqrt(variance);
-}
-
 function XHRGet(url, callback) {
   var self = this;
   var xhr = new XMLHttpRequest();

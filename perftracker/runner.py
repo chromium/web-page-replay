@@ -174,19 +174,42 @@ def StopVirtualX(slave_build_name):
     os.remove(xvfb_pid_filename)
 
 
+def _svn(cmd):
+  """Returns output of given svn command."""
+  svn = subprocess.Popen(
+      ['svn', '--non-interactive', cmd], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+  return svn.communicate()[0]
+
+
+def _get_value_for_key(lines, key):
+  """Given list of |lines| with colon separated key value pairs, return the value of |key|."""
+  for line in lines:
+    parts = line.split(':')
+    if parts[0].strip() == key:
+      return parts[1].strip()
+  return None
+
+
 def GetCPU():
   # When /proc/cpuinfo exists it is more reliable than platform.
   if os.path.exists('/proc/cpuinfo'):
     try:
       f = open('/proc/cpuinfo')
-      lines = f.readlines()
-      for line in lines:
-        parts = line.split(':')
-        if parts[0].strip() == 'model name':
-          return parts[1].strip()
+      model_name = _get_value_for_key(f.readlines(), 'model_name')
+      if model_name:
+        return model_name
     finally:
       f.close()
   return platform.processor()
+
+
+def GetVersion():
+  svn_info = _svn('info')
+  if svn_info:
+    revision = _get_value_for_key(svn_info.split('\n'), 'Revision')
+    if revision:
+      return revision
+  return 'unknown'
 
 
 class TestInstance:
@@ -210,6 +233,7 @@ class TestInstance:
       'server_url': runner_cfg.appengine_url,
       'server_login': options.login_url,
       'client_hostname': platform.node(),
+      'harness_version': GetVersion(),
       'cpu': GetCPU(),
       'iterations': str(runner_cfg.iterations),
       'download_bandwidth_kbps': str(self.network['bandwidth_kbps']['down']),
