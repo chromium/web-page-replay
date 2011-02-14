@@ -509,8 +509,13 @@ function Benchmark(url, setIds) {
     chrome.cookies.getAll({}, function(cookies) {
       for (var i = cookies.length - 1; i >= 0; i--) {
         var cookie = cookies[i];
+        var cookie_domain = 'http' + (cookie.secure ? 's' : '') + '://' + cookie.domain;
+
+        // Do not clear the cookie which allows us to login to the results server.
+        if (benchmarkConfiguration.server_url.indexOf(cookie_domain) == 0) continue;
+
         chrome.cookies.remove({
-          url: 'http' + (cookie.secure ? 's' : '') + '://' + cookie.domain + cookie.path,
+          url: cookie_domain + cookie.path,
           name: cookie.name,
           storeId: cookie.storeId,
         });
