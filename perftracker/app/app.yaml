@@ -1,4 +1,4 @@
-application: perftracker
+application: google.com:perftracker
 version: 7
 runtime: python
 api_version: 1
