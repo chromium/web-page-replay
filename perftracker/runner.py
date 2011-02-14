@@ -195,7 +195,7 @@ def GetCPU():
   if os.path.exists('/proc/cpuinfo'):
     try:
       f = open('/proc/cpuinfo')
-      model_name = _get_value_for_key(f.readlines(), 'model_name')
+      model_name = _get_value_for_key(f.readlines(), 'model name')
       if model_name:
         return model_name
     finally:
