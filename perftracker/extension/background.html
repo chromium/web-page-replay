@@ -509,11 +509,22 @@ function Benchmark(url, setIds) {
     chrome.cookies.getAll({}, function(cookies) {
       for (var i = cookies.length - 1; i >= 0; i--) {
         var cookie = cookies[i];
+
+        if (!cookie || !cookie.domain) continue;
         var cookie_domain = 'http' + (cookie.secure ? 's' : '') + '://' + cookie.domain;
 
-        // Do not clear the cookie which allows us to login to the results server.
-        if (benchmarkConfiguration.server_url.indexOf(cookie_domain) == 0) continue;
+        // Do not clear the cookie which allows us to login to the results server also.
+        if (!benchmarkConfiguration.server_url) {
+          console.log("WARNING: Not clearing any cookies because unabled " +
+                      "determine results server URL.");
+          continue;
+        }
+        if (benchmarkConfiguration.server_url.indexOf(cookie_domain) == 0) {
+          console.log("Not clearing cookie for: " + cookie_domain);
+          continue;
+        }
 
+        console.log("Clearing cookie for: " + cookie_domain);
         chrome.cookies.remove({
           url: cookie_domain + cookie.path,
           name: cookie.name,
