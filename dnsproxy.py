@@ -38,28 +38,20 @@ class RealDnsLookup(object):
     self.dns_cache = {}
 
   def __call__(self, hostname):
+    self.dns_cache_lock.acquire()
+    ip = self.dns_cache.get(hostname)
+    self.dns_cache_lock.release()
+    if ip:
+      logging.debug('_real_dns_lookup(%s) cache hit! -> %s', hostname, ip)
+      return ip
     try:
-      self.dns_cache_lock.acquire()
-      ip = self.dns_cache.get(hostname);
-      self.dns_cache_lock.release()
-      if ip:
-        logging.debug('_real_dns_lookup(%s) cache hit! -> %s', hostname, ip)
-        return ip
-
       answers = self.resolver.query(hostname, 'A')
-    except dns.resolver.NoAnswer:
-      # TODO: should these exceptions be handled at the next level up?
-      logging.debug('_real_dns_lookup(%s) -> None (NoAnswer)', hostname)
+    except (dns.resolver.NoAnswer,
+            dns.resolver.NXDOMAIN,
+            dns.resolver.Timeout) as ex:
+      logging.debug('_real_dns_lookup(%s) -> None (%s)',
+                    hostname, ex.__class__.__name__)
       return None
-    except dns.resolver.NXDOMAIN:
-      # TODO: should these exceptions be handled at the next level up?
-      logging.debug('_real_dns_lookup(%s) -> None (NXDOMAIN)', hostname)
-      return None
-    except dns.resolver.Timeout:
-      # TODO: should these exceptions be handled at the next level up?
-      logging.debug('_real_dns_lookup(%s) -> None (Timeout)', hostname)
-      return None
-    ip = None
     if answers:
       ip = str(answers[0])
     logging.debug('_real_dns_lookup(%s) -> %s', hostname, ip)
