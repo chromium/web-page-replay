@@ -242,7 +242,7 @@
         <!-- TODO(tonyg): Link to details page for each URL. -->
         <td jsselect="$this" jsvalues="class:$index > 0 ? 'righttext' : ''"><span jscontent="$this"></span></td>
         <td class="righttext" jscontent="$delta" jsvalues=".style.color:$index > isSignificants.length - 1 || isSignificants[$index] ? ($delta < 0 ? 'red' : 'black') : 'gray'"></td>
-        <td class="righttext" jscontent="Math.round(10000 * $delta / $this[2]) / 100 + '%'" jsvalues=".style.color:$index > isSignificants.length - 1 || isSignificants[$index] ? ($delta < 0 ? 'red' : 'black') : 'gray'"></td>
+        <td class="righttext" jscontent="Math.round(10000 * $delta / $this[1]) / 100 + '%'" jsvalues=".style.color:$index > isSignificants.length - 1 || isSignificants[$index] ? ($delta < 0 ? 'red' : 'black') : 'gray'"></td>
       </tr>
       </table>
     </div>
