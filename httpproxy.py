@@ -16,46 +16,13 @@
 import BaseHTTPServer
 import daemonserver
 import httparchive
-import httplib
+import httpclient  # wpr httplib wrapper
 import logging
 import os
 import socket
 import SocketServer
 import subprocess
 import time
-
-
-class RealHttpRequest(object):
-  def __init__(self, real_dns_lookup):
-    self._real_dns_lookup = real_dns_lookup
-
-  def __call__(self, request, headers):
-    # TODO(tonyg): Strip sdch from the request headers because we can't
-    # guarantee that the dictionary will be recorded, so replay may not work.
-    if 'accept-encoding' in headers:
-      headers['accept-encoding'] = headers['accept-encoding'].replace('sdch', '')
-
-    logging.debug('RealHttpRequest: %s %s', request.host, request.path)
-    host_ip = self._real_dns_lookup(request.host)
-    try:
-      connection = httplib.HTTPConnection(host_ip)
-      connection.request(
-          request.command,
-          request.path,
-          request.request_body,
-          headers)
-      response = connection.getresponse()
-
-      # On the response, we'll save every read exactly as we read it
-      # from the network.  We'll use this to replay chunks similarly to
-      # how we recorded them.
-      # TODO(tonyg): Use something other than httplib so that we can preserve
-      # the original chunks.
-      response.raw_data = []
-      return response
-    except Exception, e:
-      logging.critical('Could not fetch %s: %s', request, e)
-      return None
 
 
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -95,18 +62,10 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def send_archived_http_response(self, response):
     try:
       # We need to set the server name before we start the response.
-      # Take a scan through the response headers here
-      use_chunked = False
-      has_content_length = False
-      server_name = 'WebPageReplay'
-      for header, value in response.headers:
-        if header == 'server':
-          server_name = value
-        if header == 'transfer-encoding':
-          use_chunked = True
-        if header == 'content-length':
-          has_content_length = True
-      self.server_version = server_name
+      headers = dict(response.headers)
+      use_chunked = 'transfer-encoding' in headers
+      has_content_length = 'content-length' in headers
+      self.server_version = headers.get('server', 'WebPageReplay')
       self.sys_version = ''
 
       if response.version == 10:
@@ -115,28 +74,26 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       # If we don't have chunked encoding and there is no content length,
       # we need to manually compute the content-length.
       if not use_chunked and not has_content_length:
-        content_length = 0
-        for item in response.response_data:
-          content_length += len(item)
+        content_length = sum(len(c) for c in response.response_data)
         response.headers.append(('content-length', str(content_length)))
 
       self.send_response(response.status, response.reason)
       # TODO(mbelshe): This is lame - each write is a packet!
       for header, value in response.headers:
-        skip_header = False
-        if header == 'server':
-          skip_header = True
-        if skip_header == False:
+        if header != 'server':
           self.send_header(header, value)
       self.end_headers()
 
-      for item in response.response_data:
+      for chunk in response.response_data:
         if use_chunked:
-          self.wfile.write(str(hex(len(item)))[2:])
-          self.wfile.write('\r\n')
-        self.wfile.write(item)
-        if use_chunked:
-          self.wfile.write('\r\n')
+          # Write chunk length (hex) and data (e.g. "A\r\nTESSELATED\r\n").
+          self.wfile.write('%x\r\n%s\r\n' % (len(chunk), chunk))
+        else:
+          self.wfile.write(chunk)
+      if use_chunked and (not response.response_data or
+                          response.response_data[-1]):
+        # Write last chunk as a zero-length chunk with no data.
+        self.wfile.write('0\r\n\r\n')
       self.wfile.flush()
 
       # TODO(mbelshe): This connection close doesn't seem to work.
@@ -155,47 +112,43 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_HEAD(self):
     self.do_GET()
 
-  # Override the default send error with a version that doesn't unnecessarily close
-  # the connection.
-  def send_error(self, error, message = None):
-    body = "Not found"
+  def send_error(self, request, error, message = None):
+    """Override the default send error with a version that doesn't unnecessarily
+    close the connection.
+    """
+    body = "Not Found"
     self.send_response(error, message)
     self.send_header("content-type", "text/plain")
     self.send_header("content-length", str(len(body)))
     self.end_headers()
-    self.wfile.write("Not Found")
+    self.wfile.write(body)
     self.wfile.flush()
 
 class RecordHandler(HttpArchiveHandler):
   def do_GET(self):
     request = self.get_archived_http_request()
     if request is None:
-      self.send_error(500)
+      self.send_error(request, 500)
       return
 
-    response = self.server.real_http_request(request, self.get_header_dict())
+    response, response_chunks = self.server.real_http_request(
+        request, self.get_header_dict())
     if response is None:
-      self.send_error(404)
+      self.send_error(request, 404)
       return
-
-    # Read the rest of the HTTP response.
-    while True:
-      data = response.read(4096)
-      response.raw_data.append(data)
-      if len(data) == 0:
-        break
 
     archived_http_response = httparchive.ArchivedHttpResponse(
         response.version,
         response.status,
         response.reason,
         response.getheaders(),
-        response.raw_data)
+        response_chunks)
     if self.server.use_deterministic_script:
       try:
         archived_http_response.inject_deterministic_script()
-      except:
+      except httparchive.InjectionFailedException as err:
         logging.error('Failed to inject deterministic script for %s', request)
+        logging.debug('Request content: %s', err.text)
     self.send_archived_http_response(archived_http_response)
     self.server.http_archive[request] = archived_http_response
     logging.debug('Recorded: %s', request)
@@ -210,7 +163,7 @@ class ReplayHandler(HttpArchiveHandler):
       request_time_ms = (time.time() - start_time) * 1000.0;
       logging.debug('Replayed: %s (%dms)', request, request_time_ms)
     else:
-      self.send_error(404)
+      self.send_error(request, 404)
       logging.error('Could not replay: %s', request)
 
 
@@ -222,7 +175,7 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
       host='localhost', port=80, use_ssl=False, certfile='', keyfile=''):
     self.use_deterministic_script = use_deterministic_script
     self.archive_filename = http_archive_filename
-    self.real_http_request = RealHttpRequest(real_dns_lookup)
+    self.real_http_request = httpclient.RealHttpRequest(real_dns_lookup)
 
     self._assert_archive_file_writable()
     self.http_archive = httparchive.HttpArchive()

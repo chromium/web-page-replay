@@ -31,8 +31,7 @@ To edit a particular URL:
   $ ./httparchive.py edit --host www.example.com --path /foo archive.wpr
 """
 
-import cPickle
-import gzip
+import httpzlib
 import logging
 import optparse
 import os
@@ -40,9 +39,7 @@ import persistentmixin
 import re
 import StringIO
 import subprocess
-import sys
 import tempfile
-import zlib
 
 
 HTML_RE = re.compile(r'<html[^>]*>', re.IGNORECASE)
@@ -82,6 +79,16 @@ DETERMINISTIC_SCRIPT = """
 """
 
 
+class HttpArchiveException(Exception):
+  pass
+
+class InjectionFailedException(HttpArchiveException):
+  def __init__(self, text):
+    self.text = text
+
+  def __str__(self):
+    return repr(text)
+
 def _InsertScriptAfter(matchobj):
   return matchobj.group(0) + DETERMINISTIC_SCRIPT
 
@@ -114,7 +121,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       for k, v in sorted(response.headers):
         print >>out, "    %s: %s" % (k, v)
       headers = dict(response.headers)
-      body = response.get_body_as_text()
+      body = response.get_data_as_text()
       if body:
         print >>out, '-' * 70
         print >>out, body
@@ -139,7 +146,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
 
     response = self[matching_requests[0]]
     tmp_file = tempfile.NamedTemporaryFile(delete=False)
-    tmp_file.write(response.get_body_as_text())
+    tmp_file.write(response.get_data_as_text())
     tmp_file.close()
     subprocess.check_call([editor, tmp_file.name])
     response.set_body_text(''.join(open(tmp_file.name).readlines()))
@@ -170,6 +177,24 @@ class ArchivedHttpRequest(object):
 
 
 class ArchivedHttpResponse(object):
+  """HTTPResponse objects.
+
+  ArchivedHttpReponse instances have the following attributes:
+    version: HTTP protocol version used by server.
+        10 for HTTP/1.0, 11 for HTTP/1.1 (same as httplib).
+    status: Status code returned by server (e.g. 200).
+    reason: Reason phrase returned by server (e.g. "OK").
+    headers: list of (header, value) tuples.
+    response_data: list of content chunks. Concatenating all the content chunks
+        gives the complete contents (i.e. the chunks do not have any lengths or
+        delimiters).
+  """
+
+  # CHUNK_EDIT_SEPARATOR is used to edit and view text content.
+  # It is not sent in responses. It is added by get_data_as_text()
+  # and removed by set_data().
+  CHUNK_EDIT_SEPARATOR = '[WEB_PAGE_REPLAY_CHUNK_BOUNDARY]'
+
   def __init__(self, version, status, reason, headers, response_data):
     self.version = version
     self.status = status
@@ -196,69 +221,56 @@ class ArchivedHttpResponse(object):
         self.headers.pop(i)
         return
 
-  # TODO(tonyg): get_body_as_text/set_body_text destory chunking.
+  def is_gzip(self):
+    return self.get_header('content-encoding') == 'gzip'
 
-  def get_body_as_text(self):
+  def is_compressed(self):
+    return self.get_header('content-encoding') in ('gzip', 'deflate')
+
+  def get_data_as_text(self):
+    """Return content as a single string.
+
+    Uncompresses and concatenates chunks with CHUNK_EDIT_SEPARATOR.
+    """
     content_type = self.get_header('content-type')
-    if (not content_type or 
+    if (not content_type or
         not (content_type.startswith('text/') or
              content_type == 'application/x-javascript')):
       return None
-
-    # Concatenate the chunks so we can decompress it.
-    raw_data = ''.join(self.response_data)
-
-    is_gzip = self.get_header('content-encoding') == 'gzip'
-    is_deflate = self.get_header('content-encoding') == 'deflate'
-    try:
-      if is_gzip:
-        compressed_data = StringIO.StringIO(raw_data)
-        raw_data = gzip.GzipFile(fileobj=compressed_data).read()
-      elif is_deflate:
-        raw_data = zlib.decompress(raw_data, -zlib.MAX_WBITS)
-    except:
-      logging.warning('Could not decompress')
-      return None
-
-    return raw_data
-
-  def set_body_text(self, raw_data):
-    is_gzip = self.get_header('content-encoding') == 'gzip'
-    is_deflate = self.get_header('content-encoding') == 'deflate'
-    if is_gzip:
-      compressed_response = StringIO.StringIO()
-      gzip.GzipFile(fileobj=compressed_response, mode='w').write(raw_data)
-      raw_data = compressed_response.getvalue()
-    elif is_deflate:
-      raw_data = zlib.compress(raw_data)  # Discard zlib header+checksum.
-
-    self.response_data = []
-    self.response_data.append(raw_data)
-    self.response_data.append('')  # Append a null chunk
-
-    if not self.get_header('transfer-encoding'):
-      len_raw_data = len(self.response_data[0])
-      self.set_header('content-length', len_raw_data)
+    if self.is_compressed():
+      uncompressed_chunks = httpzlib.uncompress_chunks(
+          self.response_data, self.is_gzip())
     else:
-      logging.warning('Chunking stripped')
+      uncompressed_chunks = self.response_data
+    return self.CHUNK_EDIT_SEPARATOR.join(uncompressed_chunks)
+
+  def set_data(self, text):
+    """Inverse of set_data_as_text().
+
+    Split on CHUNK_EDIT_SEPARATOR and compress if needed.
+    """
+    text_chunks = text.split(self.CHUNK_EDIT_SEPARATOR)
+    if self.is_compressed():
+      self.response_data = httpzlib.compress_chunks(text_chunks, self.is_gzip())
+    else:
+      self.response_data = text_chunks
+    if not self.get_header('transfer-encoding'):
+      content_length = sum(len(c) for c in response.response_data)
+      self.set_header('content-length', str(content_length))
 
   def inject_deterministic_script(self):
+    """Inject deterministic script immediately after <head> or <html>."""
     content_type = self.get_header('content-type')
     if not content_type or not content_type.startswith('text/html'):
       return
-
-    raw_data = self.get_body_as_text()
-
-    # First try to insert immediately after <head> then try <html>.
-    if raw_data:
-      raw_data, injected = HEAD_RE.subn(_InsertScriptAfter, raw_data, 1)
-      if not injected:
-        raw_data, injected = HTML_RE.subn(_InsertScriptAfter, raw_data, 1)
-        if not injected:
-          logging.debug(raw_data)
-          raise
-
-    self.set_body_text(raw_data)
+    text = self.get_data_as_text()
+    if text:
+      text, is_injected = HEAD_RE.subn(_InsertScriptAfter, text, 1)
+      if not is_injected:
+        text, is_injected = HTML_RE.subn(_InsertScriptAfter, text, 1)
+        if not is_injected:
+          raise InjectionFailedException(text)
+      self.set_data(text)
 
 
 if __name__ == '__main__':
