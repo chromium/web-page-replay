@@ -515,16 +515,14 @@ function Benchmark(url, setIds) {
 
         // Do not clear the cookie which allows us to login to the results server also.
         if (!benchmarkConfiguration.server_url) {
-          console.log("WARNING: Not clearing any cookies because unabled " +
+          console.log("WARNING: Not clearing any cookies because unable to " +
                       "determine results server URL.");
           continue;
         }
         if (benchmarkConfiguration.server_url.indexOf(cookie_domain) == 0) {
-          console.log("Not clearing cookie for: " + cookie_domain);
           continue;
         }
 
-        console.log("Clearing cookie for: " + cookie_domain);
         chrome.cookies.remove({
           url: cookie_domain + cookie.path,
           name: cookie.name,
