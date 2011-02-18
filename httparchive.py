@@ -255,7 +255,7 @@ class ArchivedHttpResponse(object):
     else:
       self.response_data = text_chunks
     if not self.get_header('transfer-encoding'):
-      content_length = sum(len(c) for c in response.response_data)
+      content_length = sum(len(c) for c in self.response_data)
       self.set_header('content-length', str(content_length))
 
   def inject_deterministic_script(self):
