@@ -60,7 +60,7 @@ class TrafficShaper(object):
       self.original_cwnd = self.platformsettings.get_cwnd()
       self.platformsettings.set_cwnd(self.init_cwnd)
     try:
-      self.platformsettings.ipfw(['delete', self._RULE_SET])
+      self.platformsettings.ipfw(['delete', 'set', self._RULE_SET])
     except:
       pass
     if (self.up_bandwidth == '0' and self.down_bandwidth == '0' and
@@ -149,7 +149,7 @@ class TrafficShaper(object):
     if self.init_cwnd != '0':
       self.platformsettings.set_cwnd(self.original_cwnd)
     try:
-      self.platformsettings.ipfw(['delete', self._RULE_SET])
+      self.platformsettings.ipfw(['delete', 'set', self._RULE_SET])
       logging.info('Stopped shaping traffic')
     except Exception, e:
       raise TrafficShaperException('Unable to stop shaping traffic: %s' % e)
