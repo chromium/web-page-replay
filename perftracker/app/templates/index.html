@@ -123,15 +123,37 @@
     // See: http://code.google.com/apis/visualization/documentation/gallery/linechart.html
     google.load('visualization', '1', {'packages':['corechart']});
 
+    function getModeUrlCount(results) {
+      var urlCounts = [];
+      for (var i = 0; i < results.length; ++i) {
+        urlCounts.push(results[i].url_count);
+      }
+      return urlCounts.mode();
+    }
+
+    function filterResults(results, network, cpu) {
+      var filteredResults = [];
+      for (var i = 0; i < results.length; ++i) {
+        if (results[i].network != network) continue;
+        if (results[i].cpu != cpu) continue;
+        filteredResults.push(results[i]);
+      }
+      return filteredResults;      
+    }
+
     // Average all points for a given version into a single value.
-    function getVersionMap(results, network, cpu) {
+    function getVersionMap(results) {
+      var modeUrlCount = getModeUrlCount(results);
       var versionMap = {};
       for (var i = 0; i < results.length; ++i) {
         if (!results[i].total_time) continue;
-        if (results[i].network != network) continue;
-        if (results[i].cpu != cpu) continue;
+        // It doesn't make sense to compare average time for different sets of
+        // URLs. So as a poor man's hack, consider sets of the same number of
+        // URLs as the same.
+        if (results[i].url_count != modeUrlCount) continue;
         var point = versionMap[results[i].version] || { avg: 0, count: 0};
-        point.avg = (point.avg * point.count + results[i].total_time) / ++point.count;
+        point.avg =
+            (point.avg * point.count + results[i].total_time) / ++point.count;
         versionMap[results[i].version] = point;
       }
       return versionMap;
@@ -154,7 +176,8 @@
 
       // Add a column for each network.
       for (var i = 0; i < lines.length; i++) {
-        graph_data.addColumn('number', lines[i].network_name + " " + lines[i].cpu_name);
+        graph_data.addColumn('number',
+                             lines[i].network_name + " " + lines[i].cpu_name);
       }
 
       var versions = data.filters.versions;
@@ -184,7 +207,8 @@
       for (var i = 0; i < versions.length; ++i) {
         var row = [versions[i][0].split(" ")[1]];  // Trim leading "Chrome ".
         for (var j = 0; j < lines.length; ++j) {
-          var versionMap = getVersionMap(results, lines[j].network_id, lines[j].cpu_id);
+          var versionMap = getVersionMap(filterResults(
+              results, lines[j].network_id, lines[j].cpu_id));
           var point = versionMap[versions[i][1]];
           if (!point || !point.avg) {
             row.push(undefined);
