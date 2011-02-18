@@ -17,7 +17,7 @@ import threading
 
 
 class DaemonServer(object):
-  """Base class which manages creation and cleanup ofdaemon style servers."""
+  """Base class which manages creation and cleanup of daemon style servers."""
 
   def __enter__(self):
     # TODO: Because of python's Global Interpreter Lock (GIL), the threads
