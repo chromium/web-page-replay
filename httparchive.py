@@ -149,7 +149,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     tmp_file.write(response.get_data_as_text())
     tmp_file.close()
     subprocess.check_call([editor, tmp_file.name])
-    response.set_body_text(''.join(open(tmp_file.name).readlines()))
+    response.set_data(''.join(open(tmp_file.name).readlines()))
     os.remove(tmp_file.name)
 
 
