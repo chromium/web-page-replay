@@ -46,7 +46,13 @@ class PlatformSettings(object):
     raise NotImplementedError()
 
   def set_primary_dns(self, dns):
-    raise NotImplementedError()
+    if not self.original_primary_dns:
+      self.original_primary_dns = self.get_primary_dns()
+    self._set_primary_dns(dns)
+    if self.get_primary_dns() == dns:
+      logging.info('Changed system DNS to %s', dns)
+    else:
+      raise self._get_dns_update_error()
 
   def restore_primary_dns(self):
     if not self.original_primary_dns:
@@ -71,6 +77,9 @@ class PosixPlatformSettings(PlatformSettings):
   def ipfw(self, args):
     subprocess.check_call(['ipfw'] + args)
 
+  def _get_dns_update_error(self):
+    return DnsUpdateError('Did you run under sudo?')
+
 
 class OsxPlatformSettings(PosixPlatformSettings):
   def _scutil(self, cmd):
@@ -90,7 +99,7 @@ class OsxPlatformSettings(PosixPlatformSettings):
       key_value = line.split(' : ')
       if key_value[0] == '  PrimaryService':
         return 'State:/Network/Service/%s/DNS' % key_value[1]
-    raise DnsUpdateError('Did you run under sudo?')
+    raise self._get_dns_update_error()
 
   def get_primary_dns(self):
     # <dictionary> {
@@ -105,16 +114,13 @@ class OsxPlatformSettings(PosixPlatformSettings):
     line_parts = primary_line.split(' ')
     return line_parts[-1]
 
-  def set_primary_dns(self, dns):
-    if not self.original_primary_dns:
-      self.original_primary_dns = self.get_primary_dns()
+  def _set_primary_dns(self, dns):
     command = '\n'.join([
       'd.init',
       'd.add ServerAddresses * %s' % dns,
       'set %s' % self._get_dns_service_key()
     ])
     self._scutil(command)
-    logging.info('Changed system DNS to %s', dns)
 
   def get_ipfw_queue_slots(self):
     return 100
@@ -153,18 +159,9 @@ class LinuxPlatformSettings(PosixPlatformSettings):
         return line.split()[1]
     raise DnsReadError()
 
-  def set_primary_dns(self, dns):
-    """Replace the first nameserver entry with the one given.
-
-    TODO: catch errors.
-    """
-    if not self.original_primary_dns:
-      self.original_primary_dns = self.get_primary_dns()
+  def _set_primary_dns(self, dns):
+    """Replace the first nameserver entry with the one given."""
     self._write_resolve_conf(dns)
-    if self.get_primary_dns() == dns:
-      logging.info('Changed system DNS to %s', dns)
-    else:
-      raise DnsUpdateError('Did you run under sudo?')
 
   def _write_resolve_conf(self, dns):
     is_first_nameserver_replaced = False
@@ -190,11 +187,8 @@ class LinuxPlatformSettings(PosixPlatformSettings):
     return int(f.read())
 
 class WindowsPlatformSettings(PlatformSettings):
-  def _netsh_set_dns(self, args):
-    try:
-      subprocess.check_call('netsh interface ip set dns %s' % args)
-    except subprocess.CalledProcessError, e:
-      raise DnsUpdateError('Did you run as administrator?\n%s' % e)
+  def _get_dns_update_error(self):
+    return DnsUpdateError('Did you run as administrator?')
 
   def _netsh_show_dns(self):
     """Return DNS information:
@@ -220,7 +214,7 @@ class WindowsPlatformSettings(PlatformSettings):
     match = re.search(r':\s+(\d+\.\d+\.\d+\.\d+)', self._netsh_show_dns())
     return match and match.group(1) or None
 
-  def set_primary_dns(self, dns):
+  def _set_primary_dns(self, dns):
     vbs = """Set objWMIService = GetObject("winmgmts:{impersonationLevel=impersonate}!\\\\.\\root\\cimv2")
 Set colNetCards = objWMIService.ExecQuery("Select * From Win32_NetworkAdapterConfiguration Where IPEnabled = True")
 For Each objNetCard in colNetCards
@@ -233,11 +227,6 @@ Next
     vbs_file.close()
     subprocess.check_call(['cscript', '//nologo', vbs_file.name])
     os.remove(vbs_file.name)
-
-  def restore_primary_dns(self):
-    for name in self._netsh_get_interface_names():
-      logging.debug('Restoring DNS on "%s"' % name)
-      self._netsh_set_dns('name="%s" dhcp primary' % name)
 
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
