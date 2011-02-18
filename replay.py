@@ -43,6 +43,7 @@ import dnsproxy
 import httpproxy
 import logging
 import optparse
+import platformsettings
 import socket
 import sys
 import threading
@@ -56,7 +57,29 @@ if sys.version < '2.6':
   sys.exit(1)
 
 
-def main(options, replay_file):
+def get_server_address(options):
+  if options.server_mode:
+    return socket.gethostbyname(socket.gethostname())
+  return '127.0.0.1'
+
+
+def point_dns(server):
+  platform_settings = platformsettings.get_platform_settings()
+  try:
+    platform_settings.set_primary_dns(options.server)
+    while (True):
+      time.sleep(1)
+  except KeyboardInterrupt:
+    logging.info('Shutting down.')
+  finally:
+    platform_settings.restore_primary_dns()
+
+
+def main(options, args):
+  if options.server:
+    point_dns(options.server)
+    return
+
   if options.record:
     replay_server_class = httpproxy.RecordHttpProxyServer
   elif options.spdy:
@@ -68,25 +91,30 @@ def main(options, replay_file):
     replay_server_class = httpproxy.ReplayHttpProxyServer
 
   try:
-    with dnsproxy.DnsProxyServer(options.dns_forwarding,
-                                 options.dns_private_passthrough) as dns_server:
-      with replay_server_class(replay_file,
-                               options.deterministic_script,
-                               dns_server.real_dns_lookup,
-                               "localhost",
-                               options.port,
-                               options.spdy != "no-ssl",
-                               options.certfile,
-                               options.keyfile):
-        with trafficshaper.TrafficShaper(options.dns_forwarding,
-                                         options.up,
-                                         options.down,
-                                         options.delay_ms,
-                                         options.packet_loss_rate,
-                                         options.init_cwnd):
-          start = time.time()
-          while (not options.time_limit or
-                 time.time() - start < options.time_limit):
+    replay_file = args[0]
+    host = get_server_address(options)
+
+    with dnsproxy.DnsProxyServer(
+        options.dns_forwarding,
+        options.dns_private_passthrough,
+        host=host) as dns_server:
+      with replay_server_class(
+          replay_file,
+          options.deterministic_script,
+          dns_server.real_dns_lookup,
+          host=host,
+          port=options.port,
+          use_ssl=options.spdy != "no-ssl",
+          certfile=options.certfile,
+          keyfile=options.keyfile):
+        with trafficshaper.TrafficShaper(
+            host,
+            options.up,
+            options.down,
+            options.delay_ms,
+            options.packet_loss_rate,
+            options.init_cwnd):
+          while (True):
             time.sleep(1)
   except KeyboardInterrupt:
     logging.info('Shutting down.')
@@ -128,10 +156,6 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Log file to use in addition to writting logs to stderr.')
-  option_parser.add_option('-t', '--time_limit', default=None,
-      action='store',
-      type='int',
-      help='Maximum number of seconds to run before quiting.')
 
   network_group = optparse.OptionGroup(option_parser,
       'Network Simulation Options',
@@ -161,6 +185,18 @@ if __name__ == '__main__':
   harness_group = optparse.OptionGroup(option_parser,
       'Replay Harness Options',
       'These advanced options configure various aspects of the replay harness')
+  harness_group.add_option('-S', '--server', default=None,
+      action='store',
+      type='string',
+      help='Don\'t run replay and traffic shaping. Instead connect to another'
+           ' instance running --server_mode on port 80 of the given IP. NOTE:'
+           ' The same may be accomplished by updating DNS to point to server')
+  harness_group.add_option('-M', '--server_mode', default=False,
+      action='store_true',
+      help='Don\'t forward local traffic to the replay server. Instead, only'
+           ' serve the replay and traffic shaping functionality on --port.'
+           ' Other instances may connect to this using --server or by pointing'
+           ' their DNS to this server.')
   harness_group.add_option('-n', '--no-deterministic_script', default=True,
       action='store_false',
       dest='deterministic_script',
@@ -207,7 +243,7 @@ if __name__ == '__main__':
     fh.setLevel(log_level)
     logging.getLogger('').addHandler(fh)
 
-  if len(args) != 1:
+  if not options.server and len(args) != 1:
     option_parser.error('Must specify a replay_file')
 
   if options.record:
@@ -223,9 +259,12 @@ if __name__ == '__main__':
     if options.spdy:
       option_parser.error('Option --spdy cannot be used with --record.')
 
+  if options.server and options.server_mode:
+    option_parser.error('Cannot run with both --server and --server_mode')
+
   if options.spdy and options.deterministic_script:
     logging.warning(
         'Option --deterministic-_script is ignored with --spdy.'
         'See http://code.google.com/p/web-page-replay/issues/detail?id=10')
 
-  sys.exit(main(options, args[0]))
+  sys.exit(main(options, args))

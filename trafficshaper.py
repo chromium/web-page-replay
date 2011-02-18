@@ -32,17 +32,15 @@ class TrafficShaper(object):
 
   """Manages network traffic shaping."""
   def __init__(self,
-               shape_dns,
-               up_bandwidth = '0',
-               down_bandwidth = '0',
-               delay_ms = '0',
-               packet_loss_rate = '0',
-               init_cwnd = '0'):
+               host='127.0.0.1',
+               up_bandwidth='0',
+               down_bandwidth='0',
+               delay_ms='0',
+               packet_loss_rate='0',
+               init_cwnd='0'):
     """Start shaping traffic.
 
     Args:
-      shape_dns: Iff true, delay_ms and packet_loss_rate will also apply to DNS
-           traffic.
       up_bandwidth: Upload bandwidth
       down_bandwidth: Download bandwidth
            Bandwidths measured in [K|M]{bit/s|Byte/s}. '0' means unlimited.
@@ -50,7 +48,7 @@ class TrafficShaper(object):
       packet_loss_rate: Packet loss rate in range [0..1]. '0' means no loss.
     """
     self.platformsettings = platformsettings.get_platform_settings()
-    self.shape_dns = shape_dns
+    self.host = host
     self.up_bandwidth = up_bandwidth
     self.down_bandwidth = down_bandwidth
     self.delay_ms = delay_ms
@@ -76,23 +74,22 @@ class TrafficShaper(object):
 
     try:
       # Configure DNS shaping.
-      if self.shape_dns:
-        self.platformsettings.ipfw([
-            'pipe', self._DNS_PIPE,
-            'config',
-            'bw', '0',
-            'delay', self.delay_ms,
-            'plr', self.packet_loss_rate,
-        ])
-        self.platformsettings.ipfw([
-            'add', self._RULE_SET,
-            'pipe', self._DNS_PIPE,
-            'udp',
-            'from', '127.0.0.1',
-            'to', '127.0.0.1',
-            'out',
-            'dst-port', '53',
-        ])
+      self.platformsettings.ipfw([
+          'pipe', self._DNS_PIPE,
+          'config',
+          'bw', '0',
+          'delay', self.delay_ms,
+          'plr', self.packet_loss_rate,
+      ])
+      self.platformsettings.ipfw([
+          'add', self._RULE_SET,
+          'pipe', self._DNS_PIPE,
+          'udp',
+          'from', 'any',
+          'to', self.host,
+          'out',
+          'dst-port', '53',
+      ])
 
       # Configure upload shaping.
       self.platformsettings.ipfw([
@@ -113,8 +110,8 @@ class TrafficShaper(object):
           'add', self._RULE_SET,
           'queue', self._UPLOAD_QUEUE,
           'tcp',
-          'from', '127.0.0.1',
-          'to', '127.0.0.1',
+          'from', 'any',
+          'to', self.host,
           'out',
           'dst-port', '80',
       ])
@@ -138,8 +135,8 @@ class TrafficShaper(object):
           'add', self._RULE_SET,
           'queue', self._DOWNLOAD_QUEUE,
           'tcp',
-          'from', '127.0.0.1',
-          'to', '127.0.0.1',
+          'from', self.host,
+          'to', 'any',
           'out',
           'src-port', '80',
       ])

@@ -84,14 +84,13 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
       logging.debug("DNS request with non-zero operation code: %s",
                     operation_code)
 
-    ip = self.server.host
+    ip = self.server.server_address[0]
     if self.server.is_private_passthrough:
       real_ip = self.server.real_dns_lookup(self.domain)
-      is_private = (real_ip and ipaddr.IPv4Address(real_ip).is_private)
-      if real_ip and is_private:
+      if real_ip and ipaddr.IPv4Address(real_ip).is_private:
         ip = real_ip
-    if ip == self.server.host:
-      logging.debug('dnsproxy: handle(%s) -> %s', self.domain, self.server.host)
+    if ip == self.server.server_address[0]:
+      logging.debug('dnsproxy: handle(%s) -> %s', self.domain, ip)
     else:
       logging.debug('dnsproxy: passthrough(%s) -> %s', self.domain, ip)
     self.reply(self.get_dns_reply(ip))
@@ -131,9 +130,8 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
 
 class DnsProxyServer(SocketServer.ThreadingUDPServer,
                      daemonserver.DaemonServer):
-  def __init__(self, forward, private_passthrough, host='127.0.0.1', port=53):
+  def __init__(self, forward, private_passthrough, host='', port=53):
     platform_settings = platformsettings.get_platform_settings()
-    self.host = host
     self.forward = forward
     self.is_private_passthrough = private_passthrough
     self.real_dns_lookup = RealDnsLookup(
@@ -147,7 +145,7 @@ class DnsProxyServer(SocketServer.ThreadingUDPServer,
         raise DnsProxyException(
             'Unable to bind DNS server on (%s:%s)' % (host, port))
       raise
-    logging.info('Started DNS server on (%s:%s)...', host, port)
+    logging.info('Started DNS server on %s...', self.server_address)
     if self.forward:
       platform_settings.set_primary_dns(host)
 

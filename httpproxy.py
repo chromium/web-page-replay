@@ -112,14 +112,14 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_HEAD(self):
     self.do_GET()
 
-  def send_error(self, request, error, message = None):
+  def send_error(self, response_code):
     """Override the default send error with a version that doesn't unnecessarily
     close the connection.
     """
     body = "Not Found"
-    self.send_response(error, message)
-    self.send_header("content-type", "text/plain")
-    self.send_header("content-length", str(len(body)))
+    self.send_response(response_code)
+    self.send_header('content-type', 'text/plain')
+    self.send_header('content-length', str(len(body)))
     self.end_headers()
     self.wfile.write(body)
     self.wfile.flush()
@@ -128,13 +128,13 @@ class RecordHandler(HttpArchiveHandler):
   def do_GET(self):
     request = self.get_archived_http_request()
     if request is None:
-      self.send_error(request, 500)
+      self.send_error(500)
       return
 
     response, response_chunks = self.server.real_http_request(
         request, self.get_header_dict())
     if response is None:
-      self.send_error(request, 404)
+      self.send_error(500)
       return
 
     archived_http_response = httparchive.ArchivedHttpResponse(
@@ -163,7 +163,7 @@ class ReplayHandler(HttpArchiveHandler):
       request_time_ms = (time.time() - start_time) * 1000.0;
       logging.debug('Replayed: %s (%dms)', request, request_time_ms)
     else:
-      self.send_error(request, 404)
+      self.send_error(404)
       logging.error('Could not replay: %s', request)
 
 
@@ -172,7 +172,7 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
                             daemonserver.DaemonServer):
   def __init__(
       self, http_archive_filename, use_deterministic_script, real_dns_lookup,
-      host='localhost', port=80, use_ssl=False, certfile='', keyfile=''):
+      host='', port=80, use_ssl=False, certfile='', keyfile=''):
     self.use_deterministic_script = use_deterministic_script
     self.archive_filename = http_archive_filename
     self.real_http_request = httpclient.RealHttpRequest(real_dns_lookup)
@@ -190,7 +190,7 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
     except Exception, e:
       logging.critical('Could not start HTTPServer on port %d: %s', port, e)
       return
-    logging.info('Recording on %s:%s...', host, port)
+    logging.info('Recording on %s...', self.server_address)
 
   def _assert_archive_file_writable(self):
     archive_dir = os.path.dirname(os.path.abspath(self.archive_filename))
@@ -216,7 +216,7 @@ class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
                             daemonserver.DaemonServer):
   def __init__(
       self, http_archive_filename, use_deterministic_script, real_dns_lookup,
-      host='localhost', port=80, use_ssl=False, certfile='', keyfile=''):
+      host='', port=80, use_ssl=False, certfile='', keyfile=''):
     self.use_deterministic_script = use_deterministic_script
     self.http_archive = httparchive.HttpArchive.Create(http_archive_filename)
     logging.info('Loaded %d responses from %s',
@@ -232,7 +232,7 @@ class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
     except Exception, e:
       logging.critical('Could not start HTTPServer on port %d: %s', port, e)
       return
-    logging.info('Replaying on %s:%s...', host, port)
+    logging.info('Replaying on %s...', self.server_address)
 
   def cleanup(self):
     try:
