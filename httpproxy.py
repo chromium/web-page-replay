@@ -112,12 +112,12 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_HEAD(self):
     self.do_GET()
 
-  def send_error(self, response_code):
+  def send_error(self, response_code, message=None):
     """Override the default send error with a version that doesn't unnecessarily
     close the connection.
     """
     body = "Not Found"
-    self.send_response(response_code)
+    self.send_response(response_code, message)
     self.send_header('content-type', 'text/plain')
     self.send_header('content-length', str(len(body)))
     self.end_headers()
