@@ -285,7 +285,7 @@ setTimeout(function() {
         init_cwnd = 32
 
     if protocol == 'http-base':
-        init_cwnd = 2
+        init_cwnd = 3   # See RFC3390
 
     cmdline = [
         replay_path,
