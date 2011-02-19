@@ -278,13 +278,14 @@ setTimeout(function() {
     # on port 80, contacting the origin server (the replay server) which
     # will then run on port 8000.
     port = 80
-    protocol = self.network['protocol']
-    if protocol == 'spdy' or protocol == 'spdy-nossl':
-        port = 8000
-
     init_cwnd = 10
-    if protocol == 'spdy' or protocol == 'spdy-nossl':
+    protocol = self.network['protocol']
+    if 'spdy' in protocol:
+        port = 8000
         init_cwnd = 32
+
+    if protocol == 'http-base':
+        init_cwnd = 2
 
     cmdline = [
         replay_path,

@@ -33,7 +33,13 @@ class Network(db.Model):
     upload_bandwidth_kbps = db.IntegerProperty(required=True)
     round_trip_time_ms = db.IntegerProperty(required=True)
     packet_loss_rate  = db.FloatProperty(required=True)
-    protocol = db.StringProperty(required=True, choices=set(["http", "spdy", "spdy-nossl"]))
+    protocol = db.StringProperty(required=True,
+                                 choices=set([
+                                   "http",      # HTTP current (adj cwnd)
+                                   "http-base", # HTTP baseline (cwnd default)
+                                   "spdy",      # SPDY over SSL
+                                   "spdy-nossl" # SPDY over TCP
+                                 ]))
 
 # The unique list of CPUs
 class Cpu(db.Model):
