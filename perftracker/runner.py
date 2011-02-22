@@ -519,12 +519,16 @@ if __name__ == '__main__':
   options, args = option_parser.parse_args()
 
   # Collect login credentials and verify
-  if not options.user:
+  if options.user:
+    options.password = getpass.getpass(options.user + ' password: ');
+    options.login_url = DoAppEngineLogin(options.user, options.password)
+    if not options.login_url:
+      exit(-1)
+  elif runner_cfg.appengine_host != 'localhost':
     option_parser.error('Must specify an appengine user for login')
-  options.password = getpass.getpass(options.user + ' password: ');
-  options.login_url = DoAppEngineLogin(options.user, options.password)
-  if not options.login_url:
     exit(-1)
+  else:
+    options.login_url = ''
 
   log_level = logging.__dict__[options.log_level.upper()]
   logging.basicConfig(level=log_level)

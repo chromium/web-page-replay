@@ -174,9 +174,12 @@ function TestResultSubmitter(config) {
   var user_callback;
 
   this.AppEngineLogin = function(callback) {
-    new XHRGet(config.server_login, function() {
+    if (config.server_login) {
+      new XHRGet(config.server_login, callback);
+    } else {
+      console.log('appengine login skipped');
       callback();
-    });
+    }
   }
 
   // Creates a test.
