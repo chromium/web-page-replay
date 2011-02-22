@@ -63,6 +63,9 @@ class PlatformSettings(object):
   def ipfw(self, args):
     raise NotImplementedError()
 
+  def is_cwnd_available(self):
+    return False
+
   def set_cwnd(self, args):
     logging.error("Platform does not support setting cwnd.")
 
@@ -148,6 +151,7 @@ class LinuxPlatformSettings(PosixPlatformSettings):
   Update this as needed to make it more robust on more systems.
   """
   RESOLV_CONF = '/etc/resolv.conf'
+  TCP_INIT_CWND_PATH = '/proc/sys/net/ipv4/tcp_init_cwnd'
 
   def get_primary_dns(self):
     try:
@@ -176,15 +180,25 @@ class LinuxPlatformSettings(PosixPlatformSettings):
       raise DnsUpdateError('Could not find a suitable namserver entry in %s' %
                            self.RESOLV_CONF)
 
+  def is_cwnd_available(self):
+    return os.path.exists(self.TCP_INIT_CWND_PATH)
+
   def set_cwnd(self, args):
     value = args
     command = [ "sysctl", "-w", "net.ipv4.tcp_init_cwnd=" + str(value) ]
     logging.info(command)
-    subprocess.check_call(command)
+    try:
+      subprocess.check_call(command)
+    except subprocess.CalledProcessError, e:
+      logging.error("Unable to set init_cwnd to %s: %s" % (value, e))
 
   def get_cwnd(self):
-    f = file("/proc/sys/net/ipv4/tcp_init_cwnd")
-    return int(f.read())
+    try:
+      f = file(self.TCP_INIT_CWND_PATH)
+      return int(f.read())
+    except IOError, e:
+      logging.error("Unable to get init_cwnd: %s" % (e))
+      return 0
 
 class WindowsPlatformSettings(PlatformSettings):
   def _get_dns_update_error(self):
