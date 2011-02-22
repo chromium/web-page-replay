@@ -335,26 +335,32 @@ function BenchmarkLoad(url, loadType, setId) {
   }
 }
 
-function Benchmark(url, setIds) {
+function Benchmark(url, setIds, callbackWhenFinished) {
   var me_ = this;
   var url_ = url;
   var setIds_ = setIds;
   var runCount_ = window.iterations;
   var resultsByLoadType_ = [];
   var numSummariesInFlight_ = 0;
-  var callbackWhenFinished_;
+  var callbackWhenFinished_ = callbackWhenFinished;
   var state_;
   var stateActions_ = [];
+  var initialized_ = false;
 
-  this.run = function(callbackWhenFinished) {
-    callbackWhenFinished_ = callbackWhenFinished;
+  this.runOneIteration = function() {
+    if (!initialized_) {
+      me_.initialize();
+      initialized_ = true;
+    }
+    state_ = LoadType.cold;
+    me_.advanceStateMachine(0);
+  }
 
+  this.initialize = function() {
     for (var i in kTestsToRun) {
       resultsByLoadType_[i] = new ResultCollection();
     }
     me_.buildStateMachine();
-
-    me_.startNextIteration();
   }
 
   this.buildStateMachine = function() {
@@ -363,11 +369,6 @@ function Benchmark(url, setIds) {
     stateActions_[LoadType.hot] = me_.runHot;
     stateActions_[LoadType.warm] = me_.runWarm;
     stateActions_[kTestsToRun.length] = me_.handleIterationFinished;
-  }
-
-  this.startNextIteration = function() {
-    state_ = LoadType.cold;
-    me_.advanceStateMachine(0);
   }
 
   this.advanceStateMachine = function(tab) {
@@ -437,7 +438,7 @@ function Benchmark(url, setIds) {
     console.log("all load types complete, closing " + tab.id);
     chrome.tabs.remove(tab.id);
     if (me_.hasMoreIterations()) {
-      me_.startNextIteration();
+      callbackWhenFinished_();
     } else {
       me_.handleBenchmarkComplete();
     }
@@ -484,6 +485,7 @@ function Benchmark(url, setIds) {
 
   this.handleBenchmarkComplete = function() {
     console.log("Posting summaries");
+    numSummariesInFlight_ = 0;
     for (var i in kTestsToRun) {
       if (resultsByLoadType_[i].numResults()) {
         numSummariesInFlight_++;
@@ -576,7 +578,8 @@ function BenchmarkManager() {
         // Alert about url that is not in scheme http:// or https://.
         alert(urls[i] + " does not start with http:// or https://.");
       } else {
-        var benchmark = new Benchmark(urls[i], setIds_);
+        var benchmark = new Benchmark(urls[i], setIds_,
+                                      me_.handleBenchmarkIterationFinished);
         benchmarks_.push(benchmark);
       }
     }
@@ -585,12 +588,12 @@ function BenchmarkManager() {
   this.runNextBenchmark = function() {
     var benchmark = benchmarks_[currentBenchmarkIndex_];
     setTimeout(function() {
-        benchmark.run(me_.handleBenchmarkFinished);
+        benchmark.runOneIteration();
       }, window.interval);
-    currentBenchmarkIndex_++;
   }
 
-  this.handleBenchmarkFinished = function() {
+  this.handleBenchmarkIterationFinished = function() {
+    numSummariesInFlight_ = 0;
     for (var i in kTestsToRun) {
       if (globalTestSetResults[i].numResults()) {
         numSummariesInFlight_++;
@@ -608,11 +611,19 @@ function BenchmarkManager() {
     console.log("Posted set summary: " + response);
     numSummariesInFlight_--;
     if (numSummariesInFlight_ <= 0) {
-      if (currentBenchmarkIndex_ == benchmarks_.length) {
-        me_.asyncExitBrowser();
+      if (benchmarks_[currentBenchmarkIndex_].hasMoreIterations()) {
+        currentBenchmarkIndex_++;
       } else {
-        me_.runNextBenchmark();
+        benchmarks_.splice(currentBenchmarkIndex_, 1);
+        if (benchmarks_.length == 0) {
+          me_.asyncExitBrowser();
+          return;
+        }
       }
+      if (currentBenchmarkIndex_ >= benchmarks_.length) {
+        currentBenchmarkIndex_ = 0;
+      }
+      me_.runNextBenchmark();
     }
   }
 
