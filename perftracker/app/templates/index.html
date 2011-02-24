@@ -146,7 +146,7 @@
       var modeUrlCount = getModeUrlCount(results);
       var versionMap = {};
       for (var i = 0; i < results.length; ++i) {
-        if (!results[i].total_time) continue;
+        if (typeof results[i].total_time != 'number') continue;
         // It doesn't make sense to compare average time for different sets of
         // URLs. So as a poor man's hack, consider sets of the same number of
         // URLs as the same.
@@ -210,7 +210,7 @@
           var versionMap = getVersionMap(filterResults(
               results, lines[j].network_id, lines[j].cpu_id));
           var point = versionMap[versions[i][1]];
-          if (!point || !point.avg) {
+          if (!point || typeof point.avg != 'number') {
             row.push(undefined);
           } else {
             row.push(Math.round(point.avg));
