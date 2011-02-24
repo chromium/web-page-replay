@@ -75,6 +75,19 @@ class PlatformSettings(object):
   def get_ipfw_queue_slots(self):
     return 500
 
+  def configure_loopback(self):
+    """
+    Configure loopback to be realistic.
+
+    We use loopback for much of our testing, and on some systems, loopback
+    behaves differently from real interfaces.
+    """
+    logging.error("Platform does not support loopback configuration.")
+    pass
+
+  def unconfigure_loopback(self):
+    pass
+
 
 class PosixPlatformSettings(PlatformSettings):
   def ipfw(self, args):
@@ -151,7 +164,9 @@ class LinuxPlatformSettings(PosixPlatformSettings):
   Update this as needed to make it more robust on more systems.
   """
   RESOLV_CONF = '/etc/resolv.conf'
-  TCP_INIT_CWND_PATH = '/proc/sys/net/ipv4/tcp_init_cwnd'
+  TCP_INIT_CWND = 'net/ipv4/tcp_init_cwnd'
+  TCP_BASE_MSS = 'net/ipv4/tcp_base_mss'
+  TCP_MTU_PROBING = 'net/ipv4/tcp_mtu_probing'
 
   def get_primary_dns(self):
     try:
@@ -180,25 +195,60 @@ class LinuxPlatformSettings(PosixPlatformSettings):
       raise DnsUpdateError('Could not find a suitable namserver entry in %s' %
                            self.RESOLV_CONF)
 
+  def has_sysctl(self, name):
+    filename = '/proc/sys/' + name
+    return os.path.exists(filename)
+
+  def set_sysctl(self, name, value):
+    try:
+      filename = '/proc/sys/' + name
+      with open(filename, 'w+') as f:
+        f.write(str(value))
+    except IOError, e:
+      logging.error("Unable to set sysctl %s: %s", name, e)
+      return None
+
+  def get_sysctl(self, name):
+    try:
+      filename = '/proc/sys/' + name
+      with open(filename) as f:
+        rv = int(f.read())
+      return rv
+    except IOError, e:
+      logging.error("Unable to get sysctl %s: %s", name, e)
+      return None
+
   def is_cwnd_available(self):
-    return os.path.exists(self.TCP_INIT_CWND_PATH)
+    return self.has_sysctl(self.TCP_INIT_CWND)
 
   def set_cwnd(self, args):
-    value = args
-    command = [ "sysctl", "-w", "net.ipv4.tcp_init_cwnd=" + str(value) ]
-    logging.info(command)
-    try:
-      subprocess.check_call(command)
-    except subprocess.CalledProcessError, e:
-      logging.error("Unable to set init_cwnd to %s: %s" % (value, e))
+    self.set_sysctl(self.TCP_INIT_CWND, str(args))
 
   def get_cwnd(self):
-    try:
-      f = file(self.TCP_INIT_CWND_PATH)
-      return int(f.read())
-    except IOError, e:
-      logging.error("Unable to get init_cwnd: %s" % (e))
-      return 0
+    return self.get_sysctl(self.TCP_INIT_CWND)
+
+  def configure_loopback(self):
+    """
+    Linux will use jumbo frames by default (16KB), using the combination
+    of MTU probing and a base MSS makes it use normal sized packets.
+
+    The reason this works is because tcp_base_mss is only used when MTU
+    probing is enabled.  And since we're using the max value, it will
+    always use the reasonable size.  This is relevant for server-side realism.
+    The client-side will vary depending on the client TCP stack config.
+    """
+    ENABLE_MTU_PROBING = 2
+    TCP_FULL_MSS = 1460
+    self.saved_tcp_mtu_probing = self.get_sysctl(self.TCP_MTU_PROBING)
+    self.set_sysctl(self.TCP_MTU_PROBING, ENABLE_MTU_PROBING)
+    self.saved_tcp_base_mss = self.get_sysctl(self.TCP_BASE_MSS)
+    self.set_sysctl(self.TCP_BASE_MSS, TCP_FULL_MSS)
+
+  def unconfigure_loopback(self):
+    if self.saved_tcp_mtu_probing:
+      self.set_sysctl(self.TCP_MTU_PROBING, self.saved_tcp_mtu_probing)
+    if self.saved_tcp_base_mss:
+      self.set_sysctl(self.TCP_BASE_MSS, self.saved_tcp_base_mss)
 
 class WindowsPlatformSettings(PlatformSettings):
   def _get_dns_update_error(self):

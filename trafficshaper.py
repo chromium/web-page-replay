@@ -56,6 +56,7 @@ class TrafficShaper(object):
     self.init_cwnd = init_cwnd
 
   def __enter__(self):
+    self.platformsettings.configure_loopback()
     if self.init_cwnd != '0':
       if self.platformsettings.is_cwnd_available():
         self.original_cwnd = self.platformsettings.get_cwnd()
@@ -149,6 +150,7 @@ class TrafficShaper(object):
       raise TrafficShaperException('Unable to shape traffic: %s' % e)
 
   def __exit__(self, unused_exc_type, unused_exc_val, unused_exc_tb):
+    self.platformsettings.unconfigure_loopback()
     if (self.init_cwnd != '0' and
         self.platformsettings.is_cwnd_available()):
       self.platformsettings.set_cwnd(self.original_cwnd)
