@@ -33,6 +33,7 @@ class TrafficShaper(object):
   """Manages network traffic shaping."""
   def __init__(self,
                host='127.0.0.1',
+               port='80',
                up_bandwidth='0',
                down_bandwidth='0',
                delay_ms='0',
@@ -49,6 +50,7 @@ class TrafficShaper(object):
     """
     self.platformsettings = platformsettings.get_platform_settings()
     self.host = host
+    self.port = port
     self.up_bandwidth = up_bandwidth
     self.down_bandwidth = down_bandwidth
     self.delay_ms = delay_ms
@@ -117,7 +119,7 @@ class TrafficShaper(object):
           'from', 'any',
           'to', self.host,
           'out',
-          'dst-port', '80',
+          'dst-port', str(self.port),
       ])
 
       # Configure download shaping.
@@ -142,7 +144,7 @@ class TrafficShaper(object):
           'from', self.host,
           'to', 'any',
           'out',
-          'src-port', '80',
+          'src-port', str(self.port),
       ])
 
       logging.info('Started shaping traffic')

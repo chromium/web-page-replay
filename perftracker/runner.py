@@ -49,6 +49,13 @@ benchmark_application_name = 'perftracker'
 # The location of the PerfTracker extension
 perftracker_extension_path = './extension'
 
+# The server_port is the port which runs the webserver to test against.
+server_port = 8000
+
+# For SPDY testing, where we have both a frontend and backend server,
+# this is the port to run the backend server.
+backend_server_port = 8001
+
 # Function to login to the Google AppEngine app.
 # This code credit to: http://dalelane.co.uk/blog/?p=303
 def DoAppEngineLogin(username, password):
@@ -275,13 +282,13 @@ setTimeout(function() {
     if self.log_level:
       log_level = self.log_level
     # To run SPDY, we use the SPDY-to-HTTP gateway.  The gateway will answer
-    # on port 80, contacting the origin server (the replay server) which
-    # will then run on port 8000.
-    port = 80
+    # on port |server_port|, contacting the backend server (the replay server)
+    # which will run on |backend_server_port|.
+    port = server_port
     init_cwnd = 10
     protocol = self.network['protocol']
     if 'spdy' in protocol:
-        port = 8000
+        port = backend_server_port
         init_cwnd = 32
 
     if protocol == 'http-base':
@@ -328,11 +335,11 @@ setTimeout(function() {
 
     proxy_parameters = {
       "listen_host": "",
-      "listen_port": 80,
+      "listen_port": server_port,
       "cert_file": certfile,
       "key_file": keyfile,
       "http_host": "127.0.0.1",
-      "http_port": 8000,
+      "http_port": backend_server_port,
       "https_host": "",
       "https_port": "",
       "spdy_only": 0,
@@ -378,6 +385,7 @@ setTimeout(function() {
       if use_virtualx:
         StartVirtualX(platform.node(), '/tmp')
 
+      server_host_port_pair = '127.0.0.1:' + str(server_port)
       cmdline = [
           runner_cfg.chrome_path,
           '--activate-on-launch',
@@ -386,10 +394,10 @@ setTimeout(function() {
           # make the model realistic and stable enough to enable them.
           '--disable-preconnect',
           '--dns-prefetch-disable',
-          
+
           '--enable-benchmarking',
           '--enable-logging',
-          '--host-resolver-rules=MAP * 127.0.0.1:80,EXCLUDE ' +
+          '--host-resolver-rules=MAP * ' + server_host_port_pair + ',EXCLUDE ' +
               runner_cfg.appengine_host, 
           '--ignore-certificate-errors',
           '--load-extension=' + perftracker_extension_path,
@@ -412,7 +420,7 @@ setTimeout(function() {
       if chrome_cmdline:
         cmdline.extend(chrome_cmdline.split(' '))
       cmdline.append(start_file_url)
-  
+
       logging.debug('Starting Chrome: %s', ' '.join(cmdline))
       chrome = subprocess.Popen(cmdline)
       returncode = chrome.wait();
@@ -428,7 +436,7 @@ setTimeout(function() {
       self.GenerateConfigFile(notes)
       self.StartProxy()
       protocol = self.network['protocol']
-      if protocol == 'spdy' or protocol == 'spdy-nossl':
+      if 'spdy' in protocol:
         self.StartSpdyProxy()
       self.RunChrome(chrome_cmdline)
     finally:

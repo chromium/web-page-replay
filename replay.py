@@ -109,6 +109,7 @@ def main(options, args):
           keyfile=options.keyfile):
         with trafficshaper.TrafficShaper(
             host,
+            options.port,
             options.up,
             options.down,
             options.delay_ms,
