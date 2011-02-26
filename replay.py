@@ -109,7 +109,7 @@ def main(options, args):
           keyfile=options.keyfile):
         with trafficshaper.TrafficShaper(
             host,
-            options.port,
+            options.shaping_port,
             options.up,
             options.down,
             options.delay_ms,
@@ -219,8 +219,12 @@ if __name__ == '__main__':
   harness_group.add_option('-o', '--port', default=80,
       action='store',
       type='int',
-      help='Port number to listen on. CAUTION: Normal replay functionality '
-           'relies on using port 80.')
+      help='Port number to listen on.')
+  harness_group.add_option('--shaping_port', default=0,
+      action='store',
+      type='int',
+      help='Port to apply traffic shaping to.  \'0\' means use the same '
+           'port as the listen port (--port)')
   harness_group.add_option('-c', '--certfile', default='',
       action='store',
       dest='certfile',
@@ -267,5 +271,8 @@ if __name__ == '__main__':
     logging.warning(
         'Option --deterministic-_script is ignored with --spdy.'
         'See http://code.google.com/p/web-page-replay/issues/detail?id=10')
+
+  if options.shaping_port == 0:
+    options.shaping_port = options.port
 
   sys.exit(main(options, args))

@@ -300,6 +300,7 @@ setTimeout(function() {
         '--no-dns_forwarding',
         '--no-deterministic_script',
         '--port', str(port),
+        '--shaping_port', str(server_port),
         '--init_cwnd', str(init_cwnd),
         ]
     if self.network['bandwidth_kbps']['down']:
