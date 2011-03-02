@@ -182,6 +182,7 @@ function BenchmarkLoad(url, loadType, setId) {
 
   var tab_;
   var result_;
+  var processId_;
 
   var hasBeenRun_ = false;
   var checkForLoadId_;
@@ -198,6 +199,7 @@ function BenchmarkLoad(url, loadType, setId) {
   this.tab = function() { return tab_; }
   this.loadType = function() { return loadType_; }
   this.result = function() { return result_; }
+  this.processId = function() { return processId_; }
 
   this.run = function(tabToReuse, callbackWhenFinished) {
     console.log("Running " + url_ + " on tab " +
@@ -330,8 +332,17 @@ function BenchmarkLoad(url, loadType, setId) {
         initialSpdySessionCount_;
 
     result_ = result;
-    window.submitter.PostResult(result,
-                                function() { callbackWhenFinished_(me_); });
+    window.submitter.PostResult(result, me_.recordProcessId);
+  }
+
+  this.recordProcessId = function() {
+    chrome.experimental.processes.getProcessIdForTab(tab_.id,
+                                                     me_.handleProcessId);
+  }
+
+  this.handleProcessId = function(processId) {
+    processId_ = processId;
+    callbackWhenFinished_(me_);
   }
 }
 
@@ -346,6 +357,7 @@ function Benchmark(url, setIds, callbackWhenFinished) {
   var state_;
   var stateActions_ = [];
   var initialized_ = false;
+  var processIds_ = {};
 
   this.runOneIteration = function() {
     if (!initialized_) {
@@ -429,12 +441,18 @@ function Benchmark(url, setIds, callbackWhenFinished) {
     if (result != null) {
       resultsByLoadType_[loadType].addResult(result);
     }
+    processIds_[loadType] = benchmarkLoad.processId();
 
     me_.advanceStateMachine(benchmarkLoad.tab());
   }
 
   this.handleIterationFinished = function(tab) {
     runCount_--;
+    if (LoadType.cold in processIds_ && LoadType.hot in processIds_) {
+      CHECK(processIds_[LoadType.cold] == processIds_[LoadType.hot],
+            "Hot load occurred in different process than cold: " +
+            processIds_[LoadType.cold] + " != " + processIds_[LoadType.hot]);
+    }
     console.log("all load types complete, closing " + tab.id);
     chrome.tabs.remove(tab.id);
     if (me_.hasMoreIterations()) {

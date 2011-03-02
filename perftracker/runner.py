@@ -398,8 +398,9 @@ setTimeout(function() {
 
           '--enable-benchmarking',
           '--enable-logging',
+          '--enable-experimental-extension-apis',
           '--host-resolver-rules=MAP * ' + server_host_port_pair + ',EXCLUDE ' +
-              runner_cfg.appengine_host, 
+              runner_cfg.appengine_host,
           '--ignore-certificate-errors',
           '--load-extension=' + perftracker_extension_path,
           '--log-level=0',
