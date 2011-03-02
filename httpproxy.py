@@ -19,10 +19,21 @@ import httparchive
 import httpclient  # wpr httplib wrapper
 import logging
 import os
+import re
 import socket
 import SocketServer
 import subprocess
 import time
+
+
+GENERATOR_URL_RE = re.compile('/web-page-replay-generate-(\d{3})')
+
+
+def GetGeteneratorUrlResponseCode(request):
+  match = GENERATOR_URL_RE.match(request.path)
+  if not match:
+    return None
+  return int(match.group(1))
 
 
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -130,6 +141,10 @@ class RecordHandler(HttpArchiveHandler):
     if request is None:
       self.send_error(500)
       return
+    response_code = GetGeteneratorUrlResponseCode(request)
+    if response_code:
+      self.send_error(response_code)
+      return
 
     response, response_chunks = self.server.real_http_request(
         request, self.get_header_dict())
@@ -163,8 +178,12 @@ class ReplayHandler(HttpArchiveHandler):
       request_time_ms = (time.time() - start_time) * 1000.0;
       logging.debug('Replayed: %s (%dms)', request, request_time_ms)
     else:
-      self.send_error(404)
-      logging.error('Could not replay: %s', request)
+      response_code = GetGeteneratorUrlResponseCode(request)
+      if response_code:
+        self.send_error(response_code)
+      else:
+        self.send_error(404)
+        logging.error('Could not replay: %s', request)
 
 
 class RecordHttpProxyServer(SocketServer.ThreadingMixIn,

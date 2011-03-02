@@ -262,7 +262,7 @@ function BenchmarkLoad(url, loadType, setId) {
       console.log("load failed");
       finished_ = true;
       clearInterval(checkForLoadId_);
-      callbackWhenFinished_(me_);
+      me_.finishBenchmarkLoad();
       return;
     }
 
@@ -298,7 +298,7 @@ function BenchmarkLoad(url, loadType, setId) {
     if (window.enableSpdy && !load_times.wasFetchedViaSpdy) {
       alert("Did not fetch current url via spdy.\n" +
             "Ending current test.");
-      callbackWhenFinished_(me_);
+      me_.finishBenchmarkLoad();
       return;
     }
 
@@ -332,10 +332,10 @@ function BenchmarkLoad(url, loadType, setId) {
         initialSpdySessionCount_;
 
     result_ = result;
-    window.submitter.PostResult(result, me_.recordProcessId);
+    window.submitter.PostResult(result, me_.finishBenchmarkLoad);
   }
 
-  this.recordProcessId = function() {
+  this.finishBenchmarkLoad = function() {
     chrome.experimental.processes.getProcessIdForTab(tab_.id,
                                                      me_.handleProcessId);
   }
@@ -409,9 +409,9 @@ function Benchmark(url, setIds, callbackWhenFinished) {
     chrome.tabs.update(
         tab.id,
         // We need to navigate away to perform this test, but we still want to
-        // keep the same renderer. Navigating to a bogus site seems to have the
-        // desired effect.
-        { "url": "http://hurchoeatoeuhsrcuhs.com", "selected": true },
+        // keep the same renderer. Navigating to a bogus url on the same domain
+        // site seems to have the desired effect.
+        { "url": getWebPageReplay404Url(url_), "selected": true },
         function(tab) {
           setTimeout(function() { hotLoad.run(tab, me_.handleLoadFinished); },
                      window.interval);
@@ -711,6 +711,14 @@ function checkScheme(url) {
     return true;
   }
   return false;
+}
+
+function getWebPageReplay404Url(url) {
+  var startOfHost = url.indexOf('//') + 2;
+  var startOfPath = url.indexOf('/', startOfHost);
+  var baseUrl = url.substr(0, startOfPath);
+  var url404 = baseUrl + '/web-page-replay-generate-404';
+  return url404;
 }
 
 // Run at startup
