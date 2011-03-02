@@ -124,12 +124,23 @@ function ci(stderr) {
   return 1.96 * stderr;
 }
 
-// Returns true if the given averages have a statistically significant
-// difference based on their standard deviations.
-function isSignificant(avg1, stddev1, len1, avg2, stddev2, len2) {
-    var ci1 = ci(stderr(stddev1, len1));
-    var ci2 = ci(stderr(stddev2, len2));
-    return (avg1 + ci1) < (avg2 - ci2) || (avg1 - ci1) > (avg2 + ci2);
+// Returns the delta confidence interval, or an emptry string if the delta
+// is not statistically significant.
+function getDeltaConfidenceInterval(avg1, stddev1, len1,
+                                    avg2, stddev2, len2) {
+  var ci1 = ci(stderr(stddev1, len1));
+  var ci2 = ci(stderr(stddev2, len2));
+  var format = function(n) {
+      n = Math.round(n);
+      return n < 0 ? '(' + n + ')' : n;
+  };
+  if ((avg1 + ci1) < (avg2 - ci2) || (avg1 - ci1) > (avg2 + ci2)) {
+    var delta = avg2 - avg1;
+    return format(delta - ci1 - ci2) + ' \u2013 ' +
+           format(delta + ci1 + ci2);
+  } else {
+    return '';
+  }
 }
 
 // Sets the selected option of the <select> with id=|id|.

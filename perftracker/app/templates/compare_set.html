@@ -79,6 +79,7 @@
 
       var rows = [];
       var isSignificants = [];
+      var deltaConfidenceIntervals = [];
 
       cols.push('URL');
       var url_map = {};
@@ -87,37 +88,40 @@
         cols.push(getName(datas, result));
         sets.push(result.summaries[0].set);
         for (var j = 0; j < result.summaries.length; j++) {
-          if (!url_map[result.summaries[j].url])
-            url_map[result.summaries[j].url] = {
-              avgs: [result.summaries[j].url],
-              iterations: [result.summaries[j].url],
-              stddevs: [result.summaries[j].url],
+          var url = result.summaries[j].url;
+          if (!url_map[url])
+            url_map[url] = {
+              avgs: [url],
+              iterations: [url],
+              stddevs: [url],
             };
-          url_map[result.summaries[j].url].avgs.push(
-              result.summaries[j][metric]);
-          url_map[result.summaries[j].url].iterations.push(
-              result.summaries[j].iterations);
+          url_map[url].avgs.push(result.summaries[j][metric]);
+          url_map[url].iterations.push(result.summaries[j].iterations);
           // TODO(tonyg): The stddev is only stored for total_time. Do this for
           // others as well.
-          if (metric == "total_time")
-            url_map[result.summaries[j].url].stddevs.push(
-                result.summaries[j].total_time_stddev);
+          if (metric == "total_time") {
+            url_map[url].stddevs.push(result.summaries[j].total_time_stddev);
+          }
         }
       }
       for (var url in url_map) {
         var obj = url_map[url];
         if (obj.avgs.length != cols.length) continue;
         rows.push(obj.avgs);
-        if (obj.stddevs.length == 3)
-          isSignificants.push(isSignificant(
+        if (obj.stddevs.length == 3) {
+          var deltaCi = getDeltaConfidenceInterval(
               obj.avgs[1], obj.stddevs[1], obj.iterations[1],
-              obj.avgs[2], obj.stddevs[2], obj.iterations[2]));
+              obj.avgs[2], obj.stddevs[2], obj.iterations[2]);
+          deltaConfidenceIntervals.push(deltaCi);
+          isSignificants.push(!!deltaCi);
+        }
       }
-      drawTable(cols, sets, rows, isSignificants);
+      drawTable(cols, sets, rows, isSignificants, deltaConfidenceIntervals);
       drawChart(cols, rows, title);
     }
 
-    function drawTable(cols, sets, rows, isSignificants) {
+    function drawTable(cols, sets, rows, isSignificants,
+                       deltaConfidenceIntervals) {
       var stats = [];
       for (var i = 0; i < rows.length; i++) {
         var row = rows[i];
@@ -150,6 +154,7 @@
         rows: rowsWithStats,
       });
       context.setVariable('isSignificants', isSignificants);
+      context.setVariable('deltaConfidenceIntervals', deltaConfidenceIntervals);
       context.setVariable('sets', sets);
       var template = document.getElementById("template");
       jstProcess(context, template);
@@ -236,6 +241,7 @@
         </th>
         <th>Delta</th>
         <th>Percent</th>
+        <th>Delta 95% ci</th>
       </tr>
       <tr jsselect="rows" jseval="$delta = $this[2] - $this[1]" jsvalues=".style.fontWeight:$this[0].indexOf('http:') ? 'bold' : 'normal'">
         <td jsselect="summaries"><span jscontent="total_time"></span></td>
@@ -243,6 +249,7 @@
         <td jsselect="$this" jsvalues="class:$index > 0 ? 'righttext' : ''"><span jscontent="$this"></span></td>
         <td class="righttext" jscontent="$delta" jsvalues=".style.color:$index > isSignificants.length - 1 || isSignificants[$index] ? ($delta < 0 ? 'red' : 'black') : 'gray'"></td>
         <td class="righttext" jscontent="Math.round(10000 * $delta / $this[1]) / 100 + '%'" jsvalues=".style.color:$index > isSignificants.length - 1 || isSignificants[$index] ? ($delta < 0 ? 'red' : 'black') : 'gray'"></td>
+        <td class="righttext" jscontent="deltaConfidenceIntervals[$index] || ''"></td>
       </tr>
       </table>
     </div>
