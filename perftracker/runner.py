@@ -17,6 +17,11 @@ description = """
     This is a script for running automated network tests of chrome.
 """
 
+import sys
+if sys.version < '2.6':
+  print 'Need Python 2.6 or greater.'
+  sys.exit(1)
+
 import cookielib
 import getpass
 import json
@@ -24,41 +29,40 @@ import logging
 import optparse
 import os
 import platform
+import shutil
 import signal
 import subprocess
-import sys
 import tempfile
 import time
 import urllib
 import urllib2
 import runner_cfg
 
-if sys.version < '2.6':
-  print 'Need Python 2.6 or greater.'
-  sys.exit(1)
-
 
 # Some constants for our program
 
 # The location of the Replay script
-replay_path = '../replay.py'
+REPLAY_PATH = '../replay.py'
 
 # The name of the application we're using
-benchmark_application_name = 'perftracker'
+BENCHMARK_APPLICATION_NAME = 'perftracker'
 
 # The location of the PerfTracker extension
-perftracker_extension_path = './extension'
+PERFTRACKER_EXTENSION_PATH = './extension'
 
 # The server_port is the port which runs the webserver to test against.
-server_port = 8000
+SERVER_PORT = 8000
 
 # For SPDY testing, where we have both a frontend and backend server,
 # this is the port to run the backend server.
-backend_server_port = 8001
+BACKEND_SERVER_PORT = 8001
 
-# Function to login to the Google AppEngine app.
-# This code credit to: http://dalelane.co.uk/blog/?p=303
+
 def DoAppEngineLogin(username, password):
+  """Log into the Google AppEngine app.
+
+  This code credit to: http://dalelane.co.uk/blog/?p=303
+  """
   target_authenticated_url = runner_cfg.appengine_url
 
   # We use a cookie to authenticate with Google App Engine by registering a
@@ -76,7 +80,7 @@ def DoAppEngineLogin(username, password):
     authreq_data = urllib.urlencode({ 'Email':   username,
                                       'Passwd':  password,
                                       'service': 'ah',
-                                      'source':  benchmark_application_name,
+                                      'source':  BENCHMARK_APPLICATION_NAME,
                                       'accountType': 'HOSTED_OR_GOOGLE' })
     auth_req = urllib2.Request(auth_uri, data=authreq_data)
     auth_resp = urllib2.urlopen(auth_req)
@@ -93,40 +97,37 @@ def DoAppEngineLogin(username, password):
     serv_args = {}
     serv_args['continue'] = target_authenticated_url
     serv_args['auth']     = authtoken
-    full_serv_uri = '%s_ah/login?%s' % (runner_cfg.appengine_url,
+    full_serv_uri = '%s_ah/login?%s' % (target_authenticated_url,
                                         urllib.urlencode(serv_args))
 
     serv_req = urllib2.Request(full_serv_uri)
     serv_resp = urllib2.urlopen(serv_req)
     print 'AppEngineLogin succeeded.'
-  except Exception, e: 
+  except Exception, e:
     logging.critical('DoAppEngineLogin failed: %s', e)
     return None
   return full_serv_uri
 
 
-# Clobber a tmp directory.  Be careful!
 def ClobberTmpDirectory(tmpdir):
+  """Remove a temporary directory."""
   # Do sanity checking so we don't clobber the wrong thing
-  if len(tmpdir) == 0 or not tmpdir.startswith('/tmp/'):
-    return
+  if tmpdir == '/tmp/' or not tmpdir.startswith('/tmp/'):
+    logging.warn('Directory must start with /tmp/ to clobber: %s', tmpdir)
+  else:
+    try:
+      shutil.rmtree(tmpdir)
+    except os.error:
+      logging.error("Could not delete: %s", tmpdir)
 
-  try:
-    for root, dirs, files in os.walk(tmpdir, topdown=False):
-      for name in files:
-        os.remove(os.path.join(root, name))
-      for name in dirs:
-        os.rmdir(os.path.join(root, name))
-    os.rmdir(tmpdir)
-  except:
-    logging.error("Could not delete: " + tmpdir)
-    pass
 
 def _XvfbPidFilename(slave_build_name):
-  """Returns the filename to the Xvfb pid file.  This name is unique for each
-  builder. This is used by the linux builders."""
-  return os.path.join(tempfile.gettempdir(),
-                      'xvfb-' + slave_build_name  + '.pid')
+  """Returns the filename to the Xvfb pid file.
+
+  This name is unique for each builder.
+  This is used by the linux builders.
+  """
+  return os.path.join(tempfile.gettempdir(), 'xvfb-%s.pid' % slave_build_name)
 
 def StartVirtualX(slave_build_name, build_dir):
   """Start a virtual X server and set the DISPLAY environment variable so sub
@@ -156,21 +157,24 @@ def StartVirtualX(slave_build_name, build_dir):
   if len(build_dir) > 0:
     xdisplaycheck_path = os.path.join(build_dir, 'xdisplaycheck')
     if os.path.exists(xdisplaycheck_path):
-      print 'Verifying Xvfb has started...'
+      logging.debug('Verifying Xvfb has started...')
       status, output = commands.getstatusoutput(xdisplaycheck_path)
       if status != 0:
-        print 'Xvfb return code (None if still running):', proc.poll()
-        print 'Xvfb stdout and stderr:', proc.communicate()
+        logging.debug('Xvfb return code (None if still running): %s',
+                      proc.poll())
+        logging.debug('Xvfb stdout and stderr:', proc.communicate())
         raise Exception(output)
-      print '...OK'
+      logging.debug('...OK')
   # Some ChromeOS tests need a window manager.
   subprocess.Popen('icewm', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 
 def StopVirtualX(slave_build_name):
   """Try and stop the virtual X server if one was started with StartVirtualX.
+
   When the X server dies, it takes down the window manager with it.
-  If a virtual x server is not running, this method does nothing."""
+  If a virtual x server is not running, this method does nothing.
+  """
   xvfb_pid_filename = _XvfbPidFilename(slave_build_name)
   if os.path.exists(xvfb_pid_filename):
     # If the process doesn't exist, we raise an exception that we can ignore.
@@ -184,12 +188,14 @@ def StopVirtualX(slave_build_name):
 def _svn(cmd):
   """Returns output of given svn command."""
   svn = subprocess.Popen(
-      ['svn', '--non-interactive', cmd], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+      ['svn', '--non-interactive', cmd],
+      stdin=subprocess.PIPE, stdout=subprocess.PIPE)
   return svn.communicate()[0]
 
 
 def _get_value_for_key(lines, key):
-  """Given list of |lines| with colon separated key value pairs, return the value of |key|."""
+  """Given list of |lines| with colon separated key value pairs,
+  return the value of |key|."""
   for line in lines:
     parts = line.split(':')
     if parts[0].strip() == key:
@@ -200,13 +206,10 @@ def _get_value_for_key(lines, key):
 def GetCPU():
   # When /proc/cpuinfo exists it is more reliable than platform.
   if os.path.exists('/proc/cpuinfo'):
-    try:
-      f = open('/proc/cpuinfo')
+    with open('/proc/cpuinfo') as f:
       model_name = _get_value_for_key(f.readlines(), 'model name')
       if model_name:
         return model_name
-    finally:
-      f.close()
   return platform.processor()
 
 
@@ -220,9 +223,10 @@ def GetVersion():
 
 
 class TestInstance:
-  def __init__(self, network, log_level, record):
+  def __init__(self, network, log_level, log_file, record):
     self.network = network
     self.log_level = log_level
+    self.log_file = log_file
     self.record = record
     self.proxy_process = None
     self.spdy_proxy_process = None
@@ -231,8 +235,6 @@ class TestInstance:
     # The PerfTracker extension requires this name in order to kick off.
     ext_suffix = 'startbenchmark.html'
     self.filename = tempfile.mktemp(suffix=ext_suffix, prefix='')
-    f = open(self.filename, 'w+')
-    
     benchmark = {
       'user': getpass.getuser(),
       'notes': str(notes),
@@ -251,8 +253,8 @@ class TestInstance:
       'urls': runner_cfg.urls,
       'record': self.record
     }
-
-    f.write("""
+    with open(self.filename, 'w+') as f:
+      f.write("""
 <body>
 <h3>Running benchmark...</h3>
 <script>
@@ -274,35 +276,32 @@ setTimeout(function() {
 </body>
 """ % json.dumps(benchmark, indent=2))
 
-    f.close()
-    return
 
   def StartProxy(self):
-    log_level = 'info'
-    if self.log_level:
-      log_level = self.log_level
     # To run SPDY, we use the SPDY-to-HTTP gateway.  The gateway will answer
-    # on port |server_port|, contacting the backend server (the replay server)
-    # which will run on |backend_server_port|.
-    port = server_port
+    # on port |SERVER_PORT|, contacting the backend server (the replay server)
+    # which will run on |BACKEND_SERVER_PORT|.
+    port = SERVER_PORT
     init_cwnd = 10
     protocol = self.network['protocol']
     if 'spdy' in protocol:
-        port = backend_server_port
+        port = BACKEND_SERVER_PORT
         init_cwnd = 32
 
     if protocol == 'http-base':
         init_cwnd = 3   # See RFC3390
 
     cmdline = [
-        replay_path,
-        '-l', log_level,
+        REPLAY_PATH,
         '--no-dns_forwarding',
         '--no-deterministic_script',
         '--port', str(port),
-        '--shaping_port', str(server_port),
+        '--shaping_port', str(SERVER_PORT),
         '--init_cwnd', str(init_cwnd),
+        '--log_level', self.log_level,
         ]
+    if self.log_file:
+      cmdline += ['--log_file', self.log_file]
     if self.network['bandwidth_kbps']['down']:
       cmdline += ['-d', str(self.network['bandwidth_kbps']['down']) + 'KBit/s']
     if self.network['bandwidth_kbps']['up']:
@@ -327,33 +326,34 @@ setTimeout(function() {
       self.proxy_process.wait()
 
   def StartSpdyProxy(self):
-    certfile = ""
-    keyfile = ""
+    cert_file = ""
+    key_file = ""
     protocol = self.network['protocol']
     if protocol == "spdy":
-      certfile = runner_cfg.ssl['certfile']
-      keyfile = runner_cfg.ssl['keyfile']
+      cert_file = runner_cfg.ssl['certfile']
+      key_file = runner_cfg.ssl['keyfile']
 
-    proxy_parameters = {
-      "listen_host": "",
-      "listen_port": server_port,
-      "cert_file": certfile,
-      "key_file": keyfile,
-      "http_host": "127.0.0.1",
-      "http_port": backend_server_port,
-      "https_host": "",
-      "https_port": "",
-      "spdy_only": 0,
-    }
-    proxy_cfg = "--proxy1=%(listen_host)s,%(listen_port)d,%(cert_file)s,%(key_file)s,%(http_host)s,%(http_port)d,%(https_host)s,%(https_port)s,%(spdy_only)d" % proxy_parameters
+    proxy_cfg = "--proxy1=%s" % ",".join((
+        "",                   # listen_host
+        SERVER_PORT,          # listen_port
+        cert_file,            # cert_file
+        key_file,             # key_file
+        "127.0.0.1",          # http_host
+        BACKEND_SERVER_PORT,  # http_port
+        "",                   # https_host
+        "",                   # https_port
+        0,                    # spdy_only
+        ))
+
     # TODO(mbelshe): Remove the logfile when done with debugging the flipserver.
     logfile = "/tmp/flipserver.log"
     try:
       os.remove(logfile)
-    except:
+    except OSError:
       pass
-    cmdline = [ 
-      runner_cfg.spdy_proxy_server_path, proxy_cfg, 
+    cmdline = [
+      runner_cfg.spdy_proxy_server_path,
+      proxy_cfg,
       "--force_spdy",
       "--v=2",
       "--logfile=" + logfile
@@ -386,7 +386,7 @@ setTimeout(function() {
       if use_virtualx:
         StartVirtualX(platform.node(), '/tmp')
 
-      server_host_port_pair = '127.0.0.1:' + str(server_port)
+      server_host_port_pair = '127.0.0.1:%s' % SERVER_PORT
       cmdline = [
           runner_cfg.chrome_path,
           '--activate-on-launch',
@@ -399,10 +399,10 @@ setTimeout(function() {
           '--enable-benchmarking',
           '--enable-logging',
           '--enable-experimental-extension-apis',
-          '--host-resolver-rules=MAP * ' + server_host_port_pair + ',EXCLUDE ' +
-              runner_cfg.appengine_host,
+          '--host-resolver-rules=MAP * %s,EXCLUDE %s' % (
+              server_host_port_pair, runner_cfg.appengine_host),
           '--ignore-certificate-errors',
-          '--load-extension=' + perftracker_extension_path,
+          '--load-extension=' + PERFTRACKER_EXTENSION_PATH,
           '--log-level=0',
           '--no-first-run',
           '--no-js-randomness',
@@ -417,8 +417,8 @@ setTimeout(function() {
       if self.network['protocol'] == 'spdy-nossl':
         spdy_mode = 'no-ssl'
       if spdy_mode:
-        cmdline.extend(['--use-spdy=' + spdy_mode + ',exclude=' +
-                        runner_cfg.appengine_url])
+        cmdline.append(
+            '--use-spdy=%s,exclude=%s' % (spdy_mode, runner_cfg.appengine_url))
       if chrome_cmdline:
         cmdline.extend(chrome_cmdline.split(' '))
       cmdline.append(start_file_url)
@@ -427,7 +427,8 @@ setTimeout(function() {
       chrome = subprocess.Popen(cmdline)
       returncode = chrome.wait();
       if returncode:
-        logging.error('Chrome returned status code %d. It may have crashed.' % returncode)
+        logging.error('Chrome returned status code %d. It may have crashed.',
+                      returncode)
     finally:
       ClobberTmpDirectory(profile_dir)
       if use_virtualx:
@@ -450,6 +451,27 @@ setTimeout(function() {
   def Cleanup(self):
     os.remove(self.filename)
 
+
+def ConfigureLogging(log_level_name, log_file_name):
+  """Configure logging level and format.
+
+  Args:
+    log_level_name: 'debug', 'info', 'warning', 'error', or 'critical'.
+    log_file_name: a file name
+  """
+  if logging.root.handlers:
+    logging.critical('A logging method (e.g. "logging.warn(...)")'
+                     ' was called before logging was configured.')
+  log_level = getattr(logging, log_level_name.upper())
+  log_format = '%(asctime)s %(levelname)s %(message)s'
+  logging.basicConfig(level=log_level, format=log_format)
+  if log_file_name:
+    fh = logging.FileHandler(log_file_name)
+    fh.setLevel(log_level)
+    fh.setFormatter(logging.Formatter(log_format))
+    logging.getLogger().addHandler(fh)
+
+
 def main(options):
   # When in record mode, override most of the configuration.
   if options.record:
@@ -467,18 +489,18 @@ def main(options):
       }
     ]
 
-  done = False
-  while not done:
+  while True:
     for network in runner_cfg.networks:
-      logging.debug("Running network configuration: %s", str(network))
-      test = TestInstance(network, options.log_level, options.record)
+      logging.debug("Running network configuration: %s", network)
+      test = TestInstance(
+          network, options.log_level, options.log_file, options.record)
       test.RunTest(options.notes, options.chrome_cmdline)
     if not options.infinite or options.record:
-      done = True
-
-    if runner_cfg.inter_run_cleanup_script and not options.record:
+      break
+    if runner_cfg.inter_run_cleanup_script:
       logging.debug("Running inter-run-cleanup-script")
       subprocess.call([runner_cfg.inter_run_cleanup_script], shell=True)
+
 
 if __name__ == '__main__':
   log_levels = ('debug', 'info', 'warning', 'error', 'critical')
@@ -508,8 +530,7 @@ if __name__ == '__main__':
   option_parser.add_option('-r', '--record', default='',
       action='store',
       type='string',
-      help=('If specified, rather than running benchmark, record URLs in config'
-            'to given file.'))
+      help=('Record URLs in runner_cfg to this file.'))
   option_parser.add_option('-i', '--infinite', default=False,
       action='store_true',
       help='Loop infinitely, repeating the test.')
@@ -528,6 +549,8 @@ if __name__ == '__main__':
 
   options, args = option_parser.parse_args()
 
+  ConfigureLogging(options.log_level, options.log_file)
+
   # Collect login credentials and verify
   if options.user:
     options.password = getpass.getpass(options.user + ' password: ');
@@ -539,12 +562,5 @@ if __name__ == '__main__':
     exit(-1)
   else:
     options.login_url = ''
-
-  log_level = logging.__dict__[options.log_level.upper()]
-  logging.basicConfig(level=log_level)
-  if options.log_file:
-    fh = logging.FileHandler(options.log_file)
-    fh.setLevel(log_level)
-    logging.getLogger('').addHandler(fh)
 
   sys.exit(main(options))

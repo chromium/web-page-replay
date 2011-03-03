@@ -206,14 +206,12 @@ class LinuxPlatformSettings(PosixPlatformSettings):
         f.write(str(value))
     except IOError, e:
       logging.error("Unable to set sysctl %s: %s", name, e)
-      return None
 
   def get_sysctl(self, name):
     try:
       filename = '/proc/sys/' + name
       with open(filename) as f:
-        rv = int(f.read())
-      return rv
+        return int(f.read())
     except IOError, e:
       logging.error("Unable to get sysctl %s: %s", name, e)
       return None
