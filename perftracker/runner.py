@@ -342,7 +342,7 @@ setTimeout(function() {
         BACKEND_SERVER_PORT,  # http_port
         "",                   # https_host
         "",                   # https_port
-        0,                    # spdy_only
+        "0",                  # spdy_only
         ))
 
     # TODO(mbelshe): Remove the logfile when done with debugging the flipserver.
