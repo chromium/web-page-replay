@@ -392,7 +392,8 @@ function Benchmark(url, setIds, callbackWhenFinished) {
     var coldLoad = new BenchmarkLoad(url_, LoadType.cold,
                                      setIds_[LoadType.cold]);
 
-    chrome.benchmarking.clearCache();
+    // XXXMB - turned off cache clearing for testing snapstart
+    chrome.benchmarking.clearCache(true);
     chrome.benchmarking.closeConnections();
     me_.asyncClearCookies();
 

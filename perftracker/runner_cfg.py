@@ -16,24 +16,27 @@
 #
 # Location of Chrome to test.
 #
-chrome_path = '<path to chrome>'
+chrome_path = "/usr/local/google/dailychrome/chrome-linux/chrome"
+#chrome_path = "/usr/local/google/mbelshe/src/out/Release/chrome"
 
 #
 # Location of the SPDY proxy server to use (if testing SPDY)
 #
-spdy_proxy_server_path = "<path to spdy proxy program>"
+spdy_proxy_server_path = "/usr/local/google/mbelshe/src/out/Release/flip_in_mem_edsm_server"
 
 #
 # Location of the recorded replay data.
 #
-replay_data_archive = '<path to archive>'
+replay_data_archive = "../../data/alexa-top75_20110124.archive"
 
 #
 # The URL of the PerfTracker web application to post results to
-#
-appengine_host = 'localhost'
+#appengine_host = "perftracker.googleplex.com"
+#appengine_port = 80
+appengine_host = "mbelshe"
 appengine_port = 8080
 appengine_url = 'http://%s:%d/' % (appengine_host, appengine_port)
+
 
 #
 # Script to run between each run.
@@ -54,7 +57,7 @@ ssl = {
 #
 # Number of times to load each URL for each network.
 #
-iterations = 15
+iterations = 3
 
 #
 # The configuration to use in the runner
@@ -64,18 +67,38 @@ networks = []
 # Unlimited network speed for both http and spdy.
 networks +=  [
   {
-    'bandwidth_kbps': {
-      'down': 0,
-      'up': 0,
-    },
-    'round_trip_time_ms': 0,
+    'bandwidth_kbps': bandwidths,
+    'round_trip_time_ms': round_trip_times,
     'packet_loss_percent': 0,
     'protocol': protocols,
+    'options': options,
   }
-  for protocols in ['http', 'spdy']
+  #for protocols in ['spdy' , 'http', 'http-base']
+  for protocols in [ 'spdy-nossl', 'spdy-sd'  ]   #'spdy-snap', 'spdy']
+  for round_trip_times in [100]
+  for options in [ '' ]
+  for bandwidths in  [
+    # DSL.
+    #{
+    #  'down': 2000,
+    #  'up': 400,
+    #},
+    # Cable.
+    {
+      'down': 5000,
+      'up': 1000,
+    },
+    # 10Mbps.
+    #{
+    #  'down': 10000,
+    #  'up': 10000,
+    #},
+  ]
+  #for options in [ '--enable-preconnect' ]
 ]
 
 # Vary RTT against "Cable" speed bandwidth.
+'''
 networks += [
   {
     'bandwidth_kbps': {
@@ -131,10 +154,24 @@ networks += [
   }
   for protocols in ['http', 'spdy']
 ]
+'''
 
 #
 # URLs to test.
 #
+urls = [
+  "http://www.google.com/",
+  "http://www.google.com/search?q=dogs",
+  "http://www.facebook.com/",
+  "http://www.youtube.com/",
+  "http://www.yahoo.com/",
+  "http://www.baidu.com/",
+  "http://www.baidu.com/s?wd=obama",
+  "http://www.wikipedia.org/",
+  "http://en.wikipedia.org/wiki/Lady_gaga",
+  "http://googleblog.blogspot.com/",
+]
+
 urls = [
   "http://www.google.com/",
   "http://www.google.com/search?q=dogs",

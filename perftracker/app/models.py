@@ -38,7 +38,9 @@ class Network(db.Model):
                                    "http",      # HTTP current (adj cwnd)
                                    "http-base", # HTTP baseline (cwnd default)
                                    "spdy",      # SPDY over SSL
-                                   "spdy-nossl" # SPDY over TCP
+                                   "spdy-nossl",# SPDY over TCP
+                                   "spdy-snap", # SPDY over SSL w/ SnapStart
+                                   "spdy-sd"    # SPDY over SSL single-domain
                                  ]))
 
 # The unique list of CPUs
