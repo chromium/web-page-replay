@@ -19,29 +19,20 @@ import httparchive
 import httpclient  # wpr httplib wrapper
 import logging
 import os
-import re
 import socket
 import SocketServer
 import subprocess
 import time
 
 
-GENERATOR_URL_RE = re.compile('/web-page-replay-generate-(\d{3})')
-
-
-def GetGeteneratorUrlResponseCode(request):
-  match = GENERATOR_URL_RE.match(request.path)
-  if not match:
-    return None
-  return int(match.group(1))
-
-
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+  # URL path prefix that allows clients to request a particular response code.
+  GENERATOR_URL_PREFIX = '/web-page-replay-generate-'
 
-  protocol_version = 'HTTP/1.1'
+  protocol_version = 'HTTP/1.1'  # override BaseHTTPServer setting
 
   # Since we do lots of small wfile.write() calls, turn on buffering.
-  wbufsize = -1
+  wbufsize = -1  # override StreamRequestHandler (a base class) setting
 
   # Make request handler logging match our logging format.
   def log_request(self, code='-', size='-'): pass
@@ -60,7 +51,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
   def get_archived_http_request(self):
     host = self.headers.get('host')
-    if host == None:
+    if host is None:
       logging.error('Request without host header')
       return None
 
@@ -135,13 +126,32 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.wfile.write(body)
     self.wfile.flush()
 
+  @classmethod
+  def get_generator_url_response_code(cls, request_path):
+    """Parse special generator URLs for the embedded response code.
+
+    Clients like perftracker can use URLs of this form to request
+    a response with a particular response code.
+
+    Args:
+      request_path: a string like "/foo", or "/web-page-replay-generator-404"
+    Returns:
+      On a match, a 3-digit integer like 404.
+      Otherwise, None.
+    """
+    prefix, response_code = request_path[:-3], request_path[-3:]
+    if prefix == cls.GENERATOR_URL_PREFIX and response_code.isdigit():
+      return int(response_code)
+    return None
+
+
 class RecordHandler(HttpArchiveHandler):
   def do_GET(self):
     request = self.get_archived_http_request()
     if request is None:
       self.send_error(500)
       return
-    response_code = GetGeteneratorUrlResponseCode(request)
+    response_code = self.get_generator_url_response_code(request.path)
     if response_code:
       self.send_error(response_code)
       return
@@ -178,7 +188,7 @@ class ReplayHandler(HttpArchiveHandler):
       request_time_ms = (time.time() - start_time) * 1000.0;
       logging.debug('Replayed: %s (%dms)', request, request_time_ms)
     else:
-      response_code = GetGeteneratorUrlResponseCode(request)
+      response_code = self.get_generator_url_response_code(request.path)
       if response_code:
         self.send_error(response_code)
       else:
