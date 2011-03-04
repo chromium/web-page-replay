@@ -83,9 +83,9 @@ class JSONDataPage(BaseRequestHandler):
     def do_set_search(self):
         memcache_key = "set_search." + self.request.query
         cached_response = memcache.get(memcache_key)
-        #if cached_response is not None:
-        #    self.response.out.write(cached_response)
-        #    return
+        if cached_response is not None:
+            self.response.out.write(cached_response)
+            return
 
         query = models.TestSet.all()
         query.order("-date")
@@ -150,9 +150,9 @@ class JSONDataPage(BaseRequestHandler):
 
         memcache_key = "summary." + set_id
         cached_response = memcache.get(memcache_key)
-        #if cached_response is not None:
-        #    self.response.out.write(cached_response)
-        #    return
+        if cached_response is not None:
+            self.response.out.write(cached_response)
+            return
 
         test_summary = models.TestSummary.get_by_id(int(set_id))
         if not test_summary:
