@@ -334,15 +334,15 @@ setTimeout(function() {
       key_file = runner_cfg.ssl['keyfile']
 
     proxy_cfg = "--proxy1=%s" % ",".join((
-        "",                   # listen_host
-        SERVER_PORT,          # listen_port
-        cert_file,            # cert_file
-        key_file,             # key_file
-        "127.0.0.1",          # http_host
-        BACKEND_SERVER_PORT,  # http_port
-        "",                   # https_host
-        "",                   # https_port
-        "0",                  # spdy_only
+        "",                        # listen_host
+        str(SERVER_PORT),          # listen_port
+        cert_file,                 # cert_file
+        key_file,                  # key_file
+        "127.0.0.1",               # http_host
+        str(BACKEND_SERVER_PORT),  # http_port
+        "",                        # https_host
+        "",                        # https_port
+        "0",                       # spdy_only
         ))
 
     # TODO(mbelshe): Remove the logfile when done with debugging the flipserver.
