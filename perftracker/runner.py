@@ -383,8 +383,14 @@ setTimeout(function() {
     profile_dir = tempfile.mkdtemp(prefix='chrome.profile.')
 
     use_virtualx = False
+    switch_away_from_root = None
     if platform.system() == 'Linux':
       use_virtualx = True
+      user_uid = os.getenv('SUDO_UID')
+      if user_uid:
+        user_uid = int(user_uid)
+        switch_away_from_root = lambda: os.setuid(user_uid)
+        os.chown(profile_dir, user_uid, -1)
 
     try:
       if use_virtualx:
@@ -428,7 +434,7 @@ setTimeout(function() {
       cmdline.append(start_file_url)
 
       logging.debug('Starting Chrome: %s', ' '.join(cmdline))
-      chrome = subprocess.Popen(cmdline)
+      chrome = subprocess.Popen(cmdline, preexec_fn=switch_away_from_root)
       returncode = chrome.wait();
       if returncode:
         logging.error('Chrome returned status code %d. It may have crashed.',
