@@ -223,13 +223,15 @@ def GetVersion():
 
 
 class TestInstance:
-  def __init__(self, network, log_level, log_file, record):
+  def __init__(self, network, log_level, log_file, record,
+               diff_unknown_requests):
     self.network = network
     self.log_level = log_level
     self.log_file = log_file
     self.record = record
     self.proxy_process = None
     self.spdy_proxy_process = None
+    self.diff_unknown_requests = diff_unknown_requests
 
   def GenerateConfigFile(self, notes=''):
     # The PerfTracker extension requires this name in order to kick off.
@@ -310,6 +312,8 @@ setTimeout(function() {
       cmdline += ['-m', str(self.network['round_trip_time_ms'])]
     if self.network['packet_loss_percent']:
       cmdline += ['-p', str(self.network['packet_loss_percent'] / 100.0)]
+    if self.diff_unknown_requests:
+      cmdline.append('--diff_unknown_requests')
     if self.record:
       cmdline.append('-r')
     cmdline.append(runner_cfg.replay_data_archive)
@@ -376,7 +380,7 @@ setTimeout(function() {
   def RunChrome(self, chrome_cmdline):
     start_file_url = 'file://' + self.filename
 
-    profile_dir = tempfile.mkdtemp(prefix='chrome.profile.');
+    profile_dir = tempfile.mkdtemp(prefix='chrome.profile.')
 
     use_virtualx = False
     if platform.system() == 'Linux':
@@ -493,7 +497,8 @@ def main(options):
     for network in runner_cfg.networks:
       logging.debug("Running network configuration: %s", network)
       test = TestInstance(
-          network, options.log_level, options.log_file, options.record)
+          network, options.log_level, options.log_file, options.record,
+          options.diff_unknown_requests)
       test.RunTest(options.notes, options.chrome_cmdline)
     if not options.infinite or options.record:
       break
@@ -546,6 +551,12 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Username for logging into appengine.')
+  option_parser.add_option('-D', '--diff_unknown_requests', default=False,
+      action='store_true',
+      dest='diff_unknown_requests',
+      help='During replay, show a unified diff of any unknown requests against '
+           'their nearest match in the archive.')
+
 
   options, args = option_parser.parse_args()
 

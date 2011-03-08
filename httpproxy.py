@@ -193,7 +193,10 @@ class ReplayHandler(HttpArchiveHandler):
         self.send_error(response_code)
       else:
         self.send_error(404)
-        logging.error('Could not replay: %s', request)
+        reason = request
+        if self.server.diff_unknown_requests:
+          reason = self.server.http_archive.diff(request)
+        logging.error('Could not replay: %s', reason)
 
 
 class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
@@ -201,10 +204,12 @@ class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
                             daemonserver.DaemonServer):
   def __init__(
       self, http_archive_filename, use_deterministic_script, real_dns_lookup,
-      host='', port=80, use_ssl=False, certfile='', keyfile=''):
+      host='', port=80, use_ssl=False, certfile='', keyfile='',
+      diff_unknown_requests=False):
     self.use_deterministic_script = use_deterministic_script
     self.archive_filename = http_archive_filename
     self.real_http_request = httpclient.RealHttpRequest(real_dns_lookup)
+    self.diff_unknown_requests = diff_unknown_requests
 
     self._assert_archive_file_writable()
     self.http_archive = httparchive.HttpArchive()
@@ -245,8 +250,10 @@ class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
                             daemonserver.DaemonServer):
   def __init__(
       self, http_archive_filename, use_deterministic_script, real_dns_lookup,
-      host='', port=80, use_ssl=False, certfile='', keyfile=''):
+      host='', port=80, use_ssl=False, certfile='', keyfile='',
+      diff_unknown_requests=False):
     self.use_deterministic_script = use_deterministic_script
+    self.diff_unknown_requests = diff_unknown_requests
     self.http_archive = httparchive.HttpArchive.Create(http_archive_filename)
     logging.info('Loaded %d responses from %s',
                  len(self.http_archive), http_archive_filename)

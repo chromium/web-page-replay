@@ -31,6 +31,7 @@ To edit a particular URL:
   $ ./httparchive.py edit --host www.example.com --path /foo archive.wpr
 """
 
+import difflib
 import httpzlib
 import logging
 import optparse
@@ -152,6 +153,24 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     response.set_data(''.join(open(tmp_file.name).readlines()))
     os.remove(tmp_file.name)
 
+  def diff(self, request):
+    request_repr = request.verbose_repr()
+    best_similarity = None
+    best_candidate_repr = None
+    for candidate in self.get_requests(request.command, request.host):
+      candidate_repr = candidate.verbose_repr()
+      similarity = difflib.SequenceMatcher(a=request_repr,
+                                           b=candidate_repr).ratio()
+      if best_similarity is None or similarity > best_similarity:
+        best_similarity = similarity
+        best_candidate_repr = candidate_repr
+
+    delta = None
+    if best_candidate_repr:
+      delta = ''.join(difflib.ndiff(best_candidate_repr.splitlines(1),
+                                    request_repr.splitlines(1)))
+    return delta
+
 
 class ArchivedHttpRequest(object):
   def __init__(self, command, host, path, request_body):
@@ -174,6 +193,10 @@ class ArchivedHttpRequest(object):
     return ((command is None or command == self.command) and
             (host is None or host == self.host) and
             (path is None or path == self.path))
+
+  def verbose_repr(self):
+    return '\n'.join([str(x) for x in
+        self.command, self.host, self.path, self.request_body])
 
 
 class ArchivedHttpResponse(object):

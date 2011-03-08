@@ -106,7 +106,8 @@ def main(options, args):
           port=options.port,
           use_ssl=options.spdy != "no-ssl",
           certfile=options.certfile,
-          keyfile=options.keyfile):
+          keyfile=options.keyfile,
+          diff_unknown_requests=options.diff_unknown_requests):
         with trafficshaper.TrafficShaper(
             host,
             options.shaping_port,
@@ -204,6 +205,11 @@ if __name__ == '__main__':
       help='Don\'t inject JavaScript which makes sources of entropy such as '
            'Date() and Math.random() deterministic. CAUTION: With this option '
            'many web pages will not replay properly.')
+  harness_group.add_option('-D', '--diff_unknown_requests', default=False,
+      action='store_true',
+      dest='diff_unknown_requests',
+      help='During replay, show a unified diff of any unknown requests against '
+           'their nearest match in the archive.')
   harness_group.add_option('-P', '--no-dns_private_passthrough', default=True,
       action='store_false',
       dest='dns_private_passthrough',
