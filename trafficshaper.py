@@ -34,6 +34,7 @@ class TrafficShaper(object):
   def __init__(self,
                host='127.0.0.1',
                port='80',
+               dns_port='53',
                up_bandwidth='0',
                down_bandwidth='0',
                delay_ms='0',
@@ -42,15 +43,20 @@ class TrafficShaper(object):
     """Start shaping traffic.
 
     Args:
+      host: a host string (name or IP) for the web proxy.
+      port: a port string (e.g. '80') for the web proxy.
+      dns_port: a port string for the dns proxy (for unit testing).
       up_bandwidth: Upload bandwidth
       down_bandwidth: Download bandwidth
            Bandwidths measured in [K|M]{bit/s|Byte/s}. '0' means unlimited.
       delay_ms: Propagation delay in milliseconds. '0' means no delay.
       packet_loss_rate: Packet loss rate in range [0..1]. '0' means no loss.
+      init_cwnd: the initial cwnd setting. '0' means no change.
     """
     self.platformsettings = platformsettings.get_platform_settings()
     self.host = host
     self.port = port
+    self.dns_port = dns_port
     self.up_bandwidth = up_bandwidth
     self.down_bandwidth = down_bandwidth
     self.delay_ms = delay_ms
@@ -94,7 +100,7 @@ class TrafficShaper(object):
           'from', 'any',
           'to', self.host,
           'out',
-          'dst-port', '53',
+          'dst-port', self.dns_port,
       ])
 
       # Configure upload shaping.

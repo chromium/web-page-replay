@@ -98,10 +98,6 @@ from http_common import HttpMessageHandler, \
 
 from error import ERR_HTTP_VERSION, ERR_HOST_REQ, ERR_WHITESPACE_HDR, ERR_TRANSFER_CODE
 
-logging.basicConfig()
-log = logging.getLogger('server')
-log.setLevel(logging.WARNING)
-
 # FIXME: assure that the connection isn't closed before reading the entire req body
 # TODO: filter out 100 responses to HTTP/1.0 clients that didn't ask for it.
 
@@ -110,6 +106,9 @@ class Server:
     def __init__(self, host, port, request_handler):
         self.request_handler = request_handler
         self.server = push_tcp.create_server(host, port, self.handle_connection)
+        self.log = logging.getLogger('server')
+        self.log.setLevel(logging.WARNING)
+
         
     def handle_connection(self, tcp_conn):
         "Process a new push_tcp connection, tcp_conn."
@@ -221,7 +220,8 @@ class HttpServerConnection(HttpMessageHandler):
         self.method = method
         self.connection_hdr = conn_tokens
 
-        log.info("%s server req_start %s %s %s" % (id(self), method, uri, self.req_version))
+        self.log.info("%s server req_start %s %s %s",
+                      id(self), method, uri, self.req_version)
         self.req_body_cb, self.req_done_cb = self.request_handler(
                 method, uri, hdr_tuples, self.res_start, self.req_body_pause)
         allows_body = (content_length) or (transfer_codes != [])

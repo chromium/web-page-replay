@@ -33,11 +33,19 @@ class DnsProxyException(Exception):
 class RealDnsLookup(object):
   def __init__(self, name_servers=None):
     self.resolver = dns.resolver.get_default_resolver()
-    self.resolver.nameservers = name_servers or ['8.8.8.8']
+    self.resolver.nameservers = [
+        platformsettings.get_platform_settings().get_original_primary_dns()]
     self.dns_cache_lock = threading.Lock()
     self.dns_cache = {}
 
   def __call__(self, hostname):
+    """Return real IP for a host.
+
+    Args:
+      host: a hostname ending with a period (e.g. "www.google.com.")
+    Returns:
+      the IP address as a string (e.g. "192.168.25.2")
+    """
     self.dns_cache_lock.acquire()
     ip = self.dns_cache.get(hostname)
     self.dns_cache_lock.release()
@@ -59,6 +67,37 @@ class RealDnsLookup(object):
     self.dns_cache[hostname] = ip
     self.dns_cache_lock.release()
     return ip
+
+
+class DnsPrivatePassthroughFilter:
+  """Allow private hosts to resolve to their real IPs."""
+  def __init__(self, real_dns_lookup, skip_passthrough_hosts=()):
+    """Initialize DnsPrivatePassthroughFilter.
+
+    Args:
+      real_dns_lookup: a function that resolves a host to an IP.
+      skip_passthrough_hosts: an iterable of hosts that skip
+        the private determination (i.e. avoids a real dns lookup
+        for them).
+    """
+    self.real_dns_lookup = real_dns_lookup
+    self.skip_passthrough_hosts = set(
+        host + '.' for host in skip_passthrough_hosts)
+
+  def __call__(self, host):
+    """Return real IP for host if private.
+
+    Args:
+      host: a hostname ending with a period (e.g. "www.google.com.")
+    Returns:
+      If private, the real IP address as a string (e.g. 192.168.25.2)
+      Otherwise, None.
+    """
+    if host not in self.skip_passthrough_hosts:
+      real_ip = self.real_dns_lookup(host)
+      if real_ip and ipaddr.IPv4Address(real_ip).is_private:
+        return real_ip
+    return None
 
 
 class UdpDnsHandler(SocketServer.DatagramRequestHandler):
@@ -83,16 +122,14 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
     else:
       logging.debug("DNS request with non-zero operation code: %s",
                     operation_code)
-
-    ip = self.server.server_address[0]
-    if self.server.is_private_passthrough:
-      real_ip = self.server.real_dns_lookup(self.domain)
-      if real_ip and ipaddr.IPv4Address(real_ip).is_private:
-        ip = real_ip
-    if ip == self.server.server_address[0]:
-      logging.debug('dnsproxy: handle(%s) -> %s', self.domain, ip)
+    real_ip = self.server.passthrough_filter(self.domain)
+    if real_ip:
+      message = 'passthrough'
+      ip = real_ip
     else:
-      logging.debug('dnsproxy: passthrough(%s) -> %s', self.domain, ip)
+      message = 'handle'
+      ip = self.server.server_address[0]
+    logging.debug('dnsproxy: %s(%s) -> %s', message, self.domain, ip)
     self.reply(self.get_dns_reply(ip))
 
   @classmethod
@@ -130,13 +167,20 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
 
 class DnsProxyServer(SocketServer.ThreadingUDPServer,
                      daemonserver.DaemonServer):
-  def __init__(self, forward, private_passthrough, host='', port=53):
-    platform_settings = platformsettings.get_platform_settings()
-    self.forward = forward
-    self.is_private_passthrough = private_passthrough
-    self.real_dns_lookup = RealDnsLookup(
-        name_servers=[platform_settings.get_primary_dns()])
-    self.restore_primary_dns = platform_settings.restore_primary_dns
+  def __init__(self, use_forwarding, passthrough_filter=None, host='', port=53):
+    """Initialize DnsProxyServer.
+
+    Args:
+      use_forwarding: a boolean that if true, changes primary DNS to host.
+      passthrough_filter: a function that resolves a host to its real IP,
+        or None, if it should resolve to the dnsproxy's address.
+      host: a host string (name or IP) to bind the dns proxy and to which
+        DNS requests will be resolved.
+      port: an integer port on which to bind the proxy.
+    """
+    self.use_forwarding = use_forwarding
+    self.passthrough_filter = passthrough_filter or (lambda host: None)
+    self.platform_settings = platformsettings.get_platform_settings()
     try:
       SocketServer.ThreadingUDPServer.__init__(
           self, (host, port), UdpDnsHandler)
@@ -146,11 +190,11 @@ class DnsProxyServer(SocketServer.ThreadingUDPServer,
             'Unable to bind DNS server on (%s:%s)' % (host, port))
       raise
     logging.info('Started DNS server on %s...', self.server_address)
-    if self.forward:
-      platform_settings.set_primary_dns(host)
+    if self.use_forwarding:
+      self.platform_settings.set_primary_dns(host)
 
   def cleanup(self):
-    if self.forward:
-      self.restore_primary_dns()
+    if self.use_forwarding:
+      self.platform_settings.restore_primary_dns()
     self.shutdown()
     logging.info('Shutdown DNS server')

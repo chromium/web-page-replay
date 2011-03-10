@@ -95,7 +95,10 @@ def _InsertScriptAfter(matchobj):
 
 
 class HttpArchive(dict, persistentmixin.PersistentMixin):
-  """Dict with ArchivedHttpRequest keys and ArchivedHttpResponse values."""
+  """Dict with ArchivedHttpRequest keys and ArchivedHttpResponse values.
+
+  PersistentMixin adds CreateNew(filename), Load(filename), and Persist().
+  """
 
   def get_requests(self, command=None, host=None, path=None):
     """Retruns a list of all requests matching giving params."""
@@ -335,7 +338,7 @@ if __name__ == '__main__':
   if not os.path.exists(replay_file):
     option_parser.error('Replay file "%s" does not exist' % replay_file)
 
-  http_archive = HttpArchive.Create(replay_file)
+  http_archive = HttpArchive.Load(replay_file)
   if command == 'ls':
     print http_archive.ls(options.command, options.host, options.path)
   elif command == 'cat':

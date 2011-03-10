@@ -19,31 +19,30 @@ import httparchive
 import os
 import sys
 import threading
-import third_party.nbhttp.spdy_server as spdy_server
-import third_party.nbhttp.push_tcp as push_tcp
-from third_party.nbhttp.http_common import get_hdr, dummy
 import time
+
+import third_party
+from nbhttp import spdy_server
+from nbhttp import push_tcp
+from nbhttp import http_common
 
 CONTENT_LENGTH = 'content-length'
 STATUS = 'status'
 VERSION = 'version'
 
 class ReplaySpdyServer(daemonserver.DaemonServer):
-  def __init__(
-      self, http_archive_filename, use_deterministic_script, real_dns_lookup,
-      host='localhost', port=80, use_ssl=True, certfile="", keyfile=""):
+  def __init__(self, http_archive_fetch, host='localhost', port=80,
+               use_ssl=True, certfile=None, keyfile=None):
     #TODO(lzheng): figure out how to get the log level from main.
     self.log = logging.getLogger('ReplaySpdyServer')
     self.log.setLevel(logging.INFO)
-    self.http_archive = httparchive.HttpArchive.Create(http_archive_filename)
-    self.log.info('Loaded %d responses from %s',
-                  len(self.http_archive), http_archive_filename)
+    self.http_archive_fetch = http_archive_fetch
     self.host = host
     self.port = port
     self.use_ssl = use_ssl
-    if self.use_ssl and (certfile=="" or keyfile==""):
-        logging.error("SPDY SSL mode requires a keyfile and certificate file")
-        raise Exception("keyfile or certfile missing")
+    if self.use_ssl and (not certfile or not keyfile):
+        self.log.error('SPDY SSL mode requires a keyfile and certificate file')
+        raise Exception('keyfile or certfile missing')
     self.spdy_server = spdy_server.SpdyServer(host,
                                               port,
                                               self.use_ssl,
@@ -71,10 +70,11 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
         host = value
     self.log.debug("request: %s, uri: %s, method: %s", host, uri, method)
 
+    dummy = http_common.dummy
     if method == 'GET':
       request = httparchive.ArchivedHttpRequest(method, host, uri, None)
-      if request in self.http_archive:
-        response = self.http_archive[request]
+      response = self.http_archive_fetch(request)
+      if response:
         res_hdrs = [('version', 'HTTP/1.1')]
         for (name, value) in response.headers:
           name_lower = name.lower()

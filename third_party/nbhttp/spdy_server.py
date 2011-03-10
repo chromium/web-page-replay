@@ -93,10 +93,6 @@ import push_tcp
 from spdy_common import SpdyMessageHandler, CTL_SYN_REPLY, FLAG_NONE, FLAG_FIN
 from http_common import get_hdr, dummy
 
-logging.basicConfig()
-log = logging.getLogger('server')
-log.setLevel(logging.INFO)
-
 # FIXME: assure that the connection isn't closed before reading the entire req body
 
 class SpdyServer:

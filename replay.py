@@ -39,16 +39,19 @@ Network simulation examples:
   $ sudo ./replay.py --packet_loss_rate=0.01 archive.wpr
 """
 
-import dnsproxy
-import httpproxy
 import logging
 import optparse
-import platformsettings
 import socket
 import sys
-import threading
 import time
 import traceback
+
+import dnsproxy
+import httparchive
+import httpclient
+import httpproxy
+import platformsettings
+import replayspdyserver
 import trafficshaper
 
 
@@ -57,8 +60,8 @@ if sys.version < '2.6':
   sys.exit(1)
 
 
-def get_server_address(options):
-  if options.server_mode:
+def get_server_address(server_mode):
+  if server_mode:
     return socket.gethostbyname(socket.gethostname())
   return '127.0.0.1'
 
@@ -75,39 +78,49 @@ def point_dns(server):
     platform_settings.restore_primary_dns()
 
 
-def main(options, args):
+def main(options, replay_filename):
   if options.server:
     point_dns(options.server)
     return
+  host = get_server_address(options.server_mode)
+
+  web_server_class = httpproxy.HttpProxyServer
+  web_server_kwargs = {
+      'host': host,
+      'port': options.port,
+      }
+  if options.spdy:
+    assert not options.record, 'spdy cannot be used with --record.'
+    web_server_class = replayspdyserver.ReplaySpdyServer
+    web_server_kwargs['use_ssl'] = options.spdy != 'no-ssl'
+    web_server_kwargs['certfile'] = options.certfile
+    web_server_kwargs['keyfile'] = options.keyfile
 
   if options.record:
-    replay_server_class = httpproxy.RecordHttpProxyServer
-  elif options.spdy:
-    # TODO(lzheng): move this import to the front of the file once
-    # nbhttp moves its logging config in server.py into main.
-    import replayspdyserver
-    replay_server_class = replayspdyserver.ReplaySpdyServer
+    http_archive = httparchive.HttpArchive()
+    http_archive.AssertWritable(replay_filename)
   else:
-    replay_server_class = httpproxy.ReplayHttpProxyServer
+    http_archive = httparchive.HttpArchive.Load(replay_filename)
+    logging.info('Loaded %d responses from %s',
+                 len(http_archive), replay_filename)
 
+  real_dns_lookup = dnsproxy.RealDnsLookup()
+  if options.record:
+    http_archive_fetch = httpclient.RecordHttpArchiveFetch(
+        http_archive, real_dns_lookup, options.deterministic_script)
+  else:
+    http_archive_fetch = httpclient.ReplayHttpArchiveFetch(
+        http_archive, options.diff_unknown_requests)
+
+  dns_passthrough_filter = None
+  if options.dns_private_passthrough:
+    skip_passthrough_hosts = set(request.host for request in http_archive)
+    dns_passthrough_filter = dnsproxy.DnsPrivatePassthroughFilter(
+        real_dns_lookup, skip_passthrough_hosts)
   try:
-    replay_file = args[0]
-    host = get_server_address(options)
-
     with dnsproxy.DnsProxyServer(
-        options.dns_forwarding,
-        options.dns_private_passthrough,
-        host=host) as dns_server:
-      with replay_server_class(
-          replay_file,
-          options.deterministic_script,
-          dns_server.real_dns_lookup,
-          host=host,
-          port=options.port,
-          use_ssl=options.spdy != "no-ssl",
-          certfile=options.certfile,
-          keyfile=options.keyfile,
-          diff_unknown_requests=options.diff_unknown_requests):
+        options.dns_forwarding, dns_passthrough_filter, host):
+      with web_server_class(http_archive_fetch, **web_server_kwargs):
         with trafficshaper.TrafficShaper(
             host,
             options.shaping_port,
@@ -120,12 +133,38 @@ def main(options, args):
             time.sleep(1)
   except KeyboardInterrupt:
     logging.info('Shutting down.')
-  except dnsproxy.DnsProxyException, e:
+    exit_status = 0
+  except (dnsproxy.DnsProxyException,
+          trafficshaper.TrafficShaperException) as e:
     logging.critical(e)
-  except trafficshaper.TrafficShaperException, e:
-    logging.critical(e)
+    exit_status = 1
   except:
     print traceback.format_exc()
+    exit_status = 2
+  if options.record:
+    http_archive.Persist(replay_filename)
+    logging.info('Saved %d responses to %s', len(http_archive), replay_filename)
+  return exit_status
+
+
+def configure_logging(log_level_name, log_file_name=None):
+  """Configure logging level and format.
+
+  Args:
+    log_level_name: 'debug', 'info', 'warning', 'error', or 'critical'.
+    log_file_name: a file name
+  """
+  if logging.root.handlers:
+    logging.critical('A logging method (e.g. "logging.warn(...)")'
+                     ' was called before logging was configured.')
+  log_level = getattr(logging, log_level_name.upper())
+  log_format = '%(asctime)s %(levelname)s %(message)s'
+  logging.basicConfig(level=log_level, format=log_format)
+  if log_file_name:
+    fh = logging.FileHandler(log_file_name)
+    fh.setLevel(log_level)
+    fh.setFormatter(logging.Formatter(log_format))
+    logging.getLogger().addHandler(fh)
 
 
 if __name__ == '__main__':
@@ -135,7 +174,6 @@ if __name__ == '__main__':
         return description + '\n'
       else:
         return ''
-
   option_parser = optparse.OptionParser(
       usage='%prog [options] replay_file',
       formatter=PlainHelpFormatter(),
@@ -202,9 +240,9 @@ if __name__ == '__main__':
   harness_group.add_option('-n', '--no-deterministic_script', default=True,
       action='store_false',
       dest='deterministic_script',
-      help='Don\'t inject JavaScript which makes sources of entropy such as '
-           'Date() and Math.random() deterministic. CAUTION: With this option '
-           'many web pages will not replay properly.')
+      help='During a record, do not inject JavaScript to make sources of '
+           'entropy such as Date() and Math.random() deterministic. CAUTION: '
+           'With this option many web pages will not replay properly.')
   harness_group.add_option('-D', '--diff_unknown_requests', default=False,
       action='store_true',
       dest='diff_unknown_requests',
@@ -245,17 +283,14 @@ if __name__ == '__main__':
 
   options, args = option_parser.parse_args()
 
-  log_level = logging.__dict__[options.log_level.upper()]
-  logging.basicConfig(level=log_level,
-                      format='%(asctime)s %(levelname)s %(message)s')
+  configure_logging(options.log_level, options.log_file)
 
-  if options.log_file:
-    fh = logging.FileHandler(options.log_file)
-    fh.setLevel(log_level)
-    logging.getLogger('').addHandler(fh)
-
-  if not options.server and len(args) != 1:
+  if options.server:
+    replay_filename = None
+  elif len(args) != 1:
     option_parser.error('Must specify a replay_file')
+  else:
+    replay_filename = args[0]
 
   if options.record:
     if options.up != '0':
@@ -273,12 +308,7 @@ if __name__ == '__main__':
   if options.server and options.server_mode:
     option_parser.error('Cannot run with both --server and --server_mode')
 
-  if options.spdy and options.deterministic_script:
-    logging.warning(
-        'Option --deterministic-_script is ignored with --spdy.'
-        'See http://code.google.com/p/web-page-replay/issues/detail?id=10')
-
   if options.shaping_port == 0:
     options.shaping_port = options.port
 
-  sys.exit(main(options, args))
+  sys.exit(main(options, replay_filename))

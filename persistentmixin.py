@@ -15,20 +15,28 @@
 
 
 import cPickle
-
+import os
 
 class PersistentMixin:
-
   """Mixin class which provides facilities for persisting and restoring."""
 
   @classmethod
-  def Create(cls, filename, *args):
-    """Create a new instance of type class, loading state from dirname."""
-    try:
-      return cPickle.load(open(filename, 'rb'))
-    except:
-      return cls(*args)
+  def AssertWritable(cls, filename):
+    """Raises an IOError if filename is not writable."""
+    persist_dir = os.path.dirname(os.path.abspath(filename))
+    if not os.path.exists(persist_dir):
+      raise IOError('Directory does not exist: %s' % persist_dir)
+    if os.path.exists(filename):
+      if not os.access(filename, os.W_OK):
+        raise IOError('Need write permission on file: %s' % filename)
+    elif not os.access(persist_dir, os.W_OK):
+      raise IOError('Need write permission on directory: %s' % persist_dir)
+
+  @classmethod
+  def Load(cls, filename):
+    """Load an instance from filename."""
+    return cPickle.load(open(filename, 'rb'))
 
   def Persist(self, filename):
-    """Persist all state to a file in dirname."""
+    """Persist all state to filename."""
     cPickle.dump(self, open(filename, 'wb'), cPickle.HIGHEST_PROTOCOL)

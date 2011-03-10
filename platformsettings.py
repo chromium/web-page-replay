@@ -45,6 +45,11 @@ class PlatformSettings(object):
   def get_primary_dns(self):
     raise NotImplementedError()
 
+  def get_original_primary_dns(self):
+    if not self.original_primary_dns:
+      self.original_primary_dns = self.get_primary_dns()
+    return self.original_primary_dns
+
   def set_primary_dns(self, dns):
     if not self.original_primary_dns:
       self.original_primary_dns = self.get_primary_dns()
@@ -296,16 +301,25 @@ class WindowsXpPlatformSettings(WindowsPlatformSettings):
     subprocess.check_call([r'third_party\ipfw_win32\ipfw.exe'] + args)
 
 
-def get_platform_settings():
+def _new_platform_settings():
+  """Make a new instance of PlatformSettings for the current system."""
   system = platform.system()
   release = platform.release()
   if system == 'Darwin':
     return OsxPlatformSettings()
-  elif system == 'Linux':
+  if system == 'Linux':
     return LinuxPlatformSettings()
-  elif system == 'Windows':
+  if system == 'Windows':
     if release == 'XP':
       return WindowsXpPlatformSettings()
     else:
       return WindowsPlatformSettings()
   raise NotImplementedError('Sorry %s %s is not supported.' % (system, release))
+
+_platform_settings = None
+def get_platform_settings():
+  """Return a single instance of PlatformSettings."""
+  global _platform_settings
+  if not _platform_settings:
+    _platform_settings = _new_platform_settings()
+  return _platform_settings

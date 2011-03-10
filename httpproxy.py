@@ -144,9 +144,8 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       return int(response_code)
     return None
 
-
-class RecordHandler(HttpArchiveHandler):
   def do_GET(self):
+    start_time = time.time()
     request = self.get_archived_http_request()
     if request is None:
       self.send_error(500)
@@ -155,120 +154,31 @@ class RecordHandler(HttpArchiveHandler):
     if response_code:
       self.send_error(response_code)
       return
-
-    response, response_chunks = self.server.real_http_request(
-        request, self.get_header_dict())
-    if response is None:
-      self.send_error(500)
-      return
-
-    archived_http_response = httparchive.ArchivedHttpResponse(
-        response.version,
-        response.status,
-        response.reason,
-        response.getheaders(),
-        response_chunks)
-    if self.server.use_deterministic_script:
-      try:
-        archived_http_response.inject_deterministic_script()
-      except httparchive.InjectionFailedException as err:
-        logging.error('Failed to inject deterministic script for %s', request)
-        logging.debug('Request content: %s', err.text)
-    self.send_archived_http_response(archived_http_response)
-    self.server.http_archive[request] = archived_http_response
-    logging.debug('Recorded: %s', request)
-
-
-class ReplayHandler(HttpArchiveHandler):
-  def do_GET(self):
-    start_time = time.time()
-    request = self.get_archived_http_request()
-    if request in self.server.http_archive:
-      self.send_archived_http_response(self.server.http_archive[request])
+    response = self.server.http_archive_fetch(request, self.get_header_dict())
+    if response:
+      self.send_archived_http_response(response)
       request_time_ms = (time.time() - start_time) * 1000.0;
-      logging.debug('Replayed: %s (%dms)', request, request_time_ms)
+      logging.debug('Served: %s (%dms)', request, request_time_ms)
     else:
-      response_code = self.get_generator_url_response_code(request.path)
-      if response_code:
-        self.send_error(response_code)
-      else:
-        self.send_error(404)
-        reason = request
-        if self.server.diff_unknown_requests:
-          reason = self.server.http_archive.diff(request)
-        logging.error('Could not replay: %s', reason)
+      self.send_error(404)
 
 
-class RecordHttpProxyServer(SocketServer.ThreadingMixIn,
-                            BaseHTTPServer.HTTPServer,
-                            daemonserver.DaemonServer):
-  def __init__(
-      self, http_archive_filename, use_deterministic_script, real_dns_lookup,
-      host='', port=80, use_ssl=False, certfile='', keyfile='',
-      diff_unknown_requests=False):
-    self.use_deterministic_script = use_deterministic_script
-    self.archive_filename = http_archive_filename
-    self.real_http_request = httpclient.RealHttpRequest(real_dns_lookup)
-    self.diff_unknown_requests = diff_unknown_requests
+class HttpProxyServer(SocketServer.ThreadingMixIn,
+                      BaseHTTPServer.HTTPServer,
+                      daemonserver.DaemonServer):
+  def __init__(self, http_archive_fetch, host='localhost', port=80):
+    self.http_archive_fetch = http_archive_fetch
 
-    self._assert_archive_file_writable()
-    self.http_archive = httparchive.HttpArchive()
+    # Increase the listen queue size. The default, 5, is set in
+    # SocketServer.TCPServer (the parent of BaseHTTPServer.HTTPServer).
+    # Since we're intercepting many domains through this single server,
+    # it is quite possible to get more than 5 concurrent connection requests.
+    self.request_queue_size = 128
 
     try:
-      # Increase the listen queue size (default is 5).  Since we're intercepting
-      # many domains through this single server, it is quite possible to get
-      # more than 5 concurrent connection requests.
-      self.request_queue_size = 128
-
-      BaseHTTPServer.HTTPServer.__init__(self, (host, port), RecordHandler)
+      BaseHTTPServer.HTTPServer.__init__(self, (host, port), HttpArchiveHandler)
     except Exception, e:
       logging.critical('Could not start HTTPServer on port %d: %s', port, e)
-      return
-    logging.info('Recording on %s...', self.server_address)
-
-  def _assert_archive_file_writable(self):
-    archive_dir = os.path.dirname(os.path.abspath(self.archive_filename))
-    assert os.path.exists(archive_dir), 'Archive directory must exist.'
-    assert (os.access(self.archive_filename, os.W_OK) or
-            (os.access(archive_dir, os.W_OK) and
-             not os.path.exists(self.archive_filename))), \
-             'Need permissions to write archive file'
-
-  def cleanup(self):
-    try:
-      self.shutdown()
-    except KeyboardInterrupt, e:
-      pass
-    logging.info('Stopped Record HTTP server')
-    self.http_archive.Persist(self.archive_filename)
-    logging.info('Saved %d responses to %s',
-                 len(self.http_archive), self.archive_filename)
-
-
-class ReplayHttpProxyServer(SocketServer.ThreadingMixIn,
-                            BaseHTTPServer.HTTPServer,
-                            daemonserver.DaemonServer):
-  def __init__(
-      self, http_archive_filename, use_deterministic_script, real_dns_lookup,
-      host='', port=80, use_ssl=False, certfile='', keyfile='',
-      diff_unknown_requests=False):
-    self.use_deterministic_script = use_deterministic_script
-    self.diff_unknown_requests = diff_unknown_requests
-    self.http_archive = httparchive.HttpArchive.Create(http_archive_filename)
-    logging.info('Loaded %d responses from %s',
-                 len(self.http_archive), http_archive_filename)
-
-    try:
-      # Increase the listen queue size (default is 5).  Since we're intercepting
-      # many domains through this single server, it is quite possible to get
-      # more than 5 concurrent connection requests.
-      self.request_queue_size = 128
-
-      BaseHTTPServer.HTTPServer.__init__(self, (host, port), ReplayHandler)
-    except Exception, e:
-      logging.critical('Could not start HTTPServer on port %d: %s', port, e)
-      return
-    logging.info('Replaying on %s...', self.server_address)
 
   def cleanup(self):
     try:

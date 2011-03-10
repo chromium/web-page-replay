@@ -15,6 +15,7 @@
 
 """Retrieve web resources over http."""
 
+import httparchive
 import httplib
 import logging
 
@@ -32,8 +33,8 @@ class DetailedHTTPResponse(httplib.HTTPResponse):
     If the response was compressed, the returned data is still compressed.
 
     Returns:
-      [content]                # non-chunked responses
-      [chunk_1, chunk_2, ...]  # chunked responses
+      [response_body]  # non-chunked responses
+      [response_body_chunk_1, response_body_chunk_2, ...]  # chunked responses
     """
     buf = []
     if not self.chunked:
@@ -77,11 +78,21 @@ class DetailedHTTPConnection(httplib.HTTPConnection):
   response_class = DetailedHTTPResponse
 
 
-class RealHttpRequest(object):
+class RealHttpFetch(object):
   def __init__(self, real_dns_lookup):
     self._real_dns_lookup = real_dns_lookup
 
   def __call__(self, request, headers):
+    """Fetch an HTTP request and return the response and response_body.
+
+    Args:
+      request: an instance of an ArchivedHttpRequest
+      headers: a dict of HTTP headers
+    Returns:
+      (instance of httplib.HTTPResponse,
+       [response_body_chunk_1, response_body_chunk_2, ...])
+      # If the response did not use chunked encoding, there is only one chunk.
+    """
     # TODO(tonyg): Strip sdch from the request headers because we can't
     # guarantee that the dictionary will be recorded, so replay may not work.
     if 'accept-encoding' in headers:
@@ -92,7 +103,7 @@ class RealHttpRequest(object):
     host_ip = self._real_dns_lookup(request.host)
     if not host_ip:
       logging.critical('Unable to find host ip for name: %s', request.host)
-      return None
+      return None, None
     try:
       connection = DetailedHTTPConnection(host_ip)
       connection.request(
@@ -107,4 +118,78 @@ class RealHttpRequest(object):
       logging.critical('Could not fetch %s: %s', request, e)
       import traceback
       logging.critical(traceback.format_exc())
+      return None, None
+
+
+class RecordHttpArchiveFetch(object):
+  """Make real HTTP fetches and save responses in the given HttpArchive."""
+
+  def __init__(self, http_archive, real_dns_lookup, use_deterministic_script):
+    """Initialize RecordHttpArchiveFetch.
+
+    Args:
+      http_archve: an instance of a HttpArchive
+      real_dns_lookup: a function that resolves a host to an IP.
+      use_deterministic_script: If True, attempt to inject a script,
+        when appropriate, to make JavaScript more deterministic.
+    """
+    self.http_archive = http_archive
+    self.real_http_fetch = RealHttpFetch(real_dns_lookup)
+    self.use_deterministic_script = use_deterministic_script
+
+  def __call__(self, request, request_headers):
+    """Fetch the request and return the response.
+
+    Args:
+      request: an instance of an ArchivedHttpRequest.
+      request_headers: a dict of HTTP headers.
+    """
+    response, response_chunks = self.real_http_fetch(request, request_headers)
+    if response is None:
       return None
+    archived_http_response = httparchive.ArchivedHttpResponse(
+        response.version,
+        response.status,
+        response.reason,
+        response.getheaders(),
+        response_chunks)
+    if self.use_deterministic_script:
+      try:
+        archived_http_response.inject_deterministic_script()
+      except httparchive.InjectionFailedException as err:
+        logging.error('Failed to inject deterministic script for %s', request)
+        logging.debug('Request content: %s', err.text)
+    logging.debug('Recorded: %s', request)
+    self.http_archive[request] = archived_http_response
+    return archived_http_response
+
+
+class ReplayHttpArchiveFetch(object):
+  """Serve responses from the given HttpArchive."""
+
+  def __init__(self, http_archive, use_diff_on_unknown_requests=False):
+    """Initialize ReplayHttpArchiveFetch.
+
+    Args:
+      http_archve: an instance of a HttpArchive
+      use_diff_on_unknown_requests: If True, log unknown requests
+        with a diff to requests that look similar.
+    """
+    self.http_archive = http_archive
+    self.use_diff_on_unknown_requests = use_diff_on_unknown_requests
+
+  def __call__(self, request, request_headers=None):
+    """Fetch the request and return the response.
+
+    Args:
+      request: an instance of an ArchivedHttpRequest.
+      request_headers: a dict of HTTP headers.
+    """
+    response = self.http_archive.get(request)
+    if not response:
+      if self.use_diff_on_unknown_requests:
+        reason = self.http_archive.diff(request) or request
+      else:
+        reason = request
+      logging.error('Could not replay: %s', reason)
+    return response
