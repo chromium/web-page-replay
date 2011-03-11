@@ -122,13 +122,13 @@ def main(options, replay_filename):
         options.dns_forwarding, dns_passthrough_filter, host):
       with web_server_class(http_archive_fetch, **web_server_kwargs):
         with trafficshaper.TrafficShaper(
-            host,
-            options.shaping_port,
-            options.up,
-            options.down,
-            options.delay_ms,
-            options.packet_loss_rate,
-            options.init_cwnd):
+            host=host,
+            port=options.shaping_port,
+            up_bandwidth=options.up,
+            down_bandwidth=options.down,
+            delay_ms=options.delay_ms,
+            packet_loss_rate=options.packet_loss_rate,
+            init_cwnd=options.init_cwnd):
           while (True):
             time.sleep(1)
   except KeyboardInterrupt:

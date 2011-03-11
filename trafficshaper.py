@@ -32,6 +32,7 @@ class TrafficShaper(object):
 
   """Manages network traffic shaping."""
   def __init__(self,
+               dont_use=None,
                host='127.0.0.1',
                port='80',
                dns_port='53',
@@ -53,6 +54,7 @@ class TrafficShaper(object):
       packet_loss_rate: Packet loss rate in range [0..1]. '0' means no loss.
       init_cwnd: the initial cwnd setting. '0' means no change.
     """
+    assert dont_use is None  # Force args to be named.
     self.platformsettings = platformsettings.get_platform_settings()
     self.host = host
     self.port = port
