@@ -39,6 +39,8 @@ class DnsUpdateError(PlatformSettingsError):
 
 
 class PlatformSettings(object):
+  _IPFW_BIN = None
+
   def __init__(self):
     self.original_primary_dns = None
 
@@ -65,8 +67,13 @@ class PlatformSettings(object):
     self.set_primary_dns(self.original_primary_dns)
     self.original_primary_dns = None
 
-  def ipfw(self, args):
-    raise NotImplementedError()
+  def ipfw(self, *args):
+    if self._IPFW_BIN:
+      ipfw_args = [self._IPFW_BIN] + [str(a) for a in args]
+      logging.debug(' '.join(ipfw_args))
+      subprocess.check_call(ipfw_args)
+    else:
+      raise NotImplementedError()
 
   def is_cwnd_available(self):
     return False
@@ -88,25 +95,37 @@ class PlatformSettings(object):
     behaves differently from real interfaces.
     """
     logging.error("Platform does not support loopback configuration.")
-    pass
 
   def unconfigure_loopback(self):
     pass
 
 
 class PosixPlatformSettings(PlatformSettings):
-  def ipfw(self, args):
-    subprocess.check_call(['ipfw'] + args)
+  _IPFW_BIN = 'ipfw'
 
   def _get_dns_update_error(self):
     return DnsUpdateError('Did you run under sudo?')
 
 
 class OsxPlatformSettings(PosixPlatformSettings):
+  LOCAL_SLOWSTART_MIB_NAME = 'net.inet.tcp.local_slowstart_flightsize'
+
   def _scutil(self, cmd):
     scutil = subprocess.Popen(
         ['scutil'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     return scutil.communicate(cmd)[0]
+
+  def _ifconfig(self, *args):
+    ifconfig = subprocess.Popen(
+        ['ifconfig'] + [str(a) for a in args],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    return ifconfig.communicate()[0]
+
+  def _sysctl(self, *args):
+    sysctl = subprocess.Popen(
+        ['sysctl'] + [str(a) for a in args],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    return sysctl.communicate()[0]
 
   def _get_dns_service_key(self):
     # <dictionary> {
@@ -145,6 +164,45 @@ class OsxPlatformSettings(PosixPlatformSettings):
 
   def get_ipfw_queue_slots(self):
     return 100
+
+  def get_loopback_mtu(self):
+    config = self._ifconfig('lo0')
+    match = re.search(r'\smtu\s+(\d+)', config)
+    if match:
+      return int(match.group(1))
+    else:
+      return None
+
+  def is_cwnd_available(self):
+    return True
+
+  def set_cwnd(self, size):
+    output = self._sysctl('-w', '%s=%s' % (self.LOCAL_SLOWSTART_MIB_NAME, size))
+    # output example: "net.inet.tcp.local_slowstart_flightsize: 8 -> 20"
+    logging.debug("set_cwnd(%d): sysctl: %s", size, output.strip())
+
+  def get_cwnd(self):
+    return int(self._sysctl('-n', self.LOCAL_SLOWSTART_MIB_NAME))
+
+  def configure_loopback(self):
+    """Configure loopback to use reasonably sized frames.
+
+    OS X uses jumbo frames by default (16KB).
+    """
+    TARGET_LOOPBACK_MTU = 1500
+    loopback_mtu = self.get_loopback_mtu()
+    if loopback_mtu and loopback_mtu != TARGET_LOOPBACK_MTU:
+      self.saved_loopback_mtu = loopback_mtu
+      self._ifconfig('lo0', 'mtu', TARGET_LOOPBACK_MTU)
+      logging.debug('Set loopback MTU to %d (was %d)',
+                    TARGET_LOOPBACK_MTU, loopback_mtu)
+    else:
+      logging.error('Unable to read loopback mtu. Setting left unchanged.')
+
+  def unconfigure_loopback(self):
+    if hasattr(self, 'saved_loopback_mtu') and self.saved_loopback_mtu:
+      self._ifconfig('lo0', 'mtu', self.saved_loopback_mtu)
+      logging.debug('Restore loopback MTU to %d', self.saved_loopback_mtu)
 
 
 class LinuxPlatformSettings(PosixPlatformSettings):
@@ -297,8 +355,7 @@ Next
 
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
-  def ipfw(self, args):
-    subprocess.check_call([r'third_party\ipfw_win32\ipfw.exe'] + args)
+  _IPFW_BIN = r'third_party\ipfw_win32\ipfw.exe'
 
 
 def _new_platform_settings():

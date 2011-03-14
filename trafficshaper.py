@@ -28,7 +28,6 @@ class TrafficShaper(object):
   _DOWNLOAD_PIPE = '3'   # Enforces overall download bandwidth.
   _DOWNLOAD_QUEUE = '4'  # Shares download bandwidth among sockets.
   _DNS_PIPE = '5'        # Enforces RTT for DNS requests.
-  _RULE_SET = '6'        # Groups all pipes and queues.
 
   """Manages network traffic shaping."""
   def __init__(self,
@@ -74,86 +73,95 @@ class TrafficShaper(object):
       else:
         logging.error('Platform does not support setting cwnd.')
     try:
-      self.platformsettings.ipfw(['-q', 'flush'])
+      self.platformsettings.ipfw('-q', 'flush')
     except:
       pass
     if (self.up_bandwidth == '0' and self.down_bandwidth == '0' and
         self.delay_ms == '0' and self.packet_loss_rate == '0'):
       return
 
-    queue_size = str(self.platformsettings.get_ipfw_queue_slots())
+    queue_size = self.platformsettings.get_ipfw_queue_slots()
 
     # To distribute full delay across the uplink and downlink bandwidths evenly.
-    half_delay_ms = str(int(int(self.delay_ms) / 2))
+    half_delay_ms = int(self.delay_ms) / 2
 
     try:
       # Configure DNS shaping.
-      self.platformsettings.ipfw([
+      self.platformsettings.ipfw(
           'pipe', self._DNS_PIPE,
           'config',
           'bw', '0',
-          'delay', self.delay_ms,
+          'delay', half_delay_ms,
           'plr', self.packet_loss_rate,
-      ])
-      self.platformsettings.ipfw([
-          'add', self._RULE_SET,
+          )
+      self.platformsettings.ipfw(
+          'add',
           'pipe', self._DNS_PIPE,
           'udp',
           'from', 'any',
           'to', self.host,
           'out',
           'dst-port', self.dns_port,
-      ])
+          )
+      self.platformsettings.ipfw(
+          'add',
+          'pipe', self._DNS_PIPE,
+          'udp',
+          'from', self.host,
+          'to', 'any',
+          'out',
+          'src-port', self.dns_port,
+          )
 
       # Configure upload shaping.
-      self.platformsettings.ipfw([
+      self.platformsettings.ipfw(
           'pipe', self._UPLOAD_PIPE,
           'config',
           'bw', self.up_bandwidth,
           'delay', half_delay_ms,
-      ])
-      self.platformsettings.ipfw([
+          )
+      self.platformsettings.ipfw(
           'queue', self._UPLOAD_QUEUE,
           'config',
           'pipe', self._UPLOAD_PIPE,
           'plr', self.packet_loss_rate,
           'queue', queue_size,
           'mask', 'src-port', '0xffff',
-      ])
-      self.platformsettings.ipfw([
-          'add', self._RULE_SET,
+          )
+      self.platformsettings.ipfw(
+          'add',
           'queue', self._UPLOAD_QUEUE,
           'tcp',
           'from', 'any',
           'to', self.host,
           'out',
-          'dst-port', str(self.port),
-      ])
+          'dst-port', self.port,
+          )
 
       # Configure download shaping.
-      self.platformsettings.ipfw([
+      self.platformsettings.ipfw(
           'pipe', self._DOWNLOAD_PIPE,
           'config',
           'bw', self.down_bandwidth,
           'delay', half_delay_ms,
-      ])
-      self.platformsettings.ipfw([
+          )
+      self.platformsettings.ipfw(
           'queue', self._DOWNLOAD_QUEUE,
           'config',
           'pipe', self._DOWNLOAD_PIPE,
           'plr', self.packet_loss_rate,
           'queue', queue_size,
           'mask', 'dst-port', '0xffff',
-      ])
-      self.platformsettings.ipfw([
-          'add', self._RULE_SET,
+          )
+      self.platformsettings.ipfw(
+          'add',
           'queue', self._DOWNLOAD_QUEUE,
           'tcp',
           'from', self.host,
           'to', 'any',
           'out',
-          'src-port', str(self.port),
-      ])
+          'src-port', self.port,
+          )
 
       logging.info('Started shaping traffic')
     except Exception, e:
@@ -165,7 +173,7 @@ class TrafficShaper(object):
         self.platformsettings.is_cwnd_available()):
       self.platformsettings.set_cwnd(self.original_cwnd)
     try:
-      self.platformsettings.ipfw(['-q', 'flush'])
+      self.platformsettings.ipfw('-q', 'flush')
       logging.info('Stopped shaping traffic')
     except Exception, e:
       raise TrafficShaperException('Unable to stop shaping traffic: %s' % e)
