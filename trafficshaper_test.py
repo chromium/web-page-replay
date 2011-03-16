@@ -13,6 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""System integration test for traffic shaping.
+
+Usage:
+$ sudo ./trafficshaper_test.py
+"""
+
 import dnsproxy
 import httparchive
 import httpproxy
@@ -56,6 +62,12 @@ class IntervalTimer:
   def interval(self, name):
     self.times.append(self.timer())
     self.names.append(name)
+
+  def get_interval(self, name):
+    for i, n in enumerate(self.names):
+      if n == name:
+        return int(1000 * (self.times[i + 1] - self.times[i]))
+    return None
 
   def intervals(self):
     return zip(self.names,
@@ -148,12 +160,21 @@ class TestTrafficShaper(trafficshaper.TrafficShaper):
     self.interval_timer.start()
 
   def __exit__(self, *args):
-    self.interval_timer.interval("end")
-    logging.warn('Interval times: %s', self.interval_timer)
+    self.interval_timer.interval('end')
+    logging.info('Interval times: %s', self.interval_timer)
     trafficshaper.TrafficShaper.__exit__(self, *args)
 
 
 class TrafficShaperTest(unittest.TestCase):
+  def assertEqualWithinTolerance(self, expected, actual, tolerance=0.05):
+    """Just like assertTrue(expected <= actual + tolerance &&
+                            expected >= actual - tolerance), but with nicer
+       default message."""
+    delta = tolerance * expected
+    if actual > expected + delta or actual < expected - delta:
+      self.fail('%s is not equal to %s +/- %s%%' % (
+              actual, expected, 100 * tolerance))
+
   def setUp(self):
     self.interval_timer = IntervalTimer()
 
@@ -175,9 +196,11 @@ class TrafficShaperTest(unittest.TestCase):
           p.start()
         for p in processes:
           p.join()
-    total_timer.interval("total_time")
-    logging.warn('%s', total_timer)
-    # TODO(slamm): assert that the times are within certain values.
+    total_timer.interval('total_time')
+
+    # TODO(tonyg/slamm): Is this assertion correct?
+    self.assertEqualWithinTolerance(
+        700, total_timer.get_interval('total_time'))
 
 
   def testHttpFetch(self):
@@ -191,7 +214,10 @@ class TrafficShaperTest(unittest.TestCase):
           init_cwnd='2'):
         data = urllib.urlopen(TEST_URL).read()
     self.assertEqual('\x00' * num_bytes, data)
-    # TODO(slamm): assert that the times are within certain values.
+
+    # TODO(tonyg/slamm): Is this assertion correct?
+    self.assertEqualWithinTolerance(
+        1300, self.interval_timer.get_interval('end'))
 
 
 if __name__ == '__main__':
