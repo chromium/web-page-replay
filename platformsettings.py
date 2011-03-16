@@ -179,7 +179,7 @@ class OsxPlatformSettings(PosixPlatformSettings):
   def set_cwnd(self, size):
     output = self._sysctl('-w', '%s=%s' % (self.LOCAL_SLOWSTART_MIB_NAME, size))
     # output example: "net.inet.tcp.local_slowstart_flightsize: 8 -> 20"
-    logging.debug("set_cwnd(%d): sysctl: %s", size, output.strip())
+    logging.debug("set_cwnd(%s): sysctl: %s", size, output.strip())
 
   def get_cwnd(self):
     return int(self._sysctl('-n', self.LOCAL_SLOWSTART_MIB_NAME))
