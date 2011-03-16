@@ -15,10 +15,25 @@
 
 import logging
 import platformsettings
+import re
+
+
+# Mac has broken bandwitdh parsing, so double check the values.
+# On Mac OS X 10.6, "KBit/s" actually uses "KByte/s".
+BANDWIDTH_PATTERN = r'0|\d+[KM]?(bit|Byte)/s'
 
 
 class TrafficShaperException(Exception):
   pass
+
+
+class BandwidthValueError(TrafficShaperException):
+  def __init__(self, value):
+    self.value = value
+
+  def __str__(self):
+    return 'Value, "%s", does not match regex: %s' % (
+        self.value, BANDWIDTH_PATTERN)
 
 
 class TrafficShaper(object):
@@ -28,6 +43,8 @@ class TrafficShaper(object):
   _DOWNLOAD_PIPE = '3'   # Enforces overall download bandwidth.
   _DOWNLOAD_QUEUE = '4'  # Shares download bandwidth among sockets.
   _DNS_PIPE = '5'        # Enforces RTT for DNS requests.
+
+  _BANDWIDTH_RE = re.compile(BANDWIDTH_PATTERN)
 
   """Manages network traffic shaping."""
   def __init__(self,
@@ -63,6 +80,11 @@ class TrafficShaper(object):
     self.delay_ms = delay_ms
     self.packet_loss_rate = packet_loss_rate
     self.init_cwnd = init_cwnd
+    if not self._BANDWIDTH_RE.match(self.up_bandwidth):
+      raise BandwidthValueError(self.up_bandwidth)
+    if not self._BANDWIDTH_RE.match(self.down_bandwidth):
+      raise BandwidthValueError(self.down_bandwidth)
+
 
   def __enter__(self):
     self.platformsettings.configure_loopback()

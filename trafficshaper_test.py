@@ -50,6 +50,14 @@ else:
     DEFAULT_TIMER = time.time
 
 
+class TrafficShaperTest(unittest.TestCase):
+
+  def testBadBandwidthRaises(self):
+    self.assertRaises(trafficshaper.BandwidthValueError,
+                      trafficshaper.TrafficShaper,
+                      down_bandwidth='1KBit/s')
+
+
 class IntervalTimer:
   def __init__(self, timer=DEFAULT_TIMER):
     self.timer = timer
@@ -165,7 +173,7 @@ class TestTrafficShaper(trafficshaper.TrafficShaper):
     trafficshaper.TrafficShaper.__exit__(self, *args)
 
 
-class TrafficShaperTest(unittest.TestCase):
+class TrafficShaperTimeTest(unittest.TestCase):
   def assertEqualWithinTolerance(self, expected, actual, tolerance=0.05):
     """Just like assertTrue(expected <= actual + tolerance &&
                             expected >= actual - tolerance), but with nicer
@@ -208,8 +216,8 @@ class TrafficShaperTest(unittest.TestCase):
     with TestWebProxyServer(self.interval_timer, num_bytes):
       with TestTrafficShaper(
           self.interval_timer,
-          up_bandwidth='400KBit/s',
-          down_bandwidth='2000KBit/s',
+          up_bandwidth='400Kbit/s',
+          down_bandwidth='2000Kbit/s',
           delay_ms='100',
           init_cwnd='2'):
         data = urllib.urlopen(TEST_URL).read()

@@ -305,9 +305,9 @@ setTimeout(function() {
     if self.log_file:
       cmdline += ['--log_file', self.log_file]
     if self.network['bandwidth_kbps']['down']:
-      cmdline += ['-d', str(self.network['bandwidth_kbps']['down']) + 'KBit/s']
+      cmdline += ['-d', str(self.network['bandwidth_kbps']['down']) + 'Kbit/s']
     if self.network['bandwidth_kbps']['up']:
-      cmdline += ['-u', str(self.network['bandwidth_kbps']['up']) + 'KBit/s']
+      cmdline += ['-u', str(self.network['bandwidth_kbps']['up']) + 'Kbit/s']
     if self.network['round_trip_time_ms']:
       cmdline += ['-m', str(self.network['round_trip_time_ms'])]
     if self.network['packet_loss_percent']:
