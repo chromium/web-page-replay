@@ -70,16 +70,17 @@ class CustomHandlers(object):
     return None
 
   def handle_possible_post_image(self, request):
-    """
+    """If sent, saves embedded image to local directory.
 
-    Clients like perftracker can use URLs of this form to request
-    a response with a particular response code.
+    Expects a special url containing the filename. If sent, saves the base64
+    encoded request body as a PNG image locally. This feature is enabled by
+    passing in save_images_dir to the initializer for this class.
 
     Args:
-      request_path: a string like "/foo", or "/web-page-replay-set-phase-cold"
+      request: an http request
 
     Returns:
-      True if request was recognized as a set phase request.
+      On a match, a 3-digit integer response code.
       False otherwise.
     """
     if not self.save_images_dir:
