@@ -317,7 +317,7 @@ function BenchmarkLoad(url, loadType, setId) {
         Math.round((1000.0 * load_times.firstPaintTime) - baseTime) : 0;
     result.set_id = setId_;
     result.url = url_;
-    result.load_type = loadType_;
+    result.load_type = LoadTypeNames[loadType_];
     result.using_spdy = load_times.wasFetchedViaSpdy;
     var bytesRead = chrome.benchmarking.counter(kTCPReadBytes) -
         initialReadBytes_;
@@ -586,13 +586,14 @@ function BenchmarkManager() {
     CHECK(numTestsToCreate_, "There are no tests to run");
     for (var i in kTestsToRun) {
       globalTestSetResults[i] = new ResultCollection();
-      window.submitter.CreateTest(kTestsToRun[i], me_.handleTestCreated);
+      window.submitter.CreateTest(LoadTypeNames[kTestsToRun[i]],
+                                  me_.handleTestCreated);
     }
   }
 
   this.handleTestCreated = function(loadType, setId) {
     numTestsToCreate_--;
-    setIds_[loadType] = setId;
+    setIds_[LoadType[loadType]] = setId;
     if (numTestsToCreate_ <= 0) {
       me_.createBenchmarks();
       me_.runNextBenchmark();

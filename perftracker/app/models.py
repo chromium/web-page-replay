@@ -40,6 +40,9 @@ class Network(db.Model):
                                    "spdy",      # SPDY over SSL
                                    "spdy-nossl" # SPDY over TCP
                                  ]))
+    load_type = db.StringProperty(required=True,
+                                  choices=set(["cold", "hot", "warm"]),
+                                  default="cold")
 
 # The unique list of CPUs
 class Cpu(db.Model):
@@ -123,4 +126,3 @@ class TestSummary(db.Model):
     num_sessions = db.IntegerProperty()
     read_bytes_kb = db.IntegerProperty()
     write_bytes_kb = db.IntegerProperty()
-

@@ -52,7 +52,8 @@ def NetworkPrettyString(download_bandwidth_kbps,
                         upload_bandwidth_kbps,
                         round_trip_time_ms,
                         packet_loss_rate,
-                        protocol_str):
+                        protocol_str,
+                        load_type):
     network = protocol_str + "/"
     network += BandwidthPrettyString(download_bandwidth_kbps)
     network += "/"
@@ -61,7 +62,8 @@ def NetworkPrettyString(download_bandwidth_kbps,
     network += str(round_trip_time_ms)
     network += "ms/"
     network += str(packet_loss_rate)
-    network += "%"
+    network += "%/"
+    network += load_type
     return network
 
 class BaseRequestHandler(webapp.RequestHandler):
@@ -111,7 +113,7 @@ class JSONDataPage(BaseRequestHandler):
         response = json.encode(results)
         memcache.add(memcache_key, response, 30)   # Cache for 30secs
         self.response.out.write(response)
-    
+
     def do_set(self):
         """Lookup a specific TestSet."""
         set_id = self.request.get("id")
@@ -190,7 +192,7 @@ class JSONDataPage(BaseRequestHandler):
             cpus.add(( item.cpu, str(item.key().id()) ))
         query = models.Network.all()
         for item in query:
-            networks.add(( item.network_type, str(item.key().id()) ) )
+            networks.add(( item.network_type, str(item.key().id()) ))
 
         filters = {}
         filters["versions"] = sorted(versions)
@@ -270,23 +272,27 @@ class UploadTestSet(BaseRequestHandler):
                            upload_bandwidth_kbps,
                            round_trip_time_ms,
                            packet_loss_rate,
-                           protocol_str):
+                           protocol_str,
+                           load_type):
         network_type = NetworkPrettyString(download_bandwidth_kbps,
                                            upload_bandwidth_kbps,
                                            round_trip_time_ms,
                                            packet_loss_rate,
-                                           protocol_str)
+                                           protocol_str,
+                                           load_type)
         query = models.Network.all()
         query.filter("network_type = ", network_type)
         networks = query.fetch(1)
         if networks:
             return networks[0]
-        network = models.Network(network_type = network_type,
+        network = models.Network(
+            network_type = network_type,
             download_bandwidth_kbps = download_bandwidth_kbps,
             upload_bandwidth_kbps = upload_bandwidth_kbps,
             round_trip_time_ms = round_trip_time_ms,
             packet_loss_rate = packet_loss_rate,
-            protocol = protocol_str)
+            protocol = protocol_str,
+            load_type = load_type)
         network.put()
         return network
 
@@ -302,7 +308,7 @@ class UploadTestSet(BaseRequestHandler):
         if not cmd:
             self.send_error("Bad request, no cmd param")
             return
-   
+
         if cmd == "create":
             version_str  = self.request.get('version')
             if not version_str:
@@ -314,6 +320,7 @@ class UploadTestSet(BaseRequestHandler):
             round_trip_time_ms = int(float(self.request.get('round_trip_time_ms')))
             packet_loss_rate  = float(self.request.get('packet_loss_rate'))
             protocol_str = self.request.get('protocol')
+            load_type = self.request.get('load_type')
             version = self.GetOrCreateVersion(version_str)
             if not version:
                 raise Exception("could not create version")
@@ -326,7 +333,8 @@ class UploadTestSet(BaseRequestHandler):
                                               upload_bandwidth_kbps,
                                               round_trip_time_ms,
                                               packet_loss_rate,
-                                              protocol_str)
+                                              protocol_str,
+                                              load_type)
             if not network:
                 raise Exception("could not create network")
 
