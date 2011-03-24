@@ -31,12 +31,14 @@ STATUS = 'status'
 VERSION = 'version'
 
 class ReplaySpdyServer(daemonserver.DaemonServer):
-  def __init__(self, http_archive_fetch, host='localhost', port=80,
+  def __init__(self, http_archive_fetch, custom_handlers,
+               host='localhost', port=80,
                use_ssl=True, certfile=None, keyfile=None):
     #TODO(lzheng): figure out how to get the log level from main.
     self.log = logging.getLogger('ReplaySpdyServer')
     self.log.setLevel(logging.INFO)
     self.http_archive_fetch = http_archive_fetch
+    self.custom_handlers = custom_handlers
     self.host = host
     self.port = port
     self.use_ssl = use_ssl
@@ -73,6 +75,10 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
     dummy = http_common.dummy
     if method == 'GET':
       request = httparchive.ArchivedHttpRequest(method, host, uri, None)
+      response_code = self.custom_handlers.handle(request)
+      if response_code:
+        self.send_error(response_code, "Handled by custom handlers")
+        return dummy, dummy
       response = self.http_archive_fetch(request)
       if response:
         res_hdrs = [('version', 'HTTP/1.1')]
@@ -95,23 +101,19 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
         res_done(None)
       else:
         self.log.error("404 returned: %s %s", method, uri)
-        code = "404"
-        phrase = "file not found"
-        res_hdrs = [('Content-Type', 'text/html'), ('version', 'HTTP/1.1')]
-        res_body, res_done = res_start(code, phrase, res_hdrs, dummy)
-        res_body(None)
-        res_done(None)
+        self.send_error(404, "file not found")
     else:
       # TODO(lzheng): Add support for other methods.
       self.log.error("method: %s is not supported: %s", method, uri)
-      code = "500"
-      phrase = "Not supported"
-      res_hdrs = [('Content-Type', 'text/html'), ('version', 'HTTP/1.1')]
-      res_body, res_done = res_start(code, phrase, res_hdrs, dummy)
-      res_body(None)
-      res_done(None)
+      self.send_error(500, "Not supported")
 
     return dummy, dummy
+
+  def send_error(self, code, phrase):
+      res_hdrs = [('Content-Type', 'text/html'), ('version', 'HTTP/1.1')]
+      res_body, res_done = res_start(str(code), phrase, res_hdrs, dummy)
+      res_body(None)
+      res_done(None)
 
 if __name__ == "__main__":
     logging.basicConfig()

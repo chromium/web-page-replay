@@ -1,0 +1,94 @@
+#!/usr/bin/env python
+# Copyright 2010 Google Inc. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import base64
+
+class CustomHandlers(object):
+
+  def __init__(self, save_images_dir=None):
+    self.save_images_dir = save_images_dir
+    self.GENERATOR_URL_PREFIX = '/web-page-replay-generate-'
+    self.POST_IMAGE_URL_PREFIX = '/web-page-replay-post-image-'
+
+  def handle(self, request):
+    """Handles special URLs needed for the benchmark.
+
+    Args:
+      request: an http request
+    Returns:
+      If request is for a special URL, a 3-digit integer like 404.
+      Otherwise, None.
+    """
+    response_code = self.get_generator_url_response_code(request.path)
+    if response_code:
+      return response_code
+
+    response_code = self.handle_possible_post_image(request)
+    if response_code:
+      return response_code
+
+    return None
+
+  def get_generator_url_response_code(cls, request_path):
+    """Parse special generator URLs for the embedded response code.
+
+    Clients like perftracker can use URLs of this form to request
+    a response with a particular response code.
+
+    Args:
+      request_path: a string like "/foo", or "/web-page-replay-generator-404"
+    Returns:
+      On a match, a 3-digit integer like 404.
+      Otherwise, None.
+    """
+    prefix, response_code = request_path[:-3], request_path[-3:]
+    if prefix == cls.GENERATOR_URL_PREFIX and response_code.isdigit():
+      return int(response_code)
+    return None
+
+  def handle_possible_post_image(self, request):
+    """
+
+    Clients like perftracker can use URLs of this form to request
+    a response with a particular response code.
+
+    Args:
+      request_path: a string like "/foo", or "/web-page-replay-set-phase-cold"
+
+    Returns:
+      True if request was recognized as a set phase request.
+      False otherwise.
+    """
+    if not self.server.save_images_dir:
+      return None
+
+    prefix = request.path[:len(POST_IMAGE_URL_PREFIX)]
+    basename = request.path[len(POST_IMAGE_URL_PREFIX):]
+    if prefix != POST_IMAGE_URL_PREFIX or not basename.isalpha():
+      return None
+
+    data = request.request_body
+    PREFIX = 'data:image/png;base64,'
+    if not data.startswith(PREFIX):
+      logging.error('Unexpected image format for: %s', basename)
+      return 400
+
+    data = data[len(PREFIX):]
+    png = base64.b64decode(data)
+    filename = '%s/%s-%s.png' % (self.save_images_dir, request.host, basename)
+    f = file(filename, 'w')
+    f.write(png)
+    f.close()
+    return 200

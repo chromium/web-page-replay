@@ -104,6 +104,8 @@ def main(options, replay_filename):
     logging.info('Loaded %d responses from %s',
                  len(http_archive), replay_filename)
 
+  custom_handlers = customhandlers.CustomHandlers(options.save_images)
+
   real_dns_lookup = dnsproxy.RealDnsLookup()
   if options.record:
     http_archive_fetch = httpclient.RecordHttpArchiveFetch(
@@ -120,7 +122,8 @@ def main(options, replay_filename):
   try:
     with dnsproxy.DnsProxyServer(
         options.dns_forwarding, dns_passthrough_filter, host):
-      with web_server_class(http_archive_fetch, **web_server_kwargs):
+      with web_server_class(http_archive_fetch, custom_handlers,
+                            **web_server_kwargs):
         with trafficshaper.TrafficShaper(
             host=host,
             port=options.shaping_port,
