@@ -19,6 +19,7 @@ import os
 
 GENERATOR_URL_PREFIX = '/web-page-replay-generate-'
 POST_IMAGE_URL_PREFIX = '/web-page-replay-post-image-'
+IMAGE_DATA_PREFIX = 'data:image/png;base64,'
 
 
 class CustomHandlers(object):
@@ -88,16 +89,15 @@ class CustomHandlers(object):
 
     prefix = request.path[:len(POST_IMAGE_URL_PREFIX)]
     basename = request.path[len(POST_IMAGE_URL_PREFIX):]
-    if prefix != POST_IMAGE_URL_PREFIX or not basename.isalpha():
+    if prefix != POST_IMAGE_URL_PREFIX or not basename:
       return None
 
     data = request.request_body
-    PREFIX = 'data:image/png;base64,'
-    if not data.startswith(PREFIX):
+    if not data.startswith(IMAGE_DATA_PREFIX):
       logging.error('Unexpected image format for: %s', basename)
       return 400
 
-    data = data[len(PREFIX):]
+    data = data[len(IMAGE_DATA_PREFIX):]
     png = base64.b64decode(data)
     filename = '%s/%s-%s.png' % (self.save_images_dir, request.host, basename)
     f = file(filename, 'w')
