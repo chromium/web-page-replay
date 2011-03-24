@@ -14,13 +14,24 @@
 # limitations under the License.
 
 import base64
+import logging
+import os
+
+GENERATOR_URL_PREFIX = '/web-page-replay-generate-'
+POST_IMAGE_URL_PREFIX = '/web-page-replay-post-image-'
+
 
 class CustomHandlers(object):
 
   def __init__(self, save_images_dir=None):
+    if save_images_dir and not os.path.exists(save_images_dir):
+      try:
+        os.makedirs(save_images_dir)
+      except:
+        logging.error('%s does not exist and could not be created.',
+                      save_images_dir)
+        save_images_dir = None
     self.save_images_dir = save_images_dir
-    self.GENERATOR_URL_PREFIX = '/web-page-replay-generate-'
-    self.POST_IMAGE_URL_PREFIX = '/web-page-replay-post-image-'
 
   def handle(self, request):
     """Handles special URLs needed for the benchmark.
@@ -41,7 +52,7 @@ class CustomHandlers(object):
 
     return None
 
-  def get_generator_url_response_code(cls, request_path):
+  def get_generator_url_response_code(self, request_path):
     """Parse special generator URLs for the embedded response code.
 
     Clients like perftracker can use URLs of this form to request
@@ -54,7 +65,7 @@ class CustomHandlers(object):
       Otherwise, None.
     """
     prefix, response_code = request_path[:-3], request_path[-3:]
-    if prefix == cls.GENERATOR_URL_PREFIX and response_code.isdigit():
+    if prefix == GENERATOR_URL_PREFIX and response_code.isdigit():
       return int(response_code)
     return None
 
@@ -71,7 +82,7 @@ class CustomHandlers(object):
       True if request was recognized as a set phase request.
       False otherwise.
     """
-    if not self.server.save_images_dir:
+    if not self.save_images_dir:
       return None
 
     prefix = request.path[:len(POST_IMAGE_URL_PREFIX)]

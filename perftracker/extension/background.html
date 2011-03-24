@@ -3,7 +3,8 @@
 <script>
 // TODO(mbelshe): Remove all these console.log statements
 
-var LoadType = { "cold": 0, "hot": 1, "warm": 2} ;
+var LoadType = { "cold": 0, "hot": 1, "warm": 2 };
+var LoadTypeNames = [ "cold", "hot", "warm" ];
 
 // Configuration and results are stored globally.
 window.iterations = 10;
@@ -425,8 +426,8 @@ function Benchmark(url, setIds, callbackWhenFinished) {
         tab.id,
         // We need to navigate away to perform this test, but we still want to
         // keep the same renderer. Navigating to a bogus url on the same domain
-        // site seems to have the desired effect.
-        { "url": getWebPageReplay404Url(url_), "selected": true },
+        // seems to have the desired effect.
+        { "url": getWebPageReplayUrl(url_, 'generate-404'), "selected": true },
         function(tab) {
           setTimeout(function() { hotLoad.run(tab, me_.handleLoadFinished); },
                      window.interval);
@@ -725,12 +726,12 @@ function checkScheme(url) {
   return false;
 }
 
-function getWebPageReplay404Url(url) {
+function getWebPageReplayUrl(url, suffix) {
   var startOfHost = url.indexOf('//') + 2;
   var startOfPath = url.indexOf('/', startOfHost);
   var baseUrl = url.substr(0, startOfPath);
-  var url404 = baseUrl + '/web-page-replay-generate-404';
-  return url404;
+  var customUrl = baseUrl + '/web-page-replay-' + suffix;
+  return customUrl;
 }
 
 // Run at startup
