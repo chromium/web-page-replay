@@ -105,7 +105,7 @@ def main(options, replay_filename):
     logging.info('Loaded %d responses from %s',
                  len(http_archive), replay_filename)
 
-  custom_handlers = customhandlers.CustomHandlers(options.save_images)
+  custom_handlers = customhandlers.CustomHandlers(options.screenshot_dir)
 
   real_dns_lookup = dnsproxy.RealDnsLookup()
   if options.record:
@@ -252,7 +252,7 @@ if __name__ == '__main__':
       dest='diff_unknown_requests',
       help='During replay, show a unified diff of any unknown requests against '
            'their nearest match in the archive.')
-  harness_group.add_option('-I', '--save_images', default=None,
+  harness_group.add_option('-I', '--screenshot_dir', default=None,
       action='store',
       type='string',
       help='Save PNG images of the loaded page in the given directory.')

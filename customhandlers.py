@@ -24,15 +24,15 @@ IMAGE_DATA_PREFIX = 'data:image/png;base64,'
 
 class CustomHandlers(object):
 
-  def __init__(self, save_images_dir=None):
-    if save_images_dir and not os.path.exists(save_images_dir):
+  def __init__(self, screenshot_dir=None):
+    if screenshot_dir and not os.path.exists(screenshot_dir):
       try:
-        os.makedirs(save_images_dir)
+        os.makedirs(screenshot_dir)
       except:
         logging.error('%s does not exist and could not be created.',
-                      save_images_dir)
-        save_images_dir = None
-    self.save_images_dir = save_images_dir
+                      screenshot_dir)
+        screenshot_dir = None
+    self.screenshot_dir = screenshot_dir
 
   def handle(self, request):
     """Handles special URLs needed for the benchmark.
@@ -75,7 +75,7 @@ class CustomHandlers(object):
 
     Expects a special url containing the filename. If sent, saves the base64
     encoded request body as a PNG image locally. This feature is enabled by
-    passing in save_images_dir to the initializer for this class.
+    passing in screenshot_dir to the initializer for this class.
 
     Args:
       request: an http request
@@ -84,7 +84,7 @@ class CustomHandlers(object):
       On a match, a 3-digit integer response code.
       False otherwise.
     """
-    if not self.save_images_dir:
+    if not self.screenshot_dir:
       return None
 
     prefix = request.path[:len(POST_IMAGE_URL_PREFIX)]
@@ -99,8 +99,12 @@ class CustomHandlers(object):
 
     data = data[len(IMAGE_DATA_PREFIX):]
     png = base64.b64decode(data)
-    filename = '%s/%s-%s.png' % (self.save_images_dir, request.host, basename)
-    f = file(filename, 'w')
-    f.write(png)
-    f.close()
+    filename = os.path.join(self.screenshot_dir,
+                            '%s-%s.png' % (request.host, basename))
+    if not os.access(filename, os.W_OK):
+      logging.error('Unable to write to: %s', filename)
+      return 400
+
+    with file(filename, 'w') as f:
+      f.write(png)
     return 200

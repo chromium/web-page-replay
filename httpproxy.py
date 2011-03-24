@@ -130,7 +130,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.send_error(500)
       return
     response_code = self.server.custom_handlers.handle(request)
-    if response_code is not None:
+    if response_code:
       self.send_error(response_code)
       return
     response = self.server.http_archive_fetch(request, self.get_header_dict())
