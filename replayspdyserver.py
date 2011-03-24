@@ -77,7 +77,7 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
       request = httparchive.ArchivedHttpRequest(method, host, uri, None)
       response_code = self.custom_handlers.handle(request)
       if response_code:
-        self.send_error(response_code, "Handled by custom handlers")
+        self.send_simple_response(response_code, "Handled by custom handlers")
         return dummy, dummy
       response = self.http_archive_fetch(request)
       if response:
@@ -101,15 +101,15 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
         res_done(None)
       else:
         self.log.error("404 returned: %s %s", method, uri)
-        self.send_error(404, "file not found")
+        self.send_simple_response(404, "file not found")
     else:
       # TODO(lzheng): Add support for other methods.
       self.log.error("method: %s is not supported: %s", method, uri)
-      self.send_error(500, "Not supported")
+      self.send_simple_response(500, "Not supported")
 
     return dummy, dummy
 
-  def send_error(self, code, phrase):
+  def send_simple_response(self, code, phrase):
       res_hdrs = [('Content-Type', 'text/html'), ('version', 'HTTP/1.1')]
       res_body, res_done = res_start(str(code), phrase, res_hdrs, dummy)
       res_body(None)
