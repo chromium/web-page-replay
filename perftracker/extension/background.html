@@ -342,6 +342,17 @@ function BenchmarkLoad(url, loadType, setId) {
 
   this.handleProcessId = function(processId) {
     processId_ = processId;
+    var params = { 'format': 'png' };
+    chrome.tabs.captureVisibleTab(tab_.windowId, params, me_.handleSnapshot);
+  }
+
+  this.handleSnapshot = function(dataUri) {
+    postUrl = getWebPageReplayUrl(url_,
+                                  'post-image-' + LoadTypeNames[loadType_]);
+    XHRPost(postUrl, dataUri, me_.allDone);
+  }
+
+  this.allDone = function() {
     callbackWhenFinished_(me_);
   }
 }

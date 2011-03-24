@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import BaseHTTPServer
 import daemonserver
 import httparchive
@@ -28,6 +29,7 @@ import time
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   # URL path prefix that allows clients to request a particular response code.
   GENERATOR_URL_PREFIX = '/web-page-replay-generate-'
+  POST_IMAGE_URL_PREFIX = '/web-page-replay-post-image-'
 
   protocol_version = 'HTTP/1.1'  # override BaseHTTPServer setting
 
@@ -144,11 +146,43 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       return int(response_code)
     return None
 
+  @classmethod
+  def handle_possible_post_image(cls, request):
+    """
+
+    Clients like perftracker can use URLs of this form to request
+    a response with a particular response code.
+
+    Args:
+      request: a http request
+
+    Returns:
+      True if request was recognized as a set phase request.
+      False otherwise.
+    """
+    prefix = request.path[:len(cls.POST_IMAGE_URL_PREFIX)]
+    load_type = request.path[len(cls.POST_IMAGE_URL_PREFIX):]
+    if prefix == cls.POST_IMAGE_URL_PREFIX and load_type.isalpha():
+      data = request.request_body
+      PREFIX = 'data:image/png;base64,'
+      if data.startswith(PREFIX):
+        data = data[len(PREFIX):]
+        png = base64.b64decode(data)
+        filename = '/tmp/%s-%s.png' % (request.host, load_type)
+        f = file(filename, 'w')
+        f.write(png)
+        f.close()
+      return True
+    return False
+
   def do_GET(self):
     start_time = time.time()
     request = self.get_archived_http_request()
     if request is None:
       self.send_error(500)
+      return
+    if self.handle_possible_post_image(request):
+      self.send_error(200)
       return
     response_code = self.get_generator_url_response_code(request.path)
     if response_code:
