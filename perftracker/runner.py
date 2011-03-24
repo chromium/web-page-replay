@@ -224,7 +224,7 @@ def GetVersion():
 
 class TestInstance:
   def __init__(self, network, log_level, log_file, record,
-               diff_unknown_requests):
+               diff_unknown_requests, save_images):
     self.network = network
     self.log_level = log_level
     self.log_file = log_file
@@ -232,6 +232,7 @@ class TestInstance:
     self.proxy_process = None
     self.spdy_proxy_process = None
     self.diff_unknown_requests = diff_unknown_requests
+    self.save_images = save_images
 
   def GenerateConfigFile(self, notes=''):
     # The PerfTracker extension requires this name in order to kick off.
@@ -253,7 +254,8 @@ class TestInstance:
       'packet_loss_rate': str(self.network['packet_loss_percent']),
       'protocol': self.network['protocol'],
       'urls': runner_cfg.urls,
-      'record': self.record
+      'record': self.record,
+      'save_images': self.save_images,
     }
     with open(self.filename, 'w+') as f:
       f.write("""
@@ -314,6 +316,8 @@ setTimeout(function() {
       cmdline += ['-p', str(self.network['packet_loss_percent'] / 100.0)]
     if self.diff_unknown_requests:
       cmdline.append('--diff_unknown_requests')
+    if self.save_images:
+      cmdline += ['-I', self.save_images]
     if self.record:
       cmdline.append('-r')
     cmdline.append(runner_cfg.replay_data_archive)
@@ -504,7 +508,7 @@ def main(options):
       logging.debug("Running network configuration: %s", network)
       test = TestInstance(
           network, options.log_level, options.log_file, options.record,
-          options.diff_unknown_requests)
+          options.diff_unknown_requests, options.save_images)
       test.RunTest(options.notes, options.chrome_cmdline)
     if not options.infinite or options.record:
       break
@@ -559,10 +563,12 @@ if __name__ == '__main__':
       help='Username for logging into appengine.')
   option_parser.add_option('-D', '--diff_unknown_requests', default=False,
       action='store_true',
-      dest='diff_unknown_requests',
       help='During replay, show a unified diff of any unknown requests against '
            'their nearest match in the archive.')
-
+  option_parser.add_option('-I', '--save_images', default=None,
+      action='store',
+      type='string',
+      help='Save PNG images of the loaded page in the given directory.')
 
   options, args = option_parser.parse_args()
 

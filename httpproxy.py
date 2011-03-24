@@ -154,12 +154,17 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     a response with a particular response code.
 
     Args:
-      request: a http request
+      request_path: a string like "/foo", or "/web-page-replay-set-phase-cold"
 
     Returns:
       True if request was recognized as a set phase request.
       False otherwise.
     """
+    if not self.server.save_images:
+      logging.info('saving is disabled')
+      return False
+
+    cls = self.__class__
     prefix = request.path[:len(cls.POST_IMAGE_URL_PREFIX)]
     load_type = request.path[len(cls.POST_IMAGE_URL_PREFIX):]
     if prefix == cls.POST_IMAGE_URL_PREFIX and load_type.isalpha():
@@ -168,7 +173,8 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       if data.startswith(PREFIX):
         data = data[len(PREFIX):]
         png = base64.b64decode(data)
-        filename = '/tmp/%s-%s.png' % (request.host, load_type)
+        filename = '%s/%s-%s.png' % (self.server.save_images, request.host,
+                                     load_type)
         f = file(filename, 'w')
         f.write(png)
         f.close()

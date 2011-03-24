@@ -342,8 +342,12 @@ function BenchmarkLoad(url, loadType, setId) {
 
   this.handleProcessId = function(processId) {
     processId_ = processId;
-    var params = { 'format': 'png' };
-    chrome.tabs.captureVisibleTab(tab_.windowId, params, me_.handleSnapshot);
+    if (benchmarkConfiguration.save_images) {
+      var params = { 'format': 'png' };
+      chrome.tabs.captureVisibleTab(tab_.windowId, params, me_.handleSnapshot);
+    } else {
+      me_.allDone();
+    }
   }
 
   this.handleSnapshot = function(dataUri) {

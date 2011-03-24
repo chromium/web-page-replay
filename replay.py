@@ -248,6 +248,10 @@ if __name__ == '__main__':
       dest='diff_unknown_requests',
       help='During replay, show a unified diff of any unknown requests against '
            'their nearest match in the archive.')
+  harness_group.add_option('-I', '--save_images', default=None,
+      action='store',
+      type='string',
+      help='Save PNG images of the loaded page in the given directory.')
   harness_group.add_option('-P', '--no-dns_private_passthrough', default=True,
       action='store_false',
       dest='dns_private_passthrough',
