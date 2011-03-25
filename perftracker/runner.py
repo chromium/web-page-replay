@@ -405,6 +405,11 @@ setTimeout(function() {
           runner_cfg.chrome_path,
           '--activate-on-launch',
           '--disable-background-networking',
+
+          # Stop the translate bar from appearing at the top of the page. When
+          # it's there, the screenshots are shorter than they should be.
+          '--disable-translate',
+
           # TODO(tonyg): These are disabled to reduce noise. It would be nice to
           # make the model realistic and stable enough to enable them.
           '--disable-preconnect',
@@ -439,7 +444,7 @@ setTimeout(function() {
 
       logging.debug('Starting Chrome: %s', ' '.join(cmdline))
       chrome = subprocess.Popen(cmdline, preexec_fn=switch_away_from_root)
-      returncode = chrome.wait();
+      returncode = chrome.wait()
       if returncode:
         logging.error('Chrome returned status code %d. It may have crashed.',
                       returncode)
@@ -576,7 +581,7 @@ if __name__ == '__main__':
 
   # Collect login credentials and verify
   if options.user:
-    options.password = getpass.getpass(options.user + ' password: ');
+    options.password = getpass.getpass(options.user + ' password: ')
     options.login_url = DoAppEngineLogin(options.user, options.password)
     if not options.login_url:
       exit(-1)
