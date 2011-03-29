@@ -19,11 +19,13 @@ Usage:
 $ sudo ./trafficshaper_test.py
 """
 
+import customhandlers
 import dnsproxy
 import httparchive
 import httpproxy
 import logging
 import multiprocessing
+import socket
 import sys
 import time
 import trafficshaper
@@ -39,6 +41,7 @@ TEST_DNS_NAMESERVER = '127.0.0.1'
 TEST_DNS_PORT = 5555
 TEST_HTTP_HOST = '127.0.0.1'
 TEST_HTTP_PORT = 8888
+TEST_HOSTNAME = 'example.com'
 TEST_URL = 'http://%s:%s' % (TEST_HTTP_HOST, TEST_HTTP_PORT)
 
 # from timeit.py
@@ -86,6 +89,14 @@ class IntervalTimer:
     return str([(n, "%dms" % (v * 1000)) for n, v in self.intervals()])
 
 
+def GetConnectTimeMs(host, port):
+  start = time.time()
+  s = socket.create_connection((host, port), timeout=1.0)
+  end = time.time()
+  s.close()
+  return int(1000 * (end - start))
+
+
 class TestDnsProxyServer(dnsproxy.DnsProxyServer):
 
   def __init__(self, interval_timer):
@@ -102,7 +113,7 @@ class TestDnsProxyServer(dnsproxy.DnsProxyServer):
 
 
 class TestResolver(object):
-  def __init__(self, hostname='example.com'):
+  def __init__(self, hostname=TEST_HOSTNAME):
     self.resolver = dns.resolver.get_default_resolver()
     self.hostname = hostname
 
@@ -151,8 +162,9 @@ class MockHttpArchiveFetch:
 class TestWebProxyServer(httpproxy.HttpProxyServer):
   def __init__(self, interval_timer, num_bytes):
     http_archive_fetch = MockHttpArchiveFetch(interval_timer, num_bytes)
-    httpproxy.HttpProxyServer.__init__(
-        self, http_archive_fetch, host=TEST_HTTP_HOST, port=TEST_HTTP_PORT)
+    httpproxy.HttpProxyServer.__init__(self, http_archive_fetch,
+                                       customhandlers.CustomHandlers(None),
+                                       host=TEST_HTTP_HOST, port=TEST_HTTP_PORT)
 
 
 class TestTrafficShaper(trafficshaper.TrafficShaper):
@@ -186,13 +198,24 @@ class TrafficShaperTimeTest(unittest.TestCase):
   def setUp(self):
     self.interval_timer = IntervalTimer()
 
+  def testConnectToIP(self):
+    """Verify that it takes |delay_ms| to establish a TCP connection."""
+    with TestWebProxyServer(self.interval_timer, 0):
+      with TestTrafficShaper(self.interval_timer, delay_ms=100):
+        self.assertEqualWithinTolerance(
+            100, GetConnectTimeMs(TEST_HTTP_HOST, TEST_HTTP_PORT))
+
+      with TestTrafficShaper(self.interval_timer, delay_ms=175):
+        self.assertEqualWithinTolerance(
+            175, GetConnectTimeMs(TEST_HTTP_HOST, TEST_HTTP_PORT))
+
   def testResolve(self):
     num_requests = 5
     sleep_multiplier_seconds = 0.01
     processes = [
         multiprocessing.Process(
             target=test_resolve,
-            args=('%d.example.com' % i, sleep_multiplier_seconds * i))
+            args=('%d.%s' % (i, TEST_HOSTNAME), sleep_multiplier_seconds * i))
         for i in range(num_requests)]
     total_timer = IntervalTimer()
     total_timer.start()
@@ -209,7 +232,6 @@ class TrafficShaperTimeTest(unittest.TestCase):
     # TODO(tonyg/slamm): Is this assertion correct?
     self.assertEqualWithinTolerance(
         700, total_timer.get_interval('total_time'))
-
 
   def testHttpFetch(self):
     num_bytes = 1024 * 1024
