@@ -468,7 +468,8 @@ setTimeout(function() {
       self.Cleanup()
 
   def Cleanup(self):
-    os.remove(self.filename)
+    if os.path.exists(self.filename):
+      os.remove(self.filename)
 
 
 def ConfigureLogging(log_level_name, log_file_name):
