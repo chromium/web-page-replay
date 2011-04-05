@@ -1,5 +1,5 @@
-application: google.com:perftracker
-version: 7
+application: crperftracker
+version: 1
 runtime: python
 api_version: 1
 default_expiration: "1d"
