@@ -198,3 +198,14 @@ class DnsProxyServer(SocketServer.ThreadingUDPServer,
       self.platform_settings.restore_primary_dns()
     self.shutdown()
     logging.info('Shutdown DNS server')
+
+
+class DummyDnsServer():
+  def __init__(self, use_forwarding, passthrough_filter=None, host='', port=53):
+    pass
+
+  def __enter__(self):
+    pass
+
+  def __exit__(self, unused_exc_type, unused_exc_val, unused_exc_tb):
+    pass

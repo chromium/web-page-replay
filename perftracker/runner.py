@@ -390,9 +390,8 @@ setTimeout(function() {
     switch_away_from_root = None
     if platform.system() == 'Linux':
       use_virtualx = True
-      user_uid = os.getenv('SUDO_UID')
-      if user_uid:
-        user_uid = int(user_uid)
+      if os.getuid() == 0:
+        user_uid = int(os.getenv('SUDO_UID'))
         switch_away_from_root = lambda: os.setuid(user_uid)
         os.chown(profile_dir, user_uid, -1)
 
@@ -539,7 +538,7 @@ if __name__ == '__main__':
       description=description,
       epilog='')
 
-  option_parser.add_option('-l', '--log_level', default='info',
+  option_parser.add_option('-l', '--log_level', default='error',
       action='store',
       type='choice',
       choices=log_levels,
@@ -581,9 +580,11 @@ if __name__ == '__main__':
   ConfigureLogging(options.log_level, options.log_file)
 
   # Collect login credentials and verify
-  if options.user:
-    options.password = getpass.getpass(options.user + ' password: ')
-    options.login_url = DoAppEngineLogin(options.user, options.password)
+  user = options.user or runner_cfg.appengine_user
+  if user:
+    password = (runner_cfg.appengine_password
+                or getpass.getpass(user + ' password: '))
+    options.login_url = DoAppEngineLogin(user, password)
     if not options.login_url:
       exit(-1)
   elif runner_cfg.appengine_host != 'localhost':

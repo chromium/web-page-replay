@@ -106,6 +106,29 @@ class PosixPlatformSettings(PlatformSettings):
   def _get_dns_update_error(self):
     return DnsUpdateError('Did you run under sudo?')
 
+  def _sysctl(self, *args):
+    sysctl = subprocess.Popen(
+        ['sysctl'] + [str(a) for a in args],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    stdout = sysctl.communicate()[0]
+    return sysctl.returncode, stdout
+
+  def has_sysctl(self, name):
+    return self._sysctl(name)[0] == 0
+
+  def set_sysctl(self, name, value):
+    rv = self._sysctl('%s=%s' % (name, value))[0]
+    if rv != 0:
+      logging.error("Unable to set sysctl %s: %s", name, rv)
+
+  def get_sysctl(self, name):
+    rv, value = self._sysctl('-n', name)
+    if rv == 0:
+      return value
+    else:
+      logging.error("Unable to get sysctl %s: %s", name, rv)
+      return None
+
 
 class OsxPlatformSettings(PosixPlatformSettings):
   LOCAL_SLOWSTART_MIB_NAME = 'net.inet.tcp.local_slowstart_flightsize'
@@ -121,11 +144,10 @@ class OsxPlatformSettings(PosixPlatformSettings):
         stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     return ifconfig.communicate()[0]
 
-  def _sysctl(self, *args):
-    sysctl = subprocess.Popen(
-        ['sysctl'] + [str(a) for a in args],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    return sysctl.communicate()[0]
+  def set_sysctl(self, name, value):
+    rv = self._sysctl('-w', '%s=%s' % (name, value))[0]
+    if rv != 0:
+      logging.error("Unable to set sysctl %s: %s", name, rv)
 
   def _get_dns_service_key(self):
     # <dictionary> {
@@ -177,12 +199,10 @@ class OsxPlatformSettings(PosixPlatformSettings):
     return True
 
   def set_cwnd(self, size):
-    output = self._sysctl('-w', '%s=%s' % (self.LOCAL_SLOWSTART_MIB_NAME, size))
-    # output example: "net.inet.tcp.local_slowstart_flightsize: 8 -> 20"
-    logging.debug("set_cwnd(%s): sysctl: %s", size, output.strip())
+    self.set_sysctl(self.LOCAL_SLOWSTART_MIB_NAME, size)
 
   def get_cwnd(self):
-    return int(self._sysctl('-n', self.LOCAL_SLOWSTART_MIB_NAME))
+    return int(self.get_sysctl(self.LOCAL_SLOWSTART_MIB_NAME))
 
   def configure_loopback(self):
     """Configure loopback to use reasonably sized frames.
@@ -227,9 +247,9 @@ class LinuxPlatformSettings(PosixPlatformSettings):
   Update this as needed to make it more robust on more systems.
   """
   RESOLV_CONF = '/etc/resolv.conf'
-  TCP_INIT_CWND = 'net/ipv4/tcp_init_cwnd'
-  TCP_BASE_MSS = 'net/ipv4/tcp_base_mss'
-  TCP_MTU_PROBING = 'net/ipv4/tcp_mtu_probing'
+  TCP_INIT_CWND = 'net.ipv4.tcp_init_cwnd'
+  TCP_BASE_MSS = 'net.ipv4.tcp_base_mss'
+  TCP_MTU_PROBING = 'net.ipv4.tcp_mtu_probing'
 
   def get_primary_dns(self):
     try:
@@ -257,27 +277,6 @@ class LinuxPlatformSettings(PosixPlatformSettings):
     if not is_first_nameserver_replaced:
       raise DnsUpdateError('Could not find a suitable namserver entry in %s' %
                            self.RESOLV_CONF)
-
-  def has_sysctl(self, name):
-    filename = '/proc/sys/' + name
-    return os.path.exists(filename)
-
-  def set_sysctl(self, name, value):
-    try:
-      filename = '/proc/sys/' + name
-      with open(filename, 'w+') as f:
-        f.write(str(value))
-    except IOError, e:
-      logging.error("Unable to set sysctl %s: %s", name, e)
-
-  def get_sysctl(self, name):
-    try:
-      filename = '/proc/sys/' + name
-      with open(filename) as f:
-        return int(f.read())
-    except IOError, e:
-      logging.error("Unable to get sysctl %s: %s", name, e)
-      return None
 
   def is_cwnd_available(self):
     return self.has_sysctl(self.TCP_INIT_CWND)

@@ -133,7 +133,7 @@ class JSONDataPage(BaseRequestHandler):
         json_output['cpu'] = test_set.cpu
         json_output['network'] = test_set.network
         summaries_query = test_set.summaries
-        summaries_query.order("date")
+        summaries_query.order("url")
         json_output['summaries'] = [s for s in summaries_query]
         # There is no data; go ahead and pull the individual runs.
         if len(json_output['summaries']) == 0:

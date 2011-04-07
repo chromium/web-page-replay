@@ -33,6 +33,8 @@ replay_data_archive = '<path to archive>'
 #
 appengine_host = 'localhost'
 appengine_port = 8080
+appengine_user = None
+appengine_password = None
 appengine_url = 'http://%s:%d/' % (appengine_host, appengine_port)
 
 #

@@ -120,9 +120,13 @@ def main(options, replay_filename):
     skip_passthrough_hosts = set(request.host for request in http_archive)
     dns_passthrough_filter = dnsproxy.DnsPrivatePassthroughFilter(
         real_dns_lookup, skip_passthrough_hosts)
+
+  dns_class = dnsproxy.DummyDnsServer
+  if options.dns_forwarding:
+    dns_class = dnsproxy.DnsProxyServer
+
   try:
-    with dnsproxy.DnsProxyServer(
-        options.dns_forwarding, dns_passthrough_filter, host):
+    with dns_class(options.dns_forwarding, dns_passthrough_filter, host):
       with web_server_class(http_archive_fetch, custom_handlers,
                             **web_server_kwargs):
         with trafficshaper.TrafficShaper(

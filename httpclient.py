@@ -191,5 +191,5 @@ class ReplayHttpArchiveFetch(object):
         reason = self.http_archive.diff(request) or request
       else:
         reason = request
-      logging.error('Could not replay: %s', reason)
+      logging.warning('Could not replay: %s', reason)
     return response
