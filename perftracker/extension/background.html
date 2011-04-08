@@ -18,7 +18,7 @@ window.submitter;
 
 // TODO(simonjam): This must be in the same order as LoadType is defined.
 // TODO(simonjam): Figure out how to skip cold and/or hot if desired.
-window.kTestsToRun = [ LoadType.cold ]; // TODO(simonjam): Enable cache tests.
+window.kTestsToRun = [ LoadType.cold, LoadType.hot, LoadType.warm ];
 
 // Map the WebTiming property to the name we use to log it.
 window.loggedTimings = {
@@ -243,9 +243,10 @@ function BenchmarkLoad(url, loadType, setId) {
           me_.startMonitoringLoad(tab);
       });
     } else {
-      chrome.tabs.update(tabToReuse.id,
-                         navigationProperties,
-                         me_.startMonitoringLoad);
+      chrome.tabs.executeScript(
+          tabToReuse_.id,
+          { 'code': 'window.history.back();' },
+          function() { me_.startMonitoringLoad(tabToReuse_); });
     }
   }
 

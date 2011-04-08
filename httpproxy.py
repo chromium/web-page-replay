@@ -56,7 +56,8 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.command,
         host,
         self.path,
-        self.read_request_body())
+        self.read_request_body(),
+        self.get_header_dict())
 
   def send_archived_http_response(self, response):
     try:

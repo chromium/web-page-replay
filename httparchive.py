@@ -108,14 +108,18 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     """List all URLs that match given params."""
     out = StringIO.StringIO()
     for request in self.get_requests(command, host, path):
-      print >>out, '%s %s%s' % (request.command, request.host, request.path)
+      print >>out, '%s %s%s %s' % (request.command, request.host, request.path,
+                                   request.headers)
     return out.getvalue()
 
   def cat(self, command=None, host=None, path=None):
     """Print the contents of all URLs that match given params."""
     out = StringIO.StringIO()
     for request in self.get_requests(command, host, path):
-      print >>out, request.command, request.host, request.path
+      print >>out, '%s %s %s\nrequest headers:\n' % (
+          request.command, request.host, request.path)
+      for k, v in sorted(request.headers):
+        print >>out, "    %s: %s" % (k, v)
       if request.request_body:
         print >>out, request.request_body
       print >>out, '-' * 70
@@ -176,20 +180,30 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
 
 
 class ArchivedHttpRequest(object):
-  def __init__(self, command, host, path, request_body):
+  def __init__(self, command, host, path, request_body, headers):
     self.command = command
     self.host = host
     self.path = path
     self.request_body = request_body
+    self.headers = self._FuzzHeaders(headers)
 
   def __repr__(self):
-    return repr((self.command, self.host, self.path, self.request_body))
+    return repr((self.command, self.host, self.path, self.request_body,
+                 self.headers))
 
   def __hash__(self):
     return hash(self.__repr__())
 
   def __eq__(self, other):
     return self.__repr__() == other.__repr__()
+
+  def __setstate__(self, state):
+    if 'headers' not in state:
+      error_msg = ('Archived HTTP requests are missing headers. Your HTTP '
+                   'archive is likely from a previous version and must be '
+                   'recorded again.')
+      raise Exception(error_msg)
+    self.__dict__ = state
 
   def matches(self, command=None, host=None, path=None):
     """Returns true iff the request matches all parameters."""
@@ -199,7 +213,37 @@ class ArchivedHttpRequest(object):
 
   def verbose_repr(self):
     return '\n'.join([str(x) for x in
-        self.command, self.host, self.path, self.request_body])
+        [self.command, self.host, self.path, self.request_body] + self.headers])
+
+  def _FuzzHeaders(self, headers):
+    """Removes headers that are known to cause problems during replay.
+
+    These headers are removed for the following reasons:
+    - accept: Causes problems with www.bing.com. During record, CSS is fetched
+              with *. During replay, it's text/css.
+    - cookie: Extremely sensitive to request/response order.
+    - user-agent: Changes with every Chrome version.
+
+    Another variant to consider is dropping only the value from the header.
+    However, this is particularly bad for the cookie header, because the
+    presence of the cookie depends on the responses we've seen when the request
+    is made.
+
+    Args:
+      headers: Dictionary of String -> String headers to values.
+
+    Returns:
+      Dictionary of headers, with undesirable headers removed.
+    """
+    fuzzed_headers = headers.copy()
+    undesirable_keys = ['accept', 'cookie', 'user-agent']
+    keys_to_delete = []
+    for key in fuzzed_headers:
+      if key.lower() in undesirable_keys:
+        keys_to_delete.append(key)
+    for key in keys_to_delete:
+      del fuzzed_headers[key]
+    return [(k, fuzzed_headers[k]) for k in sorted(fuzzed_headers.keys())]
 
 
 class ArchivedHttpResponse(object):
