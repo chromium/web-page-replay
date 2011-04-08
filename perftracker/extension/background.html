@@ -244,9 +244,9 @@ function BenchmarkLoad(url, loadType, setId) {
       });
     } else {
       chrome.tabs.executeScript(
-          tabToReuse_.id,
+          tabToReuse.id,
           { 'code': 'window.history.back();' },
-          function() { me_.startMonitoringLoad(tabToReuse_); });
+          function() { me_.startMonitoringLoad(tabToReuse); });
     }
   }
 
