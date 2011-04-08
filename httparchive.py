@@ -221,6 +221,7 @@ class ArchivedHttpRequest(object):
     These headers are removed for the following reasons:
     - accept: Causes problems with www.bing.com. During record, CSS is fetched
               with *. During replay, it's text/css.
+    - connection, method, scheme, url, version: Cause problems with spdy.
     - cookie: Extremely sensitive to request/response order.
     - user-agent: Changes with every Chrome version.
 
@@ -236,7 +237,8 @@ class ArchivedHttpRequest(object):
       Dictionary of headers, with undesirable headers removed.
     """
     fuzzed_headers = headers.copy()
-    undesirable_keys = ['accept', 'cookie', 'user-agent']
+    undesirable_keys = ['accept', 'connection', 'cookie', 'method', 'scheme',
+                        'url', 'version', 'user-agent']
     keys_to_delete = []
     for key in fuzzed_headers:
       if key.lower() in undesirable_keys:
