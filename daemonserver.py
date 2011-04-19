@@ -27,7 +27,7 @@ class DaemonServer(object):
     # Of course, only bother with this if the processing speed is an issue.
     # Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
     thread = threading.Thread(target=self.serve_forever)
-    thread.setDaemon(True)
+    thread.daemon = True  # Python exits when no non-daemon threads are left.
     thread.start()
     return self
 

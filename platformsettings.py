@@ -19,6 +19,7 @@ import logging
 import os
 import platform
 import re
+import socket
 import subprocess
 import tempfile
 
@@ -38,8 +39,37 @@ class DnsUpdateError(PlatformSettingsError):
   pass
 
 
+def _check_output(*args):
+  """Run Popen(*args) and return its output as a byte string.
+
+  Python 2.7 has subprocess.check_output. This is essentially the same
+  except that, as a convenience, all the positional args are used as
+  command arguments.
+
+  Args:
+    *args: sequence of program arguments
+  Raises:
+    subprocess.CalledProcessError if the program returns non-zero exit status.
+  Returns:
+    output as a byte string.
+  """
+  command_args = [str(a) for a in args]
+  logging.debug(' '.join(command_args))
+  process = subprocess.Popen(command_args,
+      stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+  output = process.communicate()[0]
+  retcode = process.poll()
+  if retcode:
+    raise subprocess.CalledProcessError(retcode, command_args, output=output)
+  return output
+
+
 class PlatformSettings(object):
   _IPFW_BIN = None
+  _IPFW_QUEUE_SLOTS = 100
+
+  # Some platforms do not shape traffic with the loopback address.
+  _USE_REAL_IP_FOR_TRAFFIC_SHAPING = False
 
   def __init__(self):
     self.original_primary_dns = None
@@ -85,7 +115,13 @@ class PlatformSettings(object):
     logging.error("Platform does not support getting cwnd.")
 
   def get_ipfw_queue_slots(self):
-    return 500
+    return self._IPFW_QUEUE_SLOTS
+
+  def get_server_ip_address(self, is_server_mode=False):
+    """Returns the IP address to use for dnsproxy, httpproxy, and ipfw."""
+    if is_server_mode or self._USE_REAL_IP_FOR_TRAFFIC_SHAPING:
+      return socket.gethostbyname(socket.gethostname())
+    return '127.0.0.1'
 
   def configure_loopback(self):
     """
@@ -139,10 +175,7 @@ class OsxPlatformSettings(PosixPlatformSettings):
     return scutil.communicate(cmd)[0]
 
   def _ifconfig(self, *args):
-    ifconfig = subprocess.Popen(
-        ['ifconfig'] + [str(a) for a in args],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    return ifconfig.communicate()[0]
+    return _check_output('ifconfig', *args)
 
   def set_sysctl(self, name, value):
     rv = self._sysctl('-w', '%s=%s' % (name, value))[0]
@@ -183,9 +216,6 @@ class OsxPlatformSettings(PosixPlatformSettings):
       'set %s' % self._get_dns_service_key()
     ])
     self._scutil(command)
-
-  def get_ipfw_queue_slots(self):
-    return 100
 
   def get_loopback_mtu(self):
     config = self._ifconfig('lo0')
@@ -250,6 +280,7 @@ class LinuxPlatformSettings(PosixPlatformSettings):
   TCP_INIT_CWND = 'net.ipv4.tcp_init_cwnd'
   TCP_BASE_MSS = 'net.ipv4.tcp_base_mss'
   TCP_MTU_PROBING = 'net.ipv4.tcp_mtu_probing'
+  _IPFW_QUEUE_SLOTS = 500
 
   def get_primary_dns(self):
     try:
@@ -311,6 +342,8 @@ class LinuxPlatformSettings(PosixPlatformSettings):
       self.set_sysctl(self.TCP_BASE_MSS, self.saved_tcp_base_mss)
 
 class WindowsPlatformSettings(PlatformSettings):
+  _USE_REAL_IP_FOR_TRAFFIC_SHAPING = True
+
   def _get_dns_update_error(self):
     return DnsUpdateError('Did you run as administrator?')
 
@@ -327,9 +360,7 @@ class WindowsPlatformSettings(PlatformSettings):
     DNS servers configured through DHCP:  192.168.1.1
     Register with which suffix:           Primary only
     """
-    return subprocess.Popen(
-        ['netsh', 'interface', 'ip', 'show', 'dns'],
-        stdout=subprocess.PIPE).communicate()[0]
+    return _check_output('netsh', 'interface', 'ip', 'show', 'dns')
 
   def _netsh_get_interface_names(self):
     return re.findall(r'"(.+?)"', self._netsh_show_dns())
@@ -352,6 +383,46 @@ Next
     subprocess.check_call(['cscript', '//nologo', vbs_file.name])
     os.remove(vbs_file.name)
 
+  def _arp(self, *args):
+    return _check_output('arp', *args)
+
+  def _route(self, *args):
+    return _check_output('route', *args)
+
+  def _ipconfig(self, *args):
+    return _check_output('ipconfig', *args)
+
+  def get_mac_address(self, ip):
+    """Return the MAC address for the given ip."""
+    for line in self._ipconfig('/all').splitlines():
+      if line[:1].isalnum():
+        current_ip = None
+        current_mac = None
+      elif ':' in line:
+        line = line.strip()
+        if line.startswith('IP Address'):
+          current_ip = line.split(':', 1)[1].lstrip()
+        elif line.startswith('Physical Address'):
+          current_mac = line.split(':', 1)[1].lstrip()
+        if current_ip == ip and current_mac:
+          return current_mac
+    return None
+
+  def configure_loopback(self):
+    # TODO(slamm): use/set ip address that is compat with replay.py
+    self.ip = self.get_server_ip_address()
+    self.mac_address = self.get_mac_address(self.ip)
+    if self.mac_address:
+      self._arp('-s', self.ip, self.mac_address)
+      self._route('add', self.ip, self.ip, 'mask', '255.255.255.255')
+    else:
+      logging.warn('Unable to configure loopback: MAC address not found.')
+    # TODO(slamm): Configure cwnd, MTU size
+
+  def unconfigure_loopback(self):
+    if self.mac_address:
+      self._arp('-d', self.ip)
+      self._route('delete', self.ip, self.ip, 'mask', '255.255.255.255')
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
   _IPFW_BIN = r'third_party\ipfw_win32\ipfw.exe'

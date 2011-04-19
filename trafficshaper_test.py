@@ -19,30 +19,22 @@ Usage:
 $ sudo ./trafficshaper_test.py
 """
 
-import customhandlers
-import dnsproxy
-import httparchive
-import httpproxy
+import daemonserver
 import logging
 import multiprocessing
+import platformsettings
 import socket
+import SocketServer
 import sys
 import time
 import trafficshaper
 import unittest
-import urllib
-
-import third_party
-import dns.resolver
 
 
-TEST_DNS_HOST = '127.0.0.1'
-TEST_DNS_NAMESERVER = '127.0.0.1'
 TEST_DNS_PORT = 5555
-TEST_HTTP_HOST = '127.0.0.1'
 TEST_HTTP_PORT = 8888
-TEST_HOSTNAME = 'example.com'
-TEST_URL = 'http://%s:%s' % (TEST_HTTP_HOST, TEST_HTTP_PORT)
+RESPONSE_SIZE_KEY = 'response-size:'
+
 
 # from timeit.py
 if sys.platform == "win32":
@@ -53,6 +45,18 @@ else:
     DEFAULT_TIMER = time.time
 
 
+def GetElapsedMs(start_time, end_time):
+  """Return milliseconds elapsed between |start_time| and |end_time|.
+
+  Args:
+    start_time: seconds as a float (or string representation of float).
+    end_time: seconds as a float (or string representation of float).
+  Return:
+    milliseconds elapsed as integer.
+  """
+  return int((float(end_time) - float(start_time)) * 1000)
+
+
 class TrafficShaperTest(unittest.TestCase):
 
   def testBadBandwidthRaises(self):
@@ -61,197 +65,175 @@ class TrafficShaperTest(unittest.TestCase):
                       down_bandwidth='1KBit/s')
 
 
-class IntervalTimer:
-  def __init__(self, timer=DEFAULT_TIMER):
+class TimedUdpHandler(SocketServer.DatagramRequestHandler):
+  """UDP handler that returns the time when the request was handled."""
+
+  def handle(self):
+    start_time = self.server.timer()
+    data = self.rfile.read()
+    self.wfile.write(str(start_time))
+
+
+class TimedTcpHandler(SocketServer.StreamRequestHandler):
+  """Tcp handler that returns the time when the request was read.
+
+  It can respond with the number of bytes specified in the request.
+  The request looks like:
+    request_data -> RESPONSE_SIZE_KEY num_reponse_bytes '\n' ANY_DATA
+  """
+
+  def handle(self):
+    data = self.rfile.read()
+    read_time = self.server.timer()
+    contents = str(read_time)
+    if data.startswith(RESPONSE_SIZE_KEY):
+      num_response_bytes = int(data[len(RESPONSE_SIZE_KEY):data.index('\n')])
+      contents = '%s\n%s' % (contents,
+                             '\x00' * (num_response_bytes - len(contents) - 1))
+    self.wfile.write(contents)
+
+
+class TestUdpServer(SocketServer.ThreadingUDPServer, daemonserver.DaemonServer):
+  """A simple UDP server similar to dnsproxy."""
+
+  def __init__(self, host, port, timer):
+    SocketServer.ThreadingUDPServer.__init__(
+        self, (host, port), TimedUdpHandler)
     self.timer = timer
-    self.times = None
-    self.names = []
 
-  def start(self):
-    self.times = [self.timer()]
-
-  def interval(self, name):
-    self.times.append(self.timer())
-    self.names.append(name)
-
-  def get_interval(self, name):
-    for i, n in enumerate(self.names):
-      if n == name:
-        return int(1000 * (self.times[i + 1] - self.times[i]))
-    return None
-
-  def intervals(self):
-    return zip(self.names,
-               [self.times[x + 1] - self.times[x]
-                for x in range(len(self.times) - 1)])
-
-  def __str__(self):
-    return str([(n, "%dms" % (v * 1000)) for n, v in self.intervals()])
+  def cleanup(self):
+    pass
 
 
-def GetConnectTimeMs(host, port):
-  start = time.time()
-  s = socket.create_connection((host, port), timeout=1.0)
-  end = time.time()
-  s.close()
-  return int(1000 * (end - start))
+class TimedTcpServer(SocketServer.ThreadingTCPServer,
+                     daemonserver.DaemonServer):
+  """A simple TCP server similar to httpproxy."""
 
+  def __init__(self, host, port, timer=DEFAULT_TIMER):
+    SocketServer.ThreadingTCPServer.__init__(
+        self, (host, port), TimedTcpHandler)
+    self.timer = timer
 
-class TestDnsProxyServer(dnsproxy.DnsProxyServer):
-
-  def __init__(self, interval_timer):
-    dnsproxy.DnsProxyServer.__init__(self,
-        use_forwarding=False,
-        passthrough_filter=None,
-        host=TEST_DNS_HOST,
-        port=TEST_DNS_PORT)
-    self.interval_timer = interval_timer
-
-  def close_request(self, request):
-    dnsproxy.DnsProxyServer.close_request(self, request)
-    self.interval_timer.interval("dns proxy server finished")
-
-
-class TestResolver(object):
-  def __init__(self, hostname=TEST_HOSTNAME):
-    self.resolver = dns.resolver.get_default_resolver()
-    self.hostname = hostname
-
-  def __call__(self):
-    self.resolver.nameservers = [TEST_DNS_NAMESERVER]
-    self.resolver.port = TEST_DNS_PORT
-    hostname = self.hostname
+  def cleanup(self):
     try:
-      answers = self.resolver.query(hostname, 'A')
-    except (dns.resolver.NoAnswer,
-            dns.resolver.NXDOMAIN,
-            dns.resolver.Timeout) as ex:
-      logging.debug('TestResolver(%s) -> None (%s)',
-                    hostname, ex.__class__.__name__)
-      return None
-    if answers:
-      ip = str(answers[0])
-    else:
-      ip = None
-    return ip
+      self.shutdown()
+    except KeyboardInterrupt, e:
+      pass
 
 
-def test_resolve(host, sleep_time):
-  resolver = TestResolver(hostname=host)
-  time.sleep(sleep_time)
-  ip = resolver()
+class TcpTestSocketCreator:
+  """A TCP socket creator suitable for with-statement."""
 
-
-class MockHttpArchiveFetch:
-  def __init__(self, interval_timer, num_bytes):
-    self.interval_timer = interval_timer
-    self.num_bytes = num_bytes
-    self.data = ['\x00' * self.num_bytes]
-
-  def __call__(self, request, request_headers=None):
-    self.interval_timer.interval("http request received")
-    response = httparchive.ArchivedHttpResponse(
-        version=11,
-        status=200,
-        reason='OK',
-        headers=[],
-        response_data=self.data)
-    return response
-
-
-class TestWebProxyServer(httpproxy.HttpProxyServer):
-  def __init__(self, interval_timer, num_bytes):
-    http_archive_fetch = MockHttpArchiveFetch(interval_timer, num_bytes)
-    httpproxy.HttpProxyServer.__init__(self, http_archive_fetch,
-                                       customhandlers.CustomHandlers(None),
-                                       host=TEST_HTTP_HOST, port=TEST_HTTP_PORT)
-
-
-class TestTrafficShaper(trafficshaper.TrafficShaper):
-  def __init__(self, interval_timer, **kwargs):
-    self.interval_timer = interval_timer
-    trafficshaper.TrafficShaper.__init__(
-        self, host=TEST_HTTP_HOST, port=str(TEST_HTTP_PORT),
-        dns_port=str(TEST_DNS_PORT), **kwargs)
+  def __init__(self, host, port, timeout=1.0):
+    self.address = (host, port)
+    self.timeout = timeout
 
   def __enter__(self):
-    trafficshaper.TrafficShaper.__enter__(self)
-    self.platformsettings.ipfw('show')
-    self.interval_timer.start()
+    self.socket = socket.create_connection(self.address, timeout=self.timeout)
+    return self.socket
 
   def __exit__(self, *args):
-    self.interval_timer.interval('end')
-    logging.info('Interval times: %s', self.interval_timer)
-    trafficshaper.TrafficShaper.__exit__(self, *args)
+    self.socket.close()
 
 
-class TrafficShaperTimeTest(unittest.TestCase):
-  def assertEqualWithinTolerance(self, expected, actual, tolerance=0.05):
-    """Just like assertTrue(expected <= actual + tolerance &&
-                            expected >= actual - tolerance), but with nicer
-       default message."""
+class TimedTestCase(unittest.TestCase):
+  def assertAlmostEqual(self, expected, actual, tolerance=0.05):
+    """Like the following with nicer default message:
+           assertTrue(expected <= actual + tolerance &&
+                      expected >= actual - tolerance)
+    """
     delta = tolerance * expected
     if actual > expected + delta or actual < expected - delta:
-      self.fail('%s is not equal to %s +/- %s%%' % (
+      self.fail('%s is not equal to expected %s +/- %s%%' % (
               actual, expected, 100 * tolerance))
 
+
+class TcpTrafficShaperTest(TimedTestCase):
+
   def setUp(self):
-    self.interval_timer = IntervalTimer()
+    platform_settings = platformsettings.get_platform_settings()
+    self.host = platform_settings.get_server_ip_address()
+    self.port = TEST_HTTP_PORT
+    self.socket_creator = TcpTestSocketCreator(self.host, self.port)
+    self.timer = DEFAULT_TIMER
 
-  def testConnectToIP(self):
+  def TrafficShaper(self, **kwargs):
+    return trafficshaper.TrafficShaper(
+        host=self.host, port=self.port, dns_port=None, **kwargs)
+
+  def GetTcpSendTimeMs(self, num_bytes):
+    """Return time in milliseconds to send |num_bytes|."""
+
+    with self.socket_creator as s:
+      start_time = self.timer()
+      request_data = '\x00' * num_bytes
+
+      s.sendall(request_data)
+      # TODO(slamm): Figure out why partial is shutdown needed to make it work.
+      s.shutdown(socket.SHUT_WR)
+      read_time = s.recv(1024)
+    return GetElapsedMs(start_time, read_time)
+
+  def GetTcpReceiveTimeMs(self, num_bytes):
+    """Return time in milliseconds to receive |num_bytes|."""
+
+    with self.socket_creator as s:
+      s.sendall('%s%s\n' % (RESPONSE_SIZE_KEY, num_bytes))
+      # TODO(slamm): Figure out why partial is shutdown needed to make it work.
+      s.shutdown(socket.SHUT_WR)
+      num_remaining_bytes = num_bytes
+      read_time = None
+      while num_remaining_bytes > 0:
+        response_data = s.recv(4096)
+        num_remaining_bytes -= len(response_data)
+        if not read_time:
+          read_time, padding = response_data.split('\n')
+    return GetElapsedMs(read_time, self.timer())
+
+  def testTcpConnectToIp(self):
     """Verify that it takes |delay_ms| to establish a TCP connection."""
-    with TestWebProxyServer(self.interval_timer, 0):
-      with TestTrafficShaper(self.interval_timer, delay_ms=100):
-        self.assertEqualWithinTolerance(
-            100, GetConnectTimeMs(TEST_HTTP_HOST, TEST_HTTP_PORT))
+    with TimedTcpServer(self.host, self.port):
+      for delay_ms in (100, 175):
+        with self.TrafficShaper(delay_ms=delay_ms):
+          start_time = self.timer()
+          with self.socket_creator:
+            connect_time = GetElapsedMs(start_time, self.timer())
+        self.assertAlmostEqual(delay_ms, connect_time)
 
-      with TestTrafficShaper(self.interval_timer, delay_ms=175):
-        self.assertEqualWithinTolerance(
-            175, GetConnectTimeMs(TEST_HTTP_HOST, TEST_HTTP_PORT))
+  def testTcpUploadShaping(self):
+    """Verify that 'up' bandwidth is shaped on TCP connections."""
+    num_bytes = 1024 * 100
+    bandwidth_kbits = 2000
+    expected_ms = 8.0 * num_bytes / bandwidth_kbits
+    with TimedTcpServer(self.host, self.port):
+      with self.TrafficShaper(up_bandwidth='%sKbit/s' % bandwidth_kbits):
+        self.assertAlmostEqual(expected_ms, self.GetTcpSendTimeMs(num_bytes))
 
-  def testResolve(self):
-    num_requests = 5
-    sleep_multiplier_seconds = 0.01
-    processes = [
-        multiprocessing.Process(
-            target=test_resolve,
-            args=('%d.%s' % (i, TEST_HOSTNAME), sleep_multiplier_seconds * i))
-        for i in range(num_requests)]
-    total_timer = IntervalTimer()
-    total_timer.start()
-    with TestDnsProxyServer(self.interval_timer):
-      with TestTrafficShaper(
-          self.interval_timer,
-          delay_ms='100'):
-        for p in processes:
-          p.start()
-        for p in processes:
-          p.join()
-    total_timer.interval('total_time')
+  def testTcpDownloadShaping(self):
+    """Verify that 'down' bandwidth is shaped on TCP connections."""
+    num_bytes = 1024 * 100
+    bandwidth_kbits = 2000
+    expected_ms = 8.0 * num_bytes / bandwidth_kbits
+    with TimedTcpServer(self.host, self.port):
+      with self.TrafficShaper(down_bandwidth='%sKbit/s' % bandwidth_kbits):
+        self.assertAlmostEqual(expected_ms, self.GetTcpReceiveTimeMs(num_bytes))
 
-    # TODO(tonyg/slamm): Is this assertion correct?
-    self.assertEqualWithinTolerance(
-        700, total_timer.get_interval('total_time'))
+  def testTcpInterleavedDownloads(self):
+    # TODO(slamm): write tcp interleaved downloads test
+    pass
 
-  def testHttpFetch(self):
-    num_bytes = 1024 * 1024
-    with TestWebProxyServer(self.interval_timer, num_bytes):
-      with TestTrafficShaper(
-          self.interval_timer,
-          up_bandwidth='400Kbit/s',
-          down_bandwidth='2000Kbit/s',
-          delay_ms='100',
-          init_cwnd='2'):
-        data = urllib.urlopen(TEST_URL).read()
-    self.assertEqual('\x00' * num_bytes, data)
 
-    # TODO(tonyg/slamm): Is this assertion correct?
-    self.assertEqualWithinTolerance(
-        1300, self.interval_timer.get_interval('end'))
+class UdpTrafficShaperTest(TimedTestCase):
+
+  def testUdpDelay(self):
+    # TODO(slamm): write udp delay test
+    pass
+
+  def testUdpInterleavedDelay(self):
+    # TODO(slamm): write udp interleaved udp delay test
+    pass
+
 
 
 if __name__ == '__main__':
-  log_level = getattr(logging, 'DEBUG')
-  logging.basicConfig(level=log_level,
-                      format='%(asctime)s %(levelname)s %(message)s')
   unittest.main()

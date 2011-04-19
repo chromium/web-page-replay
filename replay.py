@@ -61,17 +61,18 @@ if sys.version < '2.6':
   sys.exit(1)
 
 
-def get_server_address(server_mode):
-  if server_mode:
-    return socket.gethostbyname(socket.gethostname())
-  return '127.0.0.1'
+def resolve_dns_to_remote_replay_server(platform_settings, dnsproxy_ip):
+  """Set the primary dns nameserver to the replay dnsproxy.
 
+  Restore the original primary dns nameserver on exit.
 
-def point_dns(server):
-  platform_settings = platformsettings.get_platform_settings()
+  Args:
+    platform_settings: an instance of platformsettings.PlatformSettings
+    dnsproxy_ip: the ip address to use as the primary dns server.
+  """
   try:
-    platform_settings.set_primary_dns(options.server)
-    while (True):
+    platform_settings.set_primary_dns(dnsproxy_ip)
+    while True:
       time.sleep(1)
   except KeyboardInterrupt:
     logging.info('Shutting down.')
@@ -80,10 +81,12 @@ def point_dns(server):
 
 
 def main(options, replay_filename):
+  exit_status = 0
+  platform_settings = platformsettings.get_platform_settings()
   if options.server:
-    point_dns(options.server)
-    return
-  host = get_server_address(options.server_mode)
+    resolve_dns_to_remote_replay_server(platform_settings, options.server)
+    return exit_status
+  host = platform_settings.get_server_ip_address(options.server_mode)
 
   web_server_class = httpproxy.HttpProxyServer
   web_server_kwargs = {
@@ -137,11 +140,10 @@ def main(options, replay_filename):
             delay_ms=options.delay_ms,
             packet_loss_rate=options.packet_loss_rate,
             init_cwnd=options.init_cwnd):
-          while (True):
+          while True:
             time.sleep(1)
   except KeyboardInterrupt:
     logging.info('Shutting down.')
-    exit_status = 0
   except (dnsproxy.DnsProxyException,
           trafficshaper.TrafficShaperException) as e:
     logging.critical(e)
@@ -236,15 +238,14 @@ if __name__ == '__main__':
   harness_group.add_option('-S', '--server', default=None,
       action='store',
       type='string',
-      help='Don\'t run replay and traffic shaping. Instead connect to another'
-           ' instance running --server_mode on port 80 of the given IP. NOTE:'
-           ' The same may be accomplished by updating DNS to point to server')
+      help='IP address of host running "replay.py --server_mode". '
+           'This only changes the primary DNS nameserver to use the given IP.')
   harness_group.add_option('-M', '--server_mode', default=False,
       action='store_true',
-      help='Don\'t forward local traffic to the replay server. Instead, only'
-           ' serve the replay and traffic shaping functionality on --port.'
-           ' Other instances may connect to this using --server or by pointing'
-           ' their DNS to this server.')
+      help='Run replay DNS & http proxies, and trafficshaping on --port '
+           'without changing the primary DNS nameserver. '
+           'Other hosts may connect to this using "replay.py --server" '
+           'or by pointing their DNS to this server.')
   harness_group.add_option('-n', '--no-deterministic_script', default=True,
       action='store_false',
       dest='deterministic_script',
