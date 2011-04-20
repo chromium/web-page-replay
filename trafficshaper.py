@@ -39,10 +39,9 @@ class BandwidthValueError(TrafficShaperException):
 class TrafficShaper(object):
 
   _UPLOAD_PIPE = '1'     # Enforces overall upload bandwidth.
-  _UPLOAD_QUEUE = '2'    # Shares upload bandwidth among sockets.
+  _UPLOAD_QUEUE = '2'    # Shares upload bandwidth among source ports.
   _DOWNLOAD_PIPE = '3'   # Enforces overall download bandwidth.
-  _DOWNLOAD_QUEUE = '4'  # Shares download bandwidth among sockets.
-  _DNS_PIPE = '5'        # Enforces RTT for DNS requests.
+  _DOWNLOAD_QUEUE = '4'  # Shares download bandwidth among destination ports.
 
   _BANDWIDTH_RE = re.compile(BANDWIDTH_PATTERN)
 
@@ -101,91 +100,63 @@ class TrafficShaper(object):
     if (self.up_bandwidth == '0' and self.down_bandwidth == '0' and
         self.delay_ms == '0' and self.packet_loss_rate == '0'):
       return
+    if not self.dns_port and not self.port:
+      raise TrafficShaperException('No ports on which to shape traffic.')
 
+    ports = ','.join(str(p) for p in (self.port, self.dns_port) if p)
     queue_size = self.platformsettings.get_ipfw_queue_slots()
-
-    # To distribute full delay across the uplink and downlink bandwidths evenly.
-    half_delay_ms = int(self.delay_ms) / 2
+    half_delay_ms = int(self.delay_ms) / 2  # split over up/down links
 
     try:
-      # Configure DNS shaping.
-      if self.dns_port:
-        self.platformsettings.ipfw(
-            'pipe', self._DNS_PIPE,
-            'config',
-            'bw', '0',
-            'delay', half_delay_ms,
-            'plr', self.packet_loss_rate,
-            )
-        self.platformsettings.ipfw(
-            'add',
-            'pipe', self._DNS_PIPE,
-            'udp',
-            'from', 'any',
-            'to', self.host,
-            'out',
-            'dst-port', self.dns_port,
-            )
-        self.platformsettings.ipfw(
-            'add',
-            'pipe', self._DNS_PIPE,
-            'udp',
-            'from', self.host,
-            'to', 'any',
-            'out',
-            'src-port', self.dns_port,
-            )
+      # Configure upload shaping.
+      self.platformsettings.ipfw(
+          'pipe', self._UPLOAD_PIPE,
+          'config',
+          'bw', self.up_bandwidth,
+          'delay', half_delay_ms,
+          )
+      self.platformsettings.ipfw(
+          'queue', self._UPLOAD_QUEUE,
+          'config',
+          'pipe', self._UPLOAD_PIPE,
+          'plr', self.packet_loss_rate,
+          'queue', queue_size,
+          'mask', 'src-port', '0xffff',
+          )
+      self.platformsettings.ipfw(
+          'add',
+          'queue', self._UPLOAD_QUEUE,
+          'ip',
+          'from', 'any',
+          'to', self.host,
+          'out',
+          'dst-port', ports,
+          )
 
-      if self.port:
-        # Configure upload shaping.
-        self.platformsettings.ipfw(
-            'pipe', self._UPLOAD_PIPE,
-            'config',
-            'bw', self.up_bandwidth,
-            'delay', half_delay_ms,
-            )
-        self.platformsettings.ipfw(
-            'queue', self._UPLOAD_QUEUE,
-            'config',
-            'pipe', self._UPLOAD_PIPE,
-            'plr', self.packet_loss_rate,
-            'queue', queue_size,
-            'mask', 'src-port', '0xffff',
-            )
-        self.platformsettings.ipfw(
-            'add',
-            'queue', self._UPLOAD_QUEUE,
-            'tcp',
-            'from', 'any',
-            'to', self.host,
-            'out',
-            'dst-port', self.port,
-            )
-
-        # Configure download shaping.
-        self.platformsettings.ipfw(
-            'pipe', self._DOWNLOAD_PIPE,
-            'config',
-            'bw', self.down_bandwidth,
-            'delay', half_delay_ms,
-            )
-        self.platformsettings.ipfw(
-            'queue', self._DOWNLOAD_QUEUE,
-            'config',
-            'pipe', self._DOWNLOAD_PIPE,
-            'plr', self.packet_loss_rate,
-            'queue', queue_size,
-            'mask', 'dst-port', '0xffff',
-            )
-        self.platformsettings.ipfw(
-            'add',
-            'queue', self._DOWNLOAD_QUEUE,
-            'tcp',
-            'from', self.host,
-            'to', 'any',
-            'out',
-            'src-port', self.port,
-            )
+      # Configure download shaping.
+      self.platformsettings.ipfw(
+          'pipe', self._DOWNLOAD_PIPE,
+          'config',
+          'bw', self.down_bandwidth,
+          'delay', half_delay_ms,
+          )
+      self.platformsettings.ipfw(
+          'queue', self._DOWNLOAD_QUEUE,
+          'config',
+          'pipe', self._DOWNLOAD_PIPE,
+          'plr', self.packet_loss_rate,
+          'queue', queue_size,
+          'mask', 'dst-port', '0xffff',
+          )
+      self.platformsettings.ipfw(
+          'add',
+          'queue', self._DOWNLOAD_QUEUE,
+          'ip',
+          'from', self.host,
+          'to', 'any',
+          'out',
+          'src-port', ports,
+          )
       logging.info('Started shaping traffic')
     except Exception, e:
       raise TrafficShaperException('Unable to shape traffic: %s' % e)

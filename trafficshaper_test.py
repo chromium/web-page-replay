@@ -69,9 +69,9 @@ class TimedUdpHandler(SocketServer.DatagramRequestHandler):
   """UDP handler that returns the time when the request was handled."""
 
   def handle(self):
-    start_time = self.server.timer()
     data = self.rfile.read()
-    self.wfile.write(str(start_time))
+    read_time = self.server.timer()
+    self.wfile.write(str(read_time))
 
 
 class TimedTcpHandler(SocketServer.StreamRequestHandler):
@@ -93,10 +93,14 @@ class TimedTcpHandler(SocketServer.StreamRequestHandler):
     self.wfile.write(contents)
 
 
-class TestUdpServer(SocketServer.ThreadingUDPServer, daemonserver.DaemonServer):
+class TimedUdpServer(SocketServer.ThreadingUDPServer,
+                     daemonserver.DaemonServer):
   """A simple UDP server similar to dnsproxy."""
 
-  def __init__(self, host, port, timer):
+  # Override SocketServer.TcpServer setting to avoid intermittent errors.
+  allow_reuse_address = True
+
+  def __init__(self, host, port, timer=DEFAULT_TIMER):
     SocketServer.ThreadingUDPServer.__init__(
         self, (host, port), TimedUdpHandler)
     self.timer = timer
@@ -108,6 +112,9 @@ class TestUdpServer(SocketServer.ThreadingUDPServer, daemonserver.DaemonServer):
 class TimedTcpServer(SocketServer.ThreadingTCPServer,
                      daemonserver.DaemonServer):
   """A simple TCP server similar to httpproxy."""
+
+  # Override SocketServer.TcpServer setting to avoid intermittent errors.
+  allow_reuse_address = True
 
   def __init__(self, host, port, timer=DEFAULT_TIMER):
     SocketServer.ThreadingTCPServer.__init__(
@@ -154,7 +161,7 @@ class TcpTrafficShaperTest(TimedTestCase):
     platform_settings = platformsettings.get_platform_settings()
     self.host = platform_settings.get_server_ip_address()
     self.port = TEST_HTTP_PORT
-    self.socket_creator = TcpTestSocketCreator(self.host, self.port)
+    self.tcp_socket_creator = TcpTestSocketCreator(self.host, self.port)
     self.timer = DEFAULT_TIMER
 
   def TrafficShaper(self, **kwargs):
@@ -164,7 +171,7 @@ class TcpTrafficShaperTest(TimedTestCase):
   def GetTcpSendTimeMs(self, num_bytes):
     """Return time in milliseconds to send |num_bytes|."""
 
-    with self.socket_creator as s:
+    with self.tcp_socket_creator as s:
       start_time = self.timer()
       request_data = '\x00' * num_bytes
 
@@ -177,7 +184,7 @@ class TcpTrafficShaperTest(TimedTestCase):
   def GetTcpReceiveTimeMs(self, num_bytes):
     """Return time in milliseconds to receive |num_bytes|."""
 
-    with self.socket_creator as s:
+    with self.tcp_socket_creator as s:
       s.sendall('%s%s\n' % (RESPONSE_SIZE_KEY, num_bytes))
       # TODO(slamm): Figure out why partial is shutdown needed to make it work.
       s.shutdown(socket.SHUT_WR)
@@ -196,9 +203,9 @@ class TcpTrafficShaperTest(TimedTestCase):
       for delay_ms in (100, 175):
         with self.TrafficShaper(delay_ms=delay_ms):
           start_time = self.timer()
-          with self.socket_creator:
+          with self.tcp_socket_creator:
             connect_time = GetElapsedMs(start_time, self.timer())
-        self.assertAlmostEqual(delay_ms, connect_time)
+        self.assertAlmostEqual(delay_ms, connect_time, tolerance=0.12)
 
   def testTcpUploadShaping(self):
     """Verify that 'up' bandwidth is shaped on TCP connections."""
@@ -225,15 +232,48 @@ class TcpTrafficShaperTest(TimedTestCase):
 
 class UdpTrafficShaperTest(TimedTestCase):
 
+  def setUp(self):
+    platform_settings = platformsettings.get_platform_settings()
+    self.host = platform_settings.get_server_ip_address()
+    self.dns_port = TEST_DNS_PORT
+    self.timer = DEFAULT_TIMER
+
+  def TrafficShaper(self, **kwargs):
+    return trafficshaper.TrafficShaper(
+        host=self.host, port=None, dns_port=self.dns_port, **kwargs)
+
+  def GetUdpSendReceiveTimesMs(self):
+    """Return time in milliseconds to send |num_bytes|."""
+    start_time = self.timer()
+    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_socket.sendto('test data\n', (self.host, self.dns_port))
+    read_time = udp_socket.recv(1024)
+    return (GetElapsedMs(start_time, read_time),
+            GetElapsedMs(read_time, self.timer()))
+
   def testUdpDelay(self):
-    # TODO(slamm): write udp delay test
-    pass
+    for delay_ms in (100, 170):
+      expected_ms = delay_ms / 2
+      with TimedUdpServer(self.host, self.dns_port):
+        with self.TrafficShaper(delay_ms=delay_ms):
+          send_ms, receive_ms = self.GetUdpSendReceiveTimesMs()
+          self.assertAlmostEqual(expected_ms, send_ms, tolerance=0.10)
+          self.assertAlmostEqual(expected_ms, receive_ms, tolerance=0.10)
+
 
   def testUdpInterleavedDelay(self):
     # TODO(slamm): write udp interleaved udp delay test
     pass
 
 
+class TcpAndUdpTrafficShaperTest(TimedTestCase):
+  # TODO(slamm): Test concurrent TCP and UDP traffic
+  pass
+
+
+# TODO(slamm): Packet loss rate (try different ports)
+
 
 if __name__ == '__main__':
+  #logging.getLogger().setLevel(logging.DEBUG)
   unittest.main()
