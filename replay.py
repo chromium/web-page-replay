@@ -128,8 +128,10 @@ def main(options, replay_filename):
   if options.dns_forwarding:
     dns_class = dnsproxy.DnsProxyServer
 
+  use_dns_forwarding = options.dns_forwarding and not options.server_mode
+
   try:
-    with dns_class(options.dns_forwarding, dns_passthrough_filter, host):
+    with dns_class(use_dns_forwarding, dns_passthrough_filter, host):
       with web_server_class(http_archive_fetch, custom_handlers,
                             **web_server_kwargs):
         with trafficshaper.TrafficShaper(
