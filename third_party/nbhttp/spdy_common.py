@@ -33,10 +33,18 @@ THE SOFTWARE.
 
 import struct
 
-import c_zlib
+compressed_hdrs = True
+try:
+  import c_zlib
+except TypeError:
+  # c_zlib loads "libz". However, that fails on Windows.
+  compressed_hdrs = False
+  import sys
+  print >>sys.stderr, (
+      'WARNING: sdpy_common: import c_zlib failed. Using uncompressed headers.')
+
 from http_common import dummy
 
-compressed_hdrs = True
 # There is a null character ('\0') at the end of the dictionary. The '\0' might
 # be removed in future spdy versions.
 dictionary = \
