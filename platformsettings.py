@@ -394,14 +394,16 @@ Next
 
   def get_mac_address(self, ip):
     """Return the MAC address for the given ip."""
+    ip_re = re.compile(r'^\s*IP(?:v4)? Address[ .]+:\s+([0-9.]+)')
     for line in self._ipconfig('/all').splitlines():
       if line[:1].isalnum():
         current_ip = None
         current_mac = None
       elif ':' in line:
         line = line.strip()
-        if line.startswith('IP Address'):
-          current_ip = line.split(':', 1)[1].lstrip()
+        ip_match = ip_re.match(line)
+        if ip_match:
+          current_ip = ip_match.group(1)
         elif line.startswith('Physical Address'):
           current_mac = line.split(':', 1)[1].lstrip()
         if current_ip == ip and current_mac:

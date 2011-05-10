@@ -1,0 +1,117 @@
+#!/usr/bin/env python
+# Copyright 2011 Google Inc. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Unit tests for platformsettings.
+
+Usage:
+$ ./platformsettings_test.py
+"""
+
+import unittest
+
+import platformsettings
+
+WINDOWS_7_IP = '172.11.25.170'
+WINDOWS_7_MAC = '00-1A-44-DA-88-C0'
+WINDOWS_7_IPCONFIG = """
+Windows IP Configuration
+
+   Host Name . . . . . . . . . . . . : THEHOST1-W
+   Primary Dns Suffix  . . . . . . . : something.example.com
+   Node Type . . . . . . . . . . . . : Hybrid
+   IP Routing Enabled. . . . . . . . : No
+   WINS Proxy Enabled. . . . . . . . : No
+   DNS Suffix Search List. . . . . . : example.com
+                                       another.example.com
+
+Ethernet adapter Local Area Connection:
+
+   Connection-specific DNS Suffix  . : somethingexample.com
+   Description . . . . . . . . . . . : Int PRO/1000 MT Network Connection
+   Physical Address. . . . . . . . . : %(mac_addr)s
+   DHCP Enabled. . . . . . . . . . . : Yes
+   Autoconfiguration Enabled . . . . : Yes
+   IPv6 Address. . . . . . . . . . . : 1234:0:1000:1200:839f:d256:3a6c:210(Preferred)
+   Temporary IPv6 Address. . . . . . : 2143:0:2100:1800:38f9:2d65:a3c6:120(Preferred)
+   Link-local IPv6 Address . . . . . : abcd::1234:1a33:b2cc:238%%18(Preferred)
+   IPv4 Address. . . . . . . . . . . : %(ip_addr)s(Preferred)
+   Subnet Mask . . . . . . . . . . . : 255.255.248.0
+   Lease Obtained. . . . . . . . . . : Thursday, April 28, 2011 9:40:22 PM
+   Lease Expires . . . . . . . . . . : Tuesday, May 10, 2011 12:15:48 PM
+   Default Gateway . . . . . . . . . : abcd::2:37ee:ef70:56%%18
+                                       172.11.25.254
+   DHCP Server . . . . . . . . . . . : 172.11.22.33
+   DNS Servers . . . . . . . . . . . : 8.8.4.4
+   NetBIOS over Tcpip. . . . . . . . : Enabled
+""" % { 'ip_addr': WINDOWS_7_IP, 'mac_addr': WINDOWS_7_MAC }
+
+WINDOWS_XP_IP = '172.1.2.3'
+WINDOWS_XP_MAC = '00-34-B8-1F-FA-70'
+WINDOWS_XP_IPCONFIG = """
+Windows IP Configuration
+
+        Host Name . . . . . . . . . . . . : HOSTY-0
+        Primary Dns Suffix  . . . . . . . :
+        Node Type . . . . . . . . . . . . : Unknown
+        IP Routing Enabled. . . . . . . . : No
+        WINS Proxy Enabled. . . . . . . . : No
+        DNS Suffix Search List. . . . . . : example.com
+
+Ethernet adapter Local Area Connection 2:
+
+        Connection-specific DNS Suffix  . : example.com
+        Description . . . . . . . . . . . : Int Adapter (PILA8470B)
+        Physical Address. . . . . . . . . : %(mac_addr)s
+        Dhcp Enabled. . . . . . . . . . . : Yes
+        Autoconfiguration Enabled . . . . : Yes
+        IP Address. . . . . . . . . . . . : %(ip_addr)s
+        Subnet Mask . . . . . . . . . . . : 255.255.254.0
+        Default Gateway . . . . . . . . . : 172.1.2.254
+        DHCP Server . . . . . . . . . . . : 172.1.3.241
+        DNS Servers . . . . . . . . . . . : 172.1.3.241
+                                            8.8.8.8
+                                            8.8.4.4
+        Lease Obtained. . . . . . . . . . : Thursday, April 07, 2011 9:14:55 AM
+        Lease Expires . . . . . . . . . . : Thursday, April 07, 2011 1:14:55 PM
+""" % { 'ip_addr': WINDOWS_XP_IP, 'mac_addr': WINDOWS_XP_MAC }
+
+
+class Win7Settings(platformsettings.WindowsPlatformSettings):
+  @classmethod
+  def _ipconfig(cls, *args):
+    if args == ('/all',):
+      return WINDOWS_7_IPCONFIG
+    raise RuntimeError
+
+class WinXpSettings(platformsettings.WindowsPlatformSettings):
+  @classmethod
+  def _ipconfig(cls, *args):
+    if args == ('/all',):
+      return WINDOWS_XP_IPCONFIG
+    raise RuntimeError
+
+
+class WindowsPlatformSettingsTest(unittest.TestCase):
+  def test_get_mac_address_xp(self):
+    self.assertEqual(WINDOWS_XP_MAC,
+                     WinXpSettings().get_mac_address(WINDOWS_XP_IP))
+
+  def test_get_mac_address_7(self):
+    self.assertEqual(WINDOWS_7_MAC,
+                     Win7Settings().get_mac_address(WINDOWS_7_IP))
+
+
+if __name__ == '__main__':
+  unittest.main()
