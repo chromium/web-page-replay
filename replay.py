@@ -80,9 +80,34 @@ def resolve_dns_to_remote_replay_server(platform_settings, dnsproxy_ip):
     platform_settings.restore_primary_dns()
 
 
+def configure_logging(platform_settings, log_level_name, log_file_name=None):
+  """Configure logging level and format.
+
+  Args:
+    log_level_name: 'debug', 'info', 'warning', 'error', or 'critical'.
+    log_file_name: a file name
+  """
+  if logging.root.handlers:
+    logging.critical('A logging method (e.g. "logging.warn(...)")'
+                     ' was called before logging was configured.')
+  log_level = getattr(logging, log_level_name.upper())
+  log_format = '%(asctime)s %(levelname)s %(message)s'
+  logging.basicConfig(level=log_level, format=log_format)
+  logger = logging.getLogger()
+  if log_file_name:
+    fh = logging.FileHandler(log_file_name)
+    fh.setLevel(log_level)
+    fh.setFormatter(logging.Formatter(log_format))
+    logger.addHandler(fh)
+  system_handler = platform_settings.get_system_logging_handler()
+  if system_handler:
+    logger.addHandler(system_handler)
+
 def main(options, replay_filename):
   exit_status = 0
   platform_settings = platformsettings.get_platform_settings()
+  configure_logging(platform_settings, options.log_level, options.log_file)
+
   if options.server:
     resolve_dns_to_remote_replay_server(platform_settings, options.server)
     return exit_status
@@ -147,7 +172,8 @@ def main(options, replay_filename):
   except KeyboardInterrupt:
     logging.info('Shutting down.')
   except (dnsproxy.DnsProxyException,
-          trafficshaper.TrafficShaperException) as e:
+          trafficshaper.TrafficShaperException,
+          platformsettings.DnsUpdateError) as e:
     logging.critical(e)
     exit_status = 1
   except:
@@ -157,26 +183,6 @@ def main(options, replay_filename):
     http_archive.Persist(replay_filename)
     logging.info('Saved %d responses to %s', len(http_archive), replay_filename)
   return exit_status
-
-
-def configure_logging(log_level_name, log_file_name=None):
-  """Configure logging level and format.
-
-  Args:
-    log_level_name: 'debug', 'info', 'warning', 'error', or 'critical'.
-    log_file_name: a file name
-  """
-  if logging.root.handlers:
-    logging.critical('A logging method (e.g. "logging.warn(...)")'
-                     ' was called before logging was configured.')
-  log_level = getattr(logging, log_level_name.upper())
-  log_format = '%(asctime)s %(levelname)s %(message)s'
-  logging.basicConfig(level=log_level, format=log_format)
-  if log_file_name:
-    fh = logging.FileHandler(log_file_name)
-    fh.setLevel(log_level)
-    fh.setFormatter(logging.Formatter(log_format))
-    logging.getLogger().addHandler(fh)
 
 
 if __name__ == '__main__':
@@ -297,8 +303,6 @@ if __name__ == '__main__':
   option_parser.add_option_group(harness_group)
 
   options, args = option_parser.parse_args()
-
-  configure_logging(options.log_level, options.log_file)
 
   if options.server:
     replay_filename = None

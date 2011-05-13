@@ -135,6 +135,10 @@ class PlatformSettings(object):
   def unconfigure_loopback(self):
     pass
 
+  def get_system_logging_handler(self):
+    """Return a handler for the logging module (optional)."""
+    return None
+
 
 class PosixPlatformSettings(PlatformSettings):
   _IPFW_BIN = 'ipfw'
@@ -425,6 +429,21 @@ Next
     if self.mac_address:
       self._arp('-d', self.ip)
       self._route('delete', self.ip, self.ip, 'mask', '255.255.255.255')
+
+  def get_system_logging_handler(self):
+    """Return a handler for the logging module (optional).
+
+    For Windows, output can be viewed with DebugView.
+    http://technet.microsoft.com/en-us/sysinternals/bb896647.aspx
+    """
+    import ctypes
+    output_debug_string = ctypes.windll.kernel32.OutputDebugStringA
+    output_debug_string.argtypes = [ctypes.c_char_p]
+    class DebugViewHandler(logging.Handler):
+      def emit(self, record):
+        output_debug_string(self.format(record))
+    return DebugViewHandler()
+
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
   _IPFW_BIN = r'third_party\ipfw_win32\ipfw.exe'
