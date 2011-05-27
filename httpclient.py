@@ -93,12 +93,6 @@ class RealHttpFetch(object):
        [response_body_chunk_1, response_body_chunk_2, ...])
       # If the response did not use chunked encoding, there is only one chunk.
     """
-    # TODO(tonyg): Strip sdch from the request headers because we can't
-    # guarantee that the dictionary will be recorded, so replay may not work.
-    if 'accept-encoding' in headers:
-      headers['accept-encoding'] = headers['accept-encoding'].replace(
-          'sdch', '')
-
     logging.debug('RealHttpRequest: %s %s', request.host, request.path)
     host_ip = self._real_dns_lookup(request.host)
     if not host_ip:
@@ -187,9 +181,12 @@ class ReplayHttpArchiveFetch(object):
     """
     response = self.http_archive.get(request)
     if not response:
+      reason = str(request)
       if self.use_diff_on_unknown_requests:
-        reason = self.http_archive.diff(request) or request
-      else:
-        reason = request
+        diff = self.http_archive.diff(request)
+        if diff:
+          reason += (
+              "\nNearest request diff "
+              "('-' for archived request, '+' for current request):\n%s" % diff)
       logging.warning('Could not replay: %s', reason)
     return response

@@ -16,7 +16,6 @@
 import BaseHTTPServer
 import daemonserver
 import httparchive
-import httpclient  # wpr httplib wrapper
 import logging
 import os
 import socket

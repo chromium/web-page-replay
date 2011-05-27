@@ -81,6 +81,7 @@ DETERMINISTIC_SCRIPT = """
 
 
 class HttpArchiveException(Exception):
+  """Base class for all exceptions in httparchive."""
   pass
 
 class InjectionFailedException(HttpArchiveException):
@@ -101,16 +102,13 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
   """
 
   def get_requests(self, command=None, host=None, path=None):
-    """Retruns a list of all requests matching giving params."""
+    """Return a list of requests that match the given args."""
     return [r for r in self if r.matches(command, host, path)]
 
   def ls(self, command=None, host=None, path=None):
     """List all URLs that match given params."""
-    out = StringIO.StringIO()
-    for request in self.get_requests(command, host, path):
-      print >>out, '%s %s%s %s' % (request.command, request.host, request.path,
-                                   request.headers)
-    return out.getvalue()
+    return ''.join(sorted(
+        "%s\n" % r for r in self.get_requests(command, host, path)))
 
   def cat(self, command=None, host=None, path=None):
     """Print the contents of all URLs that match given params."""
@@ -161,49 +159,112 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     os.remove(tmp_file.name)
 
   def diff(self, request):
-    request_repr = request.verbose_repr()
-    best_similarity = None
-    best_candidate_repr = None
-    for candidate in self.get_requests(request.command, request.host):
-      candidate_repr = candidate.verbose_repr()
-      similarity = difflib.SequenceMatcher(a=request_repr,
-                                           b=candidate_repr).ratio()
-      if best_similarity is None or similarity > best_similarity:
-        best_similarity = similarity
-        best_candidate_repr = candidate_repr
+    """Diff the given request to the closest matching request in the archive.
 
-    delta = None
-    if best_candidate_repr:
-      delta = ''.join(difflib.ndiff(best_candidate_repr.splitlines(1),
-                                    request_repr.splitlines(1)))
-    return delta
+    Args:
+      request: an ArchiveHttpRequest
+    Returns:
+      If a close match is found, return a textual diff between the requests.
+      Otherwise, return None.
+    """
+    def req_lines(req):
+      """Format request to make diffs easier to read.
+      Args:
+        req: an ArchiveHttpRequest
+      Returns:
+        Example:
+        ['GET www.example.com/path\n', 'Header-Key: header value\n', ...]
+      """
+      parts = ['%s %s%s\n' % (req.command, req.host, req.path)]
+      if req.request_body:
+        parts.append('%s\n' % req.request_body)
+      for k, v in req.headers:
+        k = '-'.join(x.capitalize() for x in k.split('-'))
+        parts.append('%s: %s\n' % (k, v))
+      return parts
+    best_match = None
+    request_lines = req_lines(request)
+    matcher = difflib.SequenceMatcher(b=''.join(request_lines))
+    for candidate in self.get_requests(request.command, request.host):
+      candidate_lines = req_lines(candidate)
+      matcher.set_seq1(''.join(candidate_lines))
+      best_match = max(best_match, (matcher.ratio(), candidate_lines))
+    if best_match:
+      return ''.join(difflib.ndiff(best_match[1], request_lines))
+    return None
 
 
 class ArchivedHttpRequest(object):
+  """Record all the state that goes into a request.
+
+  ArchivedHttpRequest instances are considered immutable so they can
+  serve as keys for HttpArchive instances.
+  (The immutability is not enforced.)
+
+  Upon creation, some headers are edited or dropped to allow resource
+  to be played back in a wider variety of circumstances (e.g. to different
+  user agents).
+
+  The full headers are still available via the 'full_headers' attribute.
+  The full headers get pickled to disk to help facilitate debugging.
+  """
+
   def __init__(self, command, host, path, request_body, headers):
+    """Initialize an ArchivedHttpRequest.
+
+    Args:
+      command: a string (e.g. 'GET' or 'POST').
+      host: a host name (e.g. 'www.google.com').
+      path: a request path (e.g. '/search?q=dogs').
+      request_body: a request body string for a POST or None.
+      headers: {key: value, ...} where key and value are strings.
+    """
     self.command = command
     self.host = host
     self.path = path
     self.request_body = request_body
-    self.headers = self._FuzzHeaders(headers)
+    self.headers = self._TrimHeaders(headers)
+    self.full_headers = headers
+
+  def __str__(self):
+    return '%s %s%s %s' % (self.command, self.host, self.path, self.headers)
 
   def __repr__(self):
-    return repr((self.command, self.host, self.path, self.request_body,
-                 self.headers))
+    return repr(
+        (self.command, self.host, self.path, self.request_body, self.headers))
 
   def __hash__(self):
-    return hash(self.__repr__())
+    """Return a integer hash to use for hashed collections including dict."""
+    return hash(repr(self))
 
   def __eq__(self, other):
-    return self.__repr__() == other.__repr__()
+    """Define the __eq__ method to match the hash behavior."""
+    return repr(self) == repr(other)
 
   def __setstate__(self, state):
+    """Influence how to unpickle.
+
+    Args:
+      state: a dictionary for __dict__
+    """
     if 'headers' not in state:
-      error_msg = ('Archived HTTP requests are missing headers. Your HTTP '
-                   'archive is likely from a previous version and must be '
-                   'recorded again.')
-      raise Exception(error_msg)
-    self.__dict__ = state
+      raise HttpArchiveException(
+          'Archived HTTP request is missing "headers". The HTTP archive is'
+          ' likely from a previous version and must be re-recorded.')
+    if 'full_headers' not in state:
+      state['full_headers'] = state['headers']
+    state['headers'] = self._TrimHeaders(dict(state['full_headers']))
+    self.__dict__.update(state)
+
+  def __getstate__(self):
+    """Influence how to pickle.
+
+    Returns:
+      a dict to use for pickling
+    """
+    state = self.__dict__.copy()
+    del state['headers']
+    return state
 
   def matches(self, command=None, host=None, path=None):
     """Returns true iff the request matches all parameters."""
@@ -211,18 +272,17 @@ class ArchivedHttpRequest(object):
             (host is None or host == self.host) and
             (path is None or path == self.path))
 
-  def verbose_repr(self):
-    return '\n'.join([str(x) for x in
-        [self.command, self.host, self.path, self.request_body] + self.headers])
-
-  def _FuzzHeaders(self, headers):
+  @classmethod
+  def _TrimHeaders(cls, headers):
     """Removes headers that are known to cause problems during replay.
 
     These headers are removed for the following reasons:
     - accept: Causes problems with www.bing.com. During record, CSS is fetched
               with *. During replay, it's text/css.
+    - accept-charset, accept-language, referer: vary between clients.
     - connection, method, scheme, url, version: Cause problems with spdy.
     - cookie: Extremely sensitive to request/response order.
+    - keep-alive: Not supported by Web Page Replay.
     - user-agent: Changes with every Chrome version.
 
     Another variant to consider is dropping only the value from the header.
@@ -231,36 +291,29 @@ class ArchivedHttpRequest(object):
     is made.
 
     Args:
-      headers: Dictionary of String -> String headers to values.
+      headers: {header_key: header_value, ...}
 
     Returns:
-      Dictionary of headers, with undesirable headers removed.
+      [(header_key, header_value), ...]  # (with undesirable headers removed)
     """
-    fuzzed_headers = headers.copy()
-    undesirable_keys = ['accept', 'connection', 'cookie', 'method', 'scheme',
-                        'url', 'version', 'user-agent']
-    keys_to_delete = []
-    for key in fuzzed_headers:
-      if key.lower() in undesirable_keys:
-        keys_to_delete.append(key)
-    for key in keys_to_delete:
-      del fuzzed_headers[key]
-    return [(k, fuzzed_headers[k]) for k in sorted(fuzzed_headers.keys())]
+    # TODO(tonyg): Strip sdch from the request headers because we can't
+    # guarantee that the dictionary will be recorded, so replay may not work.
+    if 'accept-encoding' in headers:
+      headers['accept-encoding'] = headers['accept-encoding'].replace(
+          'sdch', '')
+      # A little clean-up
+      if headers['accept-encoding'].endswith(','):
+        headers['accept-encoding'] = headers['accept-encoding'][:-1]
+    undesirable_keys = [
+        'accept', 'accept-charset', 'accept-language',
+        'connection', 'cookie', 'keep-alive', 'method',
+        'referer', 'scheme', 'url', 'version', 'user-agent']
+    return sorted([(k, v) for k, v in headers.items()
+                   if k.lower() not in undesirable_keys])
 
 
 class ArchivedHttpResponse(object):
-  """HTTPResponse objects.
-
-  ArchivedHttpReponse instances have the following attributes:
-    version: HTTP protocol version used by server.
-        10 for HTTP/1.0, 11 for HTTP/1.1 (same as httplib).
-    status: Status code returned by server (e.g. 200).
-    reason: Reason phrase returned by server (e.g. "OK").
-    headers: list of (header, value) tuples.
-    response_data: list of content chunks. Concatenating all the content chunks
-        gives the complete contents (i.e. the chunks do not have any lengths or
-        delimiters).
-  """
+  """All the data needed to recreate all HTTP response."""
 
   # CHUNK_EDIT_SEPARATOR is used to edit and view text content.
   # It is not sent in responses. It is added by get_data_as_text()
@@ -268,6 +321,18 @@ class ArchivedHttpResponse(object):
   CHUNK_EDIT_SEPARATOR = '[WEB_PAGE_REPLAY_CHUNK_BOUNDARY]'
 
   def __init__(self, version, status, reason, headers, response_data):
+    """Initialize an ArchivedHttpResponse.
+
+    Args:
+      version: HTTP protocol version used by server.
+          10 for HTTP/1.0, 11 for HTTP/1.1 (same as httplib).
+      status: Status code returned by server (e.g. 200).
+      reason: Reason phrase returned by server (e.g. "OK").
+      headers: list of (header, value) tuples.
+      response_data: list of content chunks where concatenating the chunks gives
+          the complete contents (i.e. the chunks do not have any lengths or
+          delimiters).
+    """
     self.version = version
     self.status = status
     self.reason = reason

@@ -60,7 +60,7 @@ def _check_output(*args):
   output = process.communicate()[0]
   retcode = process.poll()
   if retcode:
-    raise subprocess.CalledProcessError(retcode, command_args, output=output)
+    raise subprocess.CalledProcessError(retcode, command_args)
   return output
 
 
@@ -73,18 +73,22 @@ class PlatformSettings(object):
 
   def __init__(self):
     self.original_primary_dns = None
+    self.original_cwnd = None  # original TCP congestion window
 
   def get_primary_dns(self):
-    raise NotImplementedError()
+    raise NotImplementedError
+
+  def _set_primary_dns(self):
+    raise NotImplementedError
 
   def get_original_primary_dns(self):
-    if not self.original_primary_dns:
+    if self.original_primary_dns is None:
       self.original_primary_dns = self.get_primary_dns()
+      logging.info('Saved original system DNS (%s)', self.original_primary_dns)
     return self.original_primary_dns
 
   def set_primary_dns(self, dns):
-    if not self.original_primary_dns:
-      self.original_primary_dns = self.get_primary_dns()
+    self.get_original_primary_dns()
     self._set_primary_dns(dns)
     if self.get_primary_dns() == dns:
       logging.info('Changed system DNS to %s', dns)
@@ -92,10 +96,33 @@ class PlatformSettings(object):
       raise self._get_dns_update_error()
 
   def restore_primary_dns(self):
-    if not self.original_primary_dns:
-      raise DnsUpdateError('Cannot restore because never set.')
-    self.set_primary_dns(self.original_primary_dns)
-    self.original_primary_dns = None
+    if self.original_primary_dns is not None:
+      self.set_primary_dns(self.original_primary_dns)
+      self.original_primary_dns = None
+
+  def get_cwnd(self):
+    return None
+
+  def _set_cwnd(self, args):
+    pass
+
+  def get_original_cwnd(self):
+    if not self.original_cwnd:
+      self.original_cwnd = self.get_cwnd()
+    return self.original_cwnd
+
+  def set_cwnd(self, cwnd):
+    self.get_original_cwnd()
+    self._set_cwnd(cwnd)
+    if self.get_cwnd() == cwnd:
+      logging.info("Changed cwnd to %s", cwnd)
+    else:
+      logging.error("Unable to update cwnd to %s", cwnd)
+
+  def restore_cwnd(self):
+    if self.original_cwnd is not None:
+      self.set_cwnd(self.original_cwnd)
+      self.original_cwnd = None
 
   def ipfw(self, *args):
     if self._IPFW_BIN:
@@ -103,16 +130,7 @@ class PlatformSettings(object):
       logging.debug(' '.join(ipfw_args))
       subprocess.check_call(ipfw_args)
     else:
-      raise NotImplementedError()
-
-  def is_cwnd_available(self):
-    return False
-
-  def set_cwnd(self, args):
-    logging.error("Platform does not support setting cwnd.")
-
-  def get_cwnd(self):
-    logging.error("Platform does not support getting cwnd.")
+      raise NotImplementedError
 
   def get_ipfw_queue_slots(self):
     return self._IPFW_QUEUE_SLOTS
@@ -154,7 +172,11 @@ class PosixPlatformSettings(PlatformSettings):
     return sysctl.returncode, stdout
 
   def has_sysctl(self, name):
-    return self._sysctl(name)[0] == 0
+    if not hasattr(self, 'has_sysctl_cache'):
+      self.has_sysctl_cache = {}
+    if name not in self.has_sysctl_cache:
+      self.has_sysctl_cache[name] = self._sysctl(name)[0] == 0
+    return self.has_sysctl_cache[name]
 
   def set_sysctl(self, name, value):
     rv = self._sysctl('%s=%s' % (name, value))[0]
@@ -221,22 +243,18 @@ class OsxPlatformSettings(PosixPlatformSettings):
     ])
     self._scutil(command)
 
+  def get_cwnd(self):
+    return int(self.get_sysctl(self.LOCAL_SLOWSTART_MIB_NAME))
+
+  def _set_cwnd(self, size):
+    self.set_sysctl(self.LOCAL_SLOWSTART_MIB_NAME, size)
+
   def get_loopback_mtu(self):
     config = self._ifconfig('lo0')
     match = re.search(r'\smtu\s+(\d+)', config)
     if match:
       return int(match.group(1))
-    else:
-      return None
-
-  def is_cwnd_available(self):
-    return True
-
-  def set_cwnd(self, size):
-    self.set_sysctl(self.LOCAL_SLOWSTART_MIB_NAME, size)
-
-  def get_cwnd(self):
-    return int(self.get_sysctl(self.LOCAL_SLOWSTART_MIB_NAME))
+    return None
 
   def configure_loopback(self):
     """Configure loopback to use reasonably sized frames.
@@ -244,19 +262,20 @@ class OsxPlatformSettings(PosixPlatformSettings):
     OS X uses jumbo frames by default (16KB).
     """
     TARGET_LOOPBACK_MTU = 1500
-    loopback_mtu = self.get_loopback_mtu()
-    if loopback_mtu and loopback_mtu != TARGET_LOOPBACK_MTU:
-      self.saved_loopback_mtu = loopback_mtu
+    self.original_loopback_mtu = self.get_loopback_mtu()
+    if self.original_loopback_mtu == TARGET_LOOPBACK_MTU:
+      self.original_loopback_mtu = None
+    if self.original_loopback_mtu is not None:
       self._ifconfig('lo0', 'mtu', TARGET_LOOPBACK_MTU)
       logging.debug('Set loopback MTU to %d (was %d)',
-                    TARGET_LOOPBACK_MTU, loopback_mtu)
+                    TARGET_LOOPBACK_MTU, self.original_loopback_mtu)
     else:
       logging.error('Unable to read loopback mtu. Setting left unchanged.')
 
   def unconfigure_loopback(self):
-    if hasattr(self, 'saved_loopback_mtu') and self.saved_loopback_mtu:
-      self._ifconfig('lo0', 'mtu', self.saved_loopback_mtu)
-      logging.debug('Restore loopback MTU to %d', self.saved_loopback_mtu)
+    if self.original_loopback_mtu is not None:
+      self._ifconfig('lo0', 'mtu', self.original_loopback_mtu)
+      logging.debug('Restore loopback MTU to %d', self.original_loopback_mtu)
 
 
 class LinuxPlatformSettings(PosixPlatformSettings):
@@ -298,7 +317,12 @@ class LinuxPlatformSettings(PosixPlatformSettings):
 
   def _set_primary_dns(self, dns):
     """Replace the first nameserver entry with the one given."""
-    self._write_resolve_conf(dns)
+    try:
+      self._write_resolve_conf(dns)
+    except OSError, e:
+      if 'Permission denied' in e:
+        raise self._get_dns_update_error()
+      raise
 
   def _write_resolve_conf(self, dns):
     is_first_nameserver_replaced = False
@@ -310,17 +334,19 @@ class LinuxPlatformSettings(PosixPlatformSettings):
       else:
         print line,
     if not is_first_nameserver_replaced:
-      raise DnsUpdateError('Could not find a suitable namserver entry in %s' %
+      raise DnsUpdateError('Could not find a suitable nameserver entry in %s' %
                            self.RESOLV_CONF)
 
-  def is_cwnd_available(self):
-    return self.has_sysctl(self.TCP_INIT_CWND)
-
-  def set_cwnd(self, args):
-    self.set_sysctl(self.TCP_INIT_CWND, str(args))
-
   def get_cwnd(self):
-    return self.get_sysctl(self.TCP_INIT_CWND)
+    if self.has_sysctl(self.TCP_INIT_CWND):
+      return self.get_sysctl(self.TCP_INIT_CWND)
+    else:
+      return None
+
+  def _set_cwnd(self, args):
+    if self.has_sysctl(self.TCP_INIT_CWND):
+      self.set_sysctl(self.TCP_INIT_CWND, str(args))
+
 
   def configure_loopback(self):
     """
@@ -355,27 +381,26 @@ class WindowsPlatformSettings(PlatformSettings):
     """Return DNS information:
 
     Example output:
+        Configuration for interface "Local Area Connection 3"
+        DNS servers configured through DHCP:  None
+        Register with which suffix:           Primary only
 
-    Configuration for interface "Local Area Connection 3"
-    DNS servers configured through DHCP:  None
-    Register with which suffix:           Primary only
-
-    Configuration for interface "Wireless Network Connection 2"
-    DNS servers configured through DHCP:  192.168.1.1
-    Register with which suffix:           Primary only
+        Configuration for interface "Wireless Network Connection 2"
+        DNS servers configured through DHCP:  192.168.1.1
+        Register with which suffix:           Primary only
     """
     return _check_output('netsh', 'interface', 'ip', 'show', 'dns')
-
-  def _netsh_get_interface_names(self):
-    return re.findall(r'"(.+?)"', self._netsh_show_dns())
 
   def get_primary_dns(self):
     match = re.search(r':\s+(\d+\.\d+\.\d+\.\d+)', self._netsh_show_dns())
     return match and match.group(1) or None
 
   def _set_primary_dns(self, dns):
-    vbs = """Set objWMIService = GetObject("winmgmts:{impersonationLevel=impersonate}!\\\\.\\root\\cimv2")
-Set colNetCards = objWMIService.ExecQuery("Select * From Win32_NetworkAdapterConfiguration Where IPEnabled = True")
+    vbs = """
+Set objWMIService = GetObject( _
+   "winmgmts:{impersonationLevel=impersonate}!\\\\.\\root\\cimv2")
+Set colNetCards = objWMIService.ExecQuery( _
+    "Select * From Win32_NetworkAdapterConfiguration Where IPEnabled = True")
 For Each objNetCard in colNetCards
   arrDNSServers = Array("%s")
   objNetCard.SetDNSServerSearchOrder(arrDNSServers)
@@ -415,7 +440,6 @@ Next
     return None
 
   def configure_loopback(self):
-    # TODO(slamm): use/set ip address that is compat with replay.py
     self.ip = self.get_server_ip_address()
     self.mac_address = self.get_mac_address(self.ip)
     if self.mac_address:
@@ -441,7 +465,7 @@ Next
     output_debug_string.argtypes = [ctypes.c_char_p]
     class DebugViewHandler(logging.Handler):
       def emit(self, record):
-        output_debug_string(self.format(record))
+        output_debug_string("[wpr] " + self.format(record))
     return DebugViewHandler()
 
 

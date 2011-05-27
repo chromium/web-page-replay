@@ -83,22 +83,19 @@ class TrafficShaper(object):
       raise BandwidthValueError(self.up_bandwidth)
     if not self._BANDWIDTH_RE.match(self.down_bandwidth):
       raise BandwidthValueError(self.down_bandwidth)
-
+    self.is_shaping = False
 
   def __enter__(self):
     self.platformsettings.configure_loopback()
     if self.init_cwnd != '0':
-      if self.platformsettings.is_cwnd_available():
-        self.original_cwnd = self.platformsettings.get_cwnd()
-        self.platformsettings.set_cwnd(self.init_cwnd)
-      else:
-        logging.error('Platform does not support setting cwnd.')
+      self.platformsettings.set_cwnd(self.init_cwnd)
     try:
       self.platformsettings.ipfw('-q', 'flush')
     except:
       pass
     if (self.up_bandwidth == '0' and self.down_bandwidth == '0' and
         self.delay_ms == '0' and self.packet_loss_rate == '0'):
+      logging.info('Skipped shaping traffic.')
       return
     if not self.dns_port and not self.port:
       raise TrafficShaperException('No ports on which to shape traffic.')
@@ -107,6 +104,7 @@ class TrafficShaper(object):
     queue_size = self.platformsettings.get_ipfw_queue_slots()
     half_delay_ms = int(self.delay_ms) / 2  # split over up/down links
 
+    self.is_shaping = True
     try:
       # Configure upload shaping.
       self.platformsettings.ipfw(
@@ -163,11 +161,10 @@ class TrafficShaper(object):
 
   def __exit__(self, unused_exc_type, unused_exc_val, unused_exc_tb):
     self.platformsettings.unconfigure_loopback()
-    if (self.init_cwnd != '0' and
-        self.platformsettings.is_cwnd_available()):
-      self.platformsettings.set_cwnd(self.original_cwnd)
-    try:
-      self.platformsettings.ipfw('-q', 'flush')
-      logging.info('Stopped shaping traffic')
-    except Exception, e:
-      raise TrafficShaperException('Unable to stop shaping traffic: %s' % e)
+    self.platformsettings.restore_cwnd()
+    if self.is_shaping:
+      try:
+          self.platformsettings.ipfw('-q', 'flush')
+          logging.info('Stopped shaping traffic')
+      except Exception, e:
+        raise TrafficShaperException('Unable to stop shaping traffic: %s' % e)

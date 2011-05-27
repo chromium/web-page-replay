@@ -41,6 +41,7 @@ Network simulation examples:
 
 import logging
 import optparse
+import os
 import socket
 import sys
 import time
@@ -59,25 +60,6 @@ import trafficshaper
 if sys.version < '2.6':
   print 'Need Python 2.6 or greater.'
   sys.exit(1)
-
-
-def resolve_dns_to_remote_replay_server(platform_settings, dnsproxy_ip):
-  """Set the primary dns nameserver to the replay dnsproxy.
-
-  Restore the original primary dns nameserver on exit.
-
-  Args:
-    platform_settings: an instance of platformsettings.PlatformSettings
-    dnsproxy_ip: the ip address to use as the primary dns server.
-  """
-  try:
-    platform_settings.set_primary_dns(dnsproxy_ip)
-    while True:
-      time.sleep(1)
-  except KeyboardInterrupt:
-    logging.info('Shutting down.')
-  finally:
-    platform_settings.restore_primary_dns()
 
 
 def configure_logging(platform_settings, log_level_name, log_file_name=None):
@@ -103,82 +85,185 @@ def configure_logging(platform_settings, log_level_name, log_file_name=None):
   if system_handler:
     logger.addHandler(system_handler)
 
-def main(options, replay_filename):
-  exit_status = 0
-  platform_settings = platformsettings.get_platform_settings()
-  configure_logging(platform_settings, options.log_level, options.log_file)
 
-  if options.server:
-    resolve_dns_to_remote_replay_server(platform_settings, options.server)
-    return exit_status
-  host = platform_settings.get_server_ip_address(options.server_mode)
+class ServerManager(object):
+  """Run servers until run_file is removed or an exception is raised.
 
-  web_server_class = httpproxy.HttpProxyServer
-  web_server_kwargs = {
-      'host': host,
-      'port': options.port,
-      }
-  if options.spdy:
-    assert not options.record, 'spdy cannot be used with --record.'
-    web_server_class = replayspdyserver.ReplaySpdyServer
-    web_server_kwargs['use_ssl'] = options.spdy != 'no-ssl'
-    web_server_kwargs['certfile'] = options.certfile
-    web_server_kwargs['keyfile'] = options.keyfile
+  Servers start in the order they are appended and stop in the
+  opposite order. Servers are started by calling the initializer
+  passed to ServerManager.Append() and by calling __enter__(). Once an
+  server's initializer is called successfully, the __exit__() function
+  is guaranteed to be called when ServerManager.Run() completes.
+  """
 
-  if options.record:
-    http_archive = httparchive.HttpArchive()
-    http_archive.AssertWritable(replay_filename)
-  else:
-    http_archive = httparchive.HttpArchive.Load(replay_filename)
-    logging.info('Loaded %d responses from %s',
-                 len(http_archive), replay_filename)
+  def __init__(self, run_filename=None):
+    """Initialize a server manager.
 
-  custom_handlers = customhandlers.CustomHandlers(options.screenshot_dir)
+    Args:
+      run_filename: a file name (optional)
+    """
+    self.run_filename = run_filename
+    self.initializers = []
 
-  real_dns_lookup = dnsproxy.RealDnsLookup()
+  def Append(self, initializer, *init_args, **init_kwargs):
+    """Append a server to the end of the list to run.
+
+    Servers start in the order they are appended and stop in the
+    opposite order.
+
+    Args:
+      initializer: a function that returns a server instance.
+          A server needs to implement the with-statement interface.
+      init_args: positional arguments for the initializer.
+      init_args: keyword arguments for the initializer.
+    """
+    self.initializers.append((initializer, init_args, init_kwargs))
+
+  def Run(self):
+    """Create the servers and loop.
+
+    The loop is stopped either by removing the "run file" (if used) or
+    raising an exception.
+
+    Raises:
+      any exception raised by the servers
+    """
+    self._CreateRunFile()
+
+    server_exits = []
+    exception_info = (None, None, None)
+    try:
+      for initializer, init_args, init_kwargs in self.initializers:
+        server = initializer(*init_args, **init_kwargs)
+        server_exits.insert(0, server.__exit__)
+        server.__enter__()
+
+      while not self.run_filename or os.path.exists(self.run_filename):
+        time.sleep(1)
+    except:
+      exception_info = sys.exc_info()
+    finally:
+      for server_exit in server_exits:
+        try:
+          if server_exit(*exception_info):
+            exception_info = (None, None, None)
+        except:
+          exception_info = sys.exc_info()
+
+      self._RemoveRunFile()
+
+      if exception_info != (None, None, None):
+        raise exception_info[0], exception_info[1], exception_info[2]
+
+  def _CreateRunFile(self):
+    if self.run_filename:
+      try:
+        f = open(self.run_filename, 'w')
+        f.write('')
+        f.close()
+      except IOError:
+        logging.critical(
+            'Unable to create run_file: %s', self.run_filename)
+        raise
+
+  def _RemoveRunFile(self):
+    if self.run_filename and os.path.exists(self.run_filename):
+      os.remove(self.run_filename)
+
+
+def AddDnsForward(server_manager, platform_settings, host):
+  """Forward DNS traffic."""
+
+  class DnsForward(object):
+    def __enter__(self):
+      platform_settings.set_primary_dns(host)
+      return self
+
+    def __exit__(self, *args):
+      platform_settings.restore_primary_dns()
+      return False
+  server_manager.Append(DnsForward)
+
+
+def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
+  dns_passthrough_filter = None
+  if options.dns_private_passthrough:
+    skip_passthrough_hosts = set(request.host for request in http_archive)
+    dns_passthrough_filter = dnsproxy.DnsPrivatePassthroughFilter(
+        host, real_dns_lookup, skip_passthrough_hosts)
+  server_manager.Append(dnsproxy.DnsProxyServer, dns_passthrough_filter, host)
+
+
+def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive):
   if options.record:
     http_archive_fetch = httpclient.RecordHttpArchiveFetch(
         http_archive, real_dns_lookup, options.deterministic_script)
   else:
     http_archive_fetch = httpclient.ReplayHttpArchiveFetch(
         http_archive, options.diff_unknown_requests)
+  http_custom_handlers = customhandlers.CustomHandlers(options.screenshot_dir)
 
-  dns_passthrough_filter = None
-  if options.dns_private_passthrough:
-    skip_passthrough_hosts = set(request.host for request in http_archive)
-    dns_passthrough_filter = dnsproxy.DnsPrivatePassthroughFilter(
-        real_dns_lookup, skip_passthrough_hosts)
+  if options.spdy:
+    assert not options.record, 'spdy cannot be used with --record.'
+    server_manager.Append(
+        replayspdyserver.ReplaySpdyServer, http_archive_fetch,
+        http_custom_handlers, host=host, port=options.port,
+        use_ssl=(options.spdy != 'no-ssl'), certfile=options.certfile,
+        keyfile=options.keyfile)
+  else:
+    server_manager.Append(
+        httpproxy.HttpProxyServer, http_archive_fetch, http_custom_handlers,
+        host=host, port=options.port)
 
-  dns_class = dnsproxy.DummyDnsServer
-  if options.dns_forwarding:
-    dns_class = dnsproxy.DnsProxyServer
 
-  use_dns_forwarding = options.dns_forwarding and not options.server_mode
+def AddTrafficShaper(server_manager, options, host):
+  server_manager.Append(
+      trafficshaper.TrafficShaper, host=host, port=options.shaping_port,
+      up_bandwidth=options.up, down_bandwidth=options.down,
+      delay_ms=options.delay_ms, packet_loss_rate=options.packet_loss_rate,
+      init_cwnd=options.init_cwnd)
 
+
+def main(options, replay_filename):
+  platform_settings = platformsettings.get_platform_settings()
+  configure_logging(platform_settings, options.log_level, options.log_file)
+
+  server_manager = ServerManager(options.run_file)
+  if options.server:
+    AddDnsForward(server_manager, platform_settings, options.server)
+  else:
+    host = platform_settings.get_server_ip_address(options.server_mode)
+    real_dns_lookup = dnsproxy.RealDnsLookup(
+        name_servers=[platform_settings.get_original_primary_dns()])
+    if options.record:
+      http_archive = httparchive.HttpArchive()
+      http_archive.AssertWritable(replay_filename)
+    else:
+      http_archive = httparchive.HttpArchive.Load(replay_filename)
+      logging.info('Loaded %d responses from %s',
+                   len(http_archive), replay_filename)
+
+    if options.dns_forwarding:
+      if not options.server_mode:
+        AddDnsForward(server_manager, platform_settings, host)
+      AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive)
+    AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive)
+    AddTrafficShaper(server_manager, options, host)
+
+  exit_status = 0
   try:
-    with dns_class(use_dns_forwarding, dns_passthrough_filter, host):
-      with web_server_class(http_archive_fetch, custom_handlers,
-                            **web_server_kwargs):
-        with trafficshaper.TrafficShaper(
-            host=host,
-            port=options.shaping_port,
-            up_bandwidth=options.up,
-            down_bandwidth=options.down,
-            delay_ms=options.delay_ms,
-            packet_loss_rate=options.packet_loss_rate,
-            init_cwnd=options.init_cwnd):
-          while True:
-            time.sleep(1)
+    server_manager.Run()
   except KeyboardInterrupt:
     logging.info('Shutting down.')
   except (dnsproxy.DnsProxyException,
           trafficshaper.TrafficShaperException,
           platformsettings.DnsUpdateError) as e:
-    logging.critical(e)
+    logging.critical("%s: %s", e.__class__.__name__, e)
     exit_status = 1
   except:
-    print traceback.format_exc()
+    logging.critical(traceback.format_exc())
     exit_status = 2
+
   if options.record:
     http_archive.Persist(replay_filename)
     logging.info('Saved %d responses to %s', len(http_archive), replay_filename)
@@ -260,10 +345,10 @@ if __name__ == '__main__':
       help='During a record, do not inject JavaScript to make sources of '
            'entropy such as Date() and Math.random() deterministic. CAUTION: '
            'With this option many web pages will not replay properly.')
-  harness_group.add_option('-D', '--diff_unknown_requests', default=False,
-      action='store_true',
+  harness_group.add_option('-D', '--no-diff_unknown_requests', default=True,
+      action='store_false',
       dest='diff_unknown_requests',
-      help='During replay, show a unified diff of any unknown requests against '
+      help='During replay, do not show a diff of unknown requests against '
            'their nearest match in the archive.')
   harness_group.add_option('-I', '--screenshot_dir', default=None,
       action='store',
@@ -292,14 +377,17 @@ if __name__ == '__main__':
            'port as the listen port (--port)')
   harness_group.add_option('-c', '--certfile', default='',
       action='store',
-      dest='certfile',
       type='string',
       help='Certificate file for use with SSL')
   harness_group.add_option('-k', '--keyfile', default='',
       action='store',
-      dest='keyfile',
       type='string',
       help='Key file for use with SSL')
+  harness_group.add_option('-R', '--run_file', default='',
+      action='store',
+      type='string',
+      help='File used like a deadman\'s switch. The replay server creates it, '
+           'and, if another program deletes it, the replay server shutsdown.')
   option_parser.add_option_group(harness_group)
 
   options, args = option_parser.parse_args()
