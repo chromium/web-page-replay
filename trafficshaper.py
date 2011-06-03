@@ -37,15 +37,18 @@ class BandwidthValueError(TrafficShaperException):
 
 
 class TrafficShaper(object):
+  """Manages network traffic shaping."""
 
-  _UPLOAD_PIPE = '1'     # Enforces overall upload bandwidth.
-  _UPLOAD_QUEUE = '2'    # Shares upload bandwidth among source ports.
-  _DOWNLOAD_PIPE = '3'   # Enforces overall download bandwidth.
-  _DOWNLOAD_QUEUE = '4'  # Shares download bandwidth among destination ports.
+  # Pick webpagetest-compatible values (details: http://goo.gl/oghTg).
+  _UPLOAD_PIPE = '10'      # Enforces overall upload bandwidth.
+  _UPLOAD_QUEUE = '10'     # Shares upload bandwidth among source ports.
+  _UPLOAD_RULE = '5000'    # Specifies when the upload queue is used.
+  _DOWNLOAD_PIPE = '11'    # Enforces overall download bandwidth.
+  _DOWNLOAD_QUEUE = '11'   # Shares download bandwidth among destination ports.
+  _DOWNLOAD_RULE = '5100'  # Specifies when the download queue is used.
 
   _BANDWIDTH_RE = re.compile(BANDWIDTH_PATTERN)
 
-  """Manages network traffic shaping."""
   def __init__(self,
                dont_use=None,
                host='127.0.0.1',
@@ -90,9 +93,12 @@ class TrafficShaper(object):
     if self.init_cwnd != '0':
       self.platformsettings.set_cwnd(self.init_cwnd)
     try:
-      self.platformsettings.ipfw('-q', 'flush')
+      ipfw_list = self.platformsettings.ipfw('list')
+      if not ipfw_list.startswith('65535 '):
+        logging.warn('ipfw has existing rules:\n%s', ipfw_list)
+        self._delete_rules(ipfw_list)
     except:
-      pass
+      raise
     if (self.up_bandwidth == '0' and self.down_bandwidth == '0' and
         self.delay_ms == '0' and self.packet_loss_rate == '0'):
       logging.info('Skipped shaping traffic.')
@@ -104,7 +110,6 @@ class TrafficShaper(object):
     queue_size = self.platformsettings.get_ipfw_queue_slots()
     half_delay_ms = int(self.delay_ms) / 2  # split over up/down links
 
-    self.is_shaping = True
     try:
       # Configure upload shaping.
       self.platformsettings.ipfw(
@@ -122,7 +127,7 @@ class TrafficShaper(object):
           'mask', 'src-port', '0xffff',
           )
       self.platformsettings.ipfw(
-          'add',
+          'add', self._UPLOAD_RULE,
           'queue', self._UPLOAD_QUEUE,
           'ip',
           'from', 'any',
@@ -130,6 +135,7 @@ class TrafficShaper(object):
           'out',
           'dst-port', ports,
           )
+      self.is_shaping = True
 
       # Configure download shaping.
       self.platformsettings.ipfw(
@@ -147,7 +153,7 @@ class TrafficShaper(object):
           'mask', 'dst-port', '0xffff',
           )
       self.platformsettings.ipfw(
-          'add',
+          'add', self._DOWNLOAD_RULE,
           'queue', self._DOWNLOAD_QUEUE,
           'ip',
           'from', self.host,
@@ -164,7 +170,17 @@ class TrafficShaper(object):
     self.platformsettings.restore_cwnd()
     if self.is_shaping:
       try:
-          self.platformsettings.ipfw('-q', 'flush')
+          self._delete_rules()
           logging.info('Stopped shaping traffic')
       except Exception, e:
         raise TrafficShaperException('Unable to stop shaping traffic: %s' % e)
+
+  def _delete_rules(self, ipfw_list=None):
+    if ipfw_list is None:
+      ipfw_list = self.platformsettings.ipfw('list')
+    existing_rules = set(
+        r.split()[0].lstrip('0') for r in ipfw_list.splitlines())
+    delete_rules = [r for r in (self._DOWNLOAD_RULE, self._UPLOAD_RULE)
+                    if r in existing_rules]
+    if delete_rules:
+      self.platformsettings.ipfw('delete', *delete_rules)

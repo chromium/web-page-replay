@@ -127,8 +127,7 @@ class PlatformSettings(object):
   def ipfw(self, *args):
     if self._IPFW_BIN:
       ipfw_args = [self._IPFW_BIN] + [str(a) for a in args]
-      logging.debug(' '.join(ipfw_args))
-      subprocess.check_call(ipfw_args)
+      return _check_output(*ipfw_args)
     else:
       raise NotImplementedError
 
