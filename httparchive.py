@@ -178,7 +178,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       parts = ['%s %s%s\n' % (req.command, req.host, req.path)]
       if req.request_body:
         parts.append('%s\n' % req.request_body)
-      for k, v in req.headers:
+      for k, v in req.trimmed_headers:
         k = '-'.join(x.capitalize() for x in k.split('-'))
         parts.append('%s: %s\n' % (k, v))
       return parts
@@ -201,12 +201,12 @@ class ArchivedHttpRequest(object):
   serve as keys for HttpArchive instances.
   (The immutability is not enforced.)
 
-  Upon creation, some headers are edited or dropped to allow resource
-  to be played back in a wider variety of circumstances (e.g. to different
-  user agents).
+  Upon creation, the headers are "trimmed" (i.e. edited or dropped)
+  and saved to self.trimmed_headers to allow requests to match in a wider
+  variety of playback situations (e.g. using different user agents).
 
-  The full headers are still available via the 'full_headers' attribute.
-  The full headers get pickled to disk to help facilitate debugging.
+  For unpickling, 'trimmed_headers' is recreated from 'headers'. That
+  allows for changes to the trim function and can help with debugging.
   """
 
   def __init__(self, command, host, path, request_body, headers):
@@ -223,15 +223,16 @@ class ArchivedHttpRequest(object):
     self.host = host
     self.path = path
     self.request_body = request_body
-    self.headers = self._TrimHeaders(headers)
-    self.full_headers = headers
+    self.headers = headers
+    self.trimmed_headers = self._TrimHeaders(headers)
 
   def __str__(self):
-    return '%s %s%s %s' % (self.command, self.host, self.path, self.headers)
+    return '%s %s%s %s' % (self.command, self.host, self.path,
+                           self.trimmed_headers)
 
   def __repr__(self):
-    return repr(
-        (self.command, self.host, self.path, self.request_body, self.headers))
+    return repr((self.command, self.host, self.path, self.request_body,
+                 self.trimmed_headers))
 
   def __hash__(self):
     """Return a integer hash to use for hashed collections including dict."""
@@ -244,16 +245,22 @@ class ArchivedHttpRequest(object):
   def __setstate__(self, state):
     """Influence how to unpickle.
 
+    The "full_headers" are the original request headers.  The
+    "headers" are the trimmed headers used for matching requests
+    during replay.
+
     Args:
       state: a dictionary for __dict__
     """
+    if 'full_headers' in state:
+      # Fix older version of archive.
+      state['headers'] = state['full_headers']
+      del state['full_headers']
     if 'headers' not in state:
       raise HttpArchiveException(
           'Archived HTTP request is missing "headers". The HTTP archive is'
           ' likely from a previous version and must be re-recorded.')
-    if 'full_headers' not in state:
-      state['full_headers'] = state['headers']
-    state['headers'] = self._TrimHeaders(dict(state['full_headers']))
+    state['trimmed_headers'] = self._TrimHeaders(dict(state['headers']))
     self.__dict__.update(state)
 
   def __getstate__(self):
@@ -263,7 +270,7 @@ class ArchivedHttpRequest(object):
       a dict to use for pickling
     """
     state = self.__dict__.copy()
-    del state['headers']
+    del state['trimmed_headers']
     return state
 
   def matches(self, command=None, host=None, path=None):
