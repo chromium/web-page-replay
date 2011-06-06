@@ -160,6 +160,7 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), HttpArchiveHandler)
     except Exception, e:
       logging.critical('Could not start HTTPServer on port %d: %s', port, e)
+    logging.info('Started HTTP server on %s...', self.server_address)
 
   def cleanup(self):
     try:

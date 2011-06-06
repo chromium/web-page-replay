@@ -21,13 +21,8 @@ import SocketServer
 import threading
 
 import third_party
-import dns.flags
-import dns.message
-import dns.rcode
 import dns.resolver
-import dns.rdataclass
 import dns.rdatatype
-import dns.rrset
 import ipaddr
 
 
@@ -122,7 +117,6 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
   """
 
   STANDARD_QUERY_OPERATION_CODE = 0
-  TTL_SECONDS = 60
 
   def handle(self):
     """Handle a DNS query.
@@ -133,25 +127,56 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
     support IPv6.
     """
     self.data = self.rfile.read()
-    self.query_message = dns.message.from_wire(self.data)
-    self.question = self.query_message.question[0]  # assume one question
-    self.question.rdtype = dns.rdatatype.A  # force IPv4 (AAAA is for IPv6)
-    self.domain = self.question.name
+    self.transaction_id = self.data[0]
+    self.flags = self.data[1]
+    self.qa_counts = self.data[4:6]
+    self.domain = ''
+    operation_code = (ord(self.data[2]) >> 3) & 15
+    if operation_code == self.STANDARD_QUERY_OPERATION_CODE:
+      self.wire_domain = self.data[12:]
+      self.domain = self._domain(self.wire_domain)
+    else:
+      logging.debug("DNS request with non-zero operation code: %s",
+                    operation_code)
     ip = self.server.passthrough_filter(self.domain)
-    logging.debug('dnsproxy: %s -> %s%s', self.domain, ip,
-                  ip == self.server.server_address[0] and ' (web proxy)' or '')
+    if ip is None:
+      # For failed dns resolutions, return the replay web proxy ip anyway.
+      # TODO(slamm): make failed dns resolutions return an error.
+      ip = self.server.server_address[0]
+    if ip == self.server.server_address[0]:
+      logging.debug('dnsproxy: %s -> %s (replay web proxy)', self.domain, ip)
+    else:
+      logging.debug('dnsproxy: %s -> %s', self.domain, ip)
     self.wfile.write(self.get_dns_response(ip))
 
+  @classmethod
+  def _domain(cls, wire_domain):
+    domain = ''
+    index = 0
+    length = ord(wire_domain[index])
+    while length:
+      domain += wire_domain[index + 1:index + length + 1] + '.'
+      index += length + 1
+      length = ord(wire_domain[index])
+    return domain
+
   def get_dns_response(self, ip):
-    response_message = dns.message.make_response(self.query_message)
-    response_message.flags |= dns.flags.AA | dns.flags.RA
-    if ip:
-      response_message.answer.append(
-          dns.rrset.from_text(self.domain, self.TTL_SECONDS, dns.rdataclass.IN,
-                              self.question.rdtype, ip))
-    else:
-      response_message.set_rcode(dns.rcode.NXDOMAIN)  # name error
-    return response_message.to_wire()
+    packet = ''
+    if self.domain:
+      packet = (
+          self.transaction_id +
+          self.flags +
+          '\x81\x80' +        # standard query response, no error
+          self.qa_counts * 2 + '\x00\x00\x00\x00' +  # Q&A counts
+          self.wire_domain +
+          '\xc0\x0c'          # pointer to domain name
+          '\x00\x01'          # resource record type ("A" host address)
+          '\x00\x01'          # class of the data
+          '\x00\x00\x00\x3c'  # ttl (seconds)
+          '\x00\x04' +        # resource data length (4 bytes for ip)
+          socket.inet_aton(ip)
+          )
+    return packet
 
 
 class DnsProxyServer(SocketServer.ThreadingUDPServer,
@@ -175,7 +200,7 @@ class DnsProxyServer(SocketServer.ThreadingUDPServer,
             'Unable to bind DNS server on (%s:%s)' % (host, port))
       raise
     self.passthrough_filter = passthrough_filter or (
-        lambda host: self.server_address)
+        lambda host: self.server_address[0])
     logging.info('Started DNS server on %s...', self.server_address)
 
   def cleanup(self):
