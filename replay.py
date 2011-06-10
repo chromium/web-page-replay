@@ -221,7 +221,7 @@ def AddTrafficShaper(server_manager, options, host):
       trafficshaper.TrafficShaper, host=host, port=options.shaping_port,
       up_bandwidth=options.up, down_bandwidth=options.down,
       delay_ms=options.delay_ms, packet_loss_rate=options.packet_loss_rate,
-      init_cwnd=options.init_cwnd)
+      init_cwnd=options.init_cwnd, use_loopback=not options.server_mode)
 
 
 def main(options, replay_filename):
