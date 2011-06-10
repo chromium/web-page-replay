@@ -409,11 +409,6 @@ setTimeout(function() {
           # it's there, the screenshots are shorter than they should be.
           '--disable-translate',
 
-          # TODO(tonyg): These are disabled to reduce noise. It would be nice to
-          # make the model realistic and stable enough to enable them.
-          '--disable-preconnect',
-          '--dns-prefetch-disable',
-
           '--enable-benchmarking',
           '--enable-logging',
           '--enable-experimental-extension-apis',
