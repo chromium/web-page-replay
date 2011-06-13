@@ -13,29 +13,54 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Handle special HTTP requests.
+
+/web-page-replay-generate-[RESPONSE_CODE]
+  - Return the given RESPONSE_CODE.
+/web-page-replay-post-image-[FILENAME]
+  - Save the posted image to local disk.
+/web-page-replay-command-[record|replay]
+  - Optional. Enable by calling custom_handlers.add_server_manager_handler(...).
+  - Change the server mode to either record or replay.
+    + When switching to record, the http_archive is cleared.
+    + When switching to replay, the http_archive is maintained.
+"""
+
 import base64
 import logging
 import os
 
-GENERATOR_URL_PREFIX = '/web-page-replay-generate-'
-POST_IMAGE_URL_PREFIX = '/web-page-replay-post-image-'
+COMMON_URL_PREFIX = '/web-page-replay-'
+COMMAND_URL_PREFIX = COMMON_URL_PREFIX + 'command-'
+GENERATOR_URL_PREFIX = COMMON_URL_PREFIX + 'generate-'
+POST_IMAGE_URL_PREFIX = COMMON_URL_PREFIX + 'post-image-'
 IMAGE_DATA_PREFIX = 'data:image/png;base64,'
 
 
 class CustomHandlers(object):
 
   def __init__(self, screenshot_dir=None):
-    if screenshot_dir and not os.path.exists(screenshot_dir):
-      try:
-        os.makedirs(screenshot_dir)
-      except:
-        logging.error('%s does not exist and could not be created.',
-                      screenshot_dir)
-        screenshot_dir = None
-    self.screenshot_dir = screenshot_dir
+    """Initialize CustomHandlers.
+
+    Args:
+      screenshot_dir: a path to which screenshots are saved.
+    """
+    self.handlers = [
+        (GENERATOR_URL_PREFIX, self.get_generator_url_response_code)]
+    if screenshot_dir:
+      if not os.path.exists(screenshot_dir):
+        try:
+          os.makedirs(screenshot_dir)
+        except IOError:
+          logging.error('Unable to create screenshot dir: %s', screenshot_dir)
+          screenshot_dir = None
+      if screenshot_dir:
+        self.screenshot_dir = screenshot_dir
+        self.handlers.append(
+            (POST_IMAGE_URL_PREFIX, self.handle_possible_post_image))
 
   def handle(self, request):
-    """Handles special URLs needed for the benchmark.
+    """Dispatches requests to matching handlers.
 
     Args:
       request: an http request
@@ -43,34 +68,33 @@ class CustomHandlers(object):
       If request is for a special URL, a 3-digit integer like 404.
       Otherwise, None.
     """
-    response_code = self.get_generator_url_response_code(request.path)
-    if response_code:
-      return response_code
-
-    response_code = self.handle_possible_post_image(request)
-    if response_code:
-      return response_code
-
+    for prefix, handler in self.handlers:
+      if request.path.startswith(prefix):
+        response_code = handler(request, request.path[len(prefix):])
+        if response_code:
+          return response_code
     return None
 
-  def get_generator_url_response_code(self, request_path):
+  def get_generator_url_response_code(self, request, url_suffix):
     """Parse special generator URLs for the embedded response code.
 
     Clients like perftracker can use URLs of this form to request
     a response with a particular response code.
 
     Args:
-      request_path: a string like "/foo", or "/web-page-replay-generator-404"
+      request: an ArchivedHttpRequest instance
+      url_suffix: string that is after the handler prefix (e.g. 304)
     Returns:
       On a match, a 3-digit integer like 404.
       Otherwise, None.
     """
-    prefix, response_code = request_path[:-3], request_path[-3:]
-    if prefix == GENERATOR_URL_PREFIX and response_code.isdigit():
-      return int(response_code)
-    return None
+    try:
+      response_code = int(url_suffix)
+      return response_code
+    except ValueError:
+      return None
 
-  def handle_possible_post_image(self, request):
+  def handle_possible_post_image(self, request, url_suffix):
     """If sent, saves embedded image to local directory.
 
     Expects a special url containing the filename. If sent, saves the base64
@@ -78,18 +102,14 @@ class CustomHandlers(object):
     passing in screenshot_dir to the initializer for this class.
 
     Args:
-      request: an http request
-
+      request: an ArchivedHttpRequest instance
+      url_suffix: string that is after the handler prefix (e.g. 'foo.png')
     Returns:
       On a match, a 3-digit integer response code.
       False otherwise.
     """
-    if not self.screenshot_dir:
-      return None
-
-    prefix = request.path[:len(POST_IMAGE_URL_PREFIX)]
-    basename = request.path[len(POST_IMAGE_URL_PREFIX):]
-    if prefix != POST_IMAGE_URL_PREFIX or not basename:
+    basename = url_suffix
+    if not basename:
       return None
 
     data = request.request_body
@@ -108,3 +128,39 @@ class CustomHandlers(object):
     with file(filename, 'w') as f:
       f.write(png)
     return 200
+
+  def add_server_manager_handler(self, server_manager):
+    """Add the ability to change the server mode (e.g. to record mode).
+    Args:
+      server_manager: a servermanager.ServerManager instance.
+    """
+    self.server_manager = server_manager
+    self.handlers.append(
+        (COMMAND_URL_PREFIX, self.handle_server_manager_command))
+
+  def handle_server_manager_command(self, request, url_suffix):
+    """Parse special URLs for the embedded server manager command.
+
+    Clients like webpagetest.org can use URLs of this form to change
+    the replay server from record mode to replay mode.
+
+    This handler is not in the default list of handlers. Call
+    add_server_manager_handler to add it.
+
+    In the future, this could be expanded to save or serve archive files.
+
+    Args:
+      request: an ArchivedHttpRequest instance
+      url_suffix: string that is after the handler prefix (e.g. 'record')
+    Returns:
+      200 if the command is handled.
+      Otherwise, None.
+    """
+    command = url_suffix
+    if command == 'record':
+      self.server_manager.SetRecordMode()
+      return 200
+    elif command == 'replay':
+      self.server_manager.SetReplayMode()
+      return 200
+    return None

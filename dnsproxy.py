@@ -69,37 +69,45 @@ class RealDnsLookup(object):
     self.dns_cache_lock.release()
     return ip
 
+  def ClearCache(self):
+    """Clearn the dns cache."""
+    self.dns_cache_lock.acquire()
+    self.dns_cache.clear()
+    self.dns_cache_lock.release()
 
-class DnsPrivatePassthroughFilter:
-  """Allow private hosts to resolve to their real IPs.
+
+class PrivateIpDnsLookup(object):
+  """Resolve private hosts to their real IPs and others to the Web proxy IP.
+
+  Hosts in the given http_archive will resolve to the Web proxy IP without
+  checking the real IP.
 
   This only supports IPv4 lookups.
   """
-  def __init__(self, web_proxy_ip, real_dns_lookup, skip_passthrough_hosts=()):
-    """Initialize DnsPrivatePassthroughFilter.
+  def __init__(self, web_proxy_ip, real_dns_lookup, http_archive):
+    """Initialize PrivateIpDnsLookup.
 
     Args:
       web_proxy_ip: the IP address returned by __call__ for non-private hosts.
       real_dns_lookup: a function that resolves a host to an IP.
-      skip_passthrough_hosts: an iterable of hosts that skip
-        the private determination (i.e. avoids a real dns lookup
-        for them).
+      http_archive: an instance of a HttpArchive
+        Hosts is in the archive will always resolve to the web_proxy_ip
     """
     self.web_proxy_ip = web_proxy_ip
     self.real_dns_lookup = real_dns_lookup
-    self.skip_passthrough_hosts = set(
-        host + '.' for host in skip_passthrough_hosts)
+    self.http_archive = http_archive
+    self.InitializeArchiveHosts()
 
   def __call__(self, host):
-    """Return real IPv4 for host if private.
+    """Return real IPv4 for private hosts and Web proxy IP otherwise.
 
     Args:
       host: a hostname ending with a period (e.g. "www.google.com.")
     Returns:
-      ip address as a string or None (if lookup fails)
+      IP address as a string or None (if lookup fails)
     """
     ip = self.web_proxy_ip
-    if host not in self.skip_passthrough_hosts:
+    if host not in self.archive_hosts:
       real_ip = self.real_dns_lookup(host)
       if real_ip:
         if ipaddr.IPAddress(real_ip).is_private:
@@ -107,6 +115,10 @@ class DnsPrivatePassthroughFilter:
       else:
         ip = None
     return ip
+
+  def InitializeArchiveHosts(self):
+    """Recompute the archive_hosts from the http_archive."""
+    self.archive_hosts = set('%s.' % req.host for req in self.http_archive)
 
 
 class UdpDnsHandler(SocketServer.DatagramRequestHandler):
@@ -138,7 +150,7 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
     else:
       logging.debug("DNS request with non-zero operation code: %s",
                     operation_code)
-    ip = self.server.passthrough_filter(self.domain)
+    ip = self.server.dns_lookup(self.domain)
     if ip is None:
       # For failed dns resolutions, return the replay web proxy ip anyway.
       # TODO(slamm): make failed dns resolutions return an error.
@@ -181,12 +193,11 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
 
 class DnsProxyServer(SocketServer.ThreadingUDPServer,
                      daemonserver.DaemonServer):
-  def __init__(self, passthrough_filter=None, host='', port=53):
+  def __init__(self, dns_lookup=None, host='', port=53):
     """Initialize DnsProxyServer.
 
     Args:
-      passthrough_filter: a function that resolves a host to its real IP,
-        or None, if it should resolve to the dnsproxy's address.
+      dns_lookup: a function that resolves a host to an IP address.
       host: a host string (name or IP) to bind the dns proxy and to which
         DNS requests will be resolved.
       port: an integer port on which to bind the proxy.
@@ -199,8 +210,7 @@ class DnsProxyServer(SocketServer.ThreadingUDPServer,
         raise DnsProxyException(
             'Unable to bind DNS server on (%s:%s)' % (host, port))
       raise
-    self.passthrough_filter = passthrough_filter or (
-        lambda host: self.server_address[0])
+    self.dns_lookup = dns_lookup or (lambda host: self.server_address[0])
     logging.info('Started DNS server on %s...', self.server_address)
 
   def cleanup(self):

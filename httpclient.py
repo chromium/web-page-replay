@@ -165,7 +165,7 @@ class ReplayHttpArchiveFetch(object):
     """Initialize ReplayHttpArchiveFetch.
 
     Args:
-      http_archve: an instance of a HttpArchive
+      http_archive: an instance of a HttpArchive
       use_diff_on_unknown_requests: If True, log unknown requests
         with a diff to requests that look similar.
     """
@@ -190,3 +190,38 @@ class ReplayHttpArchiveFetch(object):
               "('-' for archived request, '+' for current request):\n%s" % diff)
       logging.warning('Could not replay: %s', reason)
     return response
+
+class ControllableHttpArchiveFetch(object):
+  """Controllable fetch function that can swap between record and replay."""
+
+  def __init__(self, http_archive, real_dns_lookup, use_deterministic_script,
+               use_diff_on_unknown_requests, use_record_mode):
+    """Initialize HttpArchiveFetch.
+
+    Args:
+      http_archive: an instance of a HttpArchive
+      real_dns_lookup: a function that resolves a host to an IP.
+      use_deterministic_script: If True, attempt to inject a script,
+        when appropriate, to make JavaScript more deterministic.
+      use_diff_on_unknown_requests: If True, log unknown requests
+        with a diff to requests that look similar.
+      use_record_mode: If True, start in server in record mode.
+    """
+    self.record_fetch = RecordHttpArchiveFetch(
+        http_archive, real_dns_lookup, use_deterministic_script)
+    self.replay_fetch = ReplayHttpArchiveFetch(
+        http_archive, use_diff_on_unknown_requests)
+    if use_record_mode:
+      self.SetRecordMode()
+    else:
+      self.SetReplayMode()
+
+  def SetRecordMode(self):
+    self.fetch = self.record_fetch
+
+  def SetReplayMode(self):
+    self.fetch = self.replay_fetch
+
+  def __call__(self, *args, **kwargs):
+    """Forward calls to Replay/Record fetch functions depending on mode."""
+    return self.fetch(*args, **kwargs)
