@@ -21,6 +21,9 @@ import SocketServer
 import threading
 
 import third_party
+import dns.flags
+import dns.message
+import dns.rcode
 import dns.resolver
 import dns.rdatatype
 import ipaddr
@@ -56,9 +59,9 @@ class RealDnsLookup(object):
       return ip
     try:
       answers = self.resolver.query(hostname, rdtype)
-    except (dns.resolver.NoAnswer,
-            dns.resolver.NXDOMAIN,
-            dns.resolver.Timeout) as ex:
+    except dns.resolver.NXDOMAIN:
+      return None
+    except (dns.resolver.NoAnswer, dns.resolver.Timeout) as ex:
       logging.debug('_real_dns_lookup(%s) -> None (%s)',
                     hostname, ex.__class__.__name__)
       return None
@@ -152,14 +155,15 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
                     operation_code)
     ip = self.server.dns_lookup(self.domain)
     if ip is None:
-      # For failed dns resolutions, return the replay web proxy ip anyway.
-      # TODO(slamm): make failed dns resolutions return an error.
-      ip = self.server.server_address[0]
-    if ip == self.server.server_address[0]:
-      logging.debug('dnsproxy: %s -> %s (replay web proxy)', self.domain, ip)
+      logging.debug('dnsproxy: %s -> NXDOMAIN', self.domain)
+      response = self.get_dns_no_such_name_response()
     else:
-      logging.debug('dnsproxy: %s -> %s', self.domain, ip)
-    self.wfile.write(self.get_dns_response(ip))
+      if ip == self.server.server_address[0]:
+        logging.debug('dnsproxy: %s -> %s (replay web proxy)', self.domain, ip)
+      else:
+        logging.debug('dnsproxy: %s -> %s', self.domain, ip)
+      response = self.get_dns_response(ip)
+    self.wfile.write(response)
 
   @classmethod
   def _domain(cls, wire_domain):
@@ -190,6 +194,12 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
           )
     return packet
 
+  def get_dns_no_such_name_response(self):
+    query_message = dns.message.from_wire(self.data)
+    response_message = dns.message.make_response(query_message)
+    response_message.flags |= dns.flags.AA | dns.flags.RA
+    response_message.set_rcode(dns.rcode.NXDOMAIN)
+    return response_message.to_wire()
 
 class DnsProxyServer(SocketServer.ThreadingUDPServer,
                      daemonserver.DaemonServer):
