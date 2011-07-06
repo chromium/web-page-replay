@@ -45,20 +45,50 @@ import tempfile
 
 HTML_RE = re.compile(r'<html[^>]*>', re.IGNORECASE)
 HEAD_RE = re.compile(r'<head[^>]*>', re.IGNORECASE)
+
+# Deterministic script to inject immediately after <head> or <html> tags.
+#
+# Overrides javascript's Math.random() and Date() functions for deterministic
+# behavior.
+#
+# The initial implementation was to always increment the random/date
+# value returned after every call. However, due to latency, scripts may be
+# executed in a non-deterministic order, causing race conditions.
+#
+# Fixing the returned values as constant was also an insufficient solution,
+# due to scripts that record real time such as:
+#   while ((new Date().getTime()) < endTime)
+#
+# Therefore, we settled on a step solution where values are returned
+# count_threshold times before being incremented. In practice, tweaking
+# count_threshold is sufficient to prevent race conditions.
 DETERMINISTIC_SCRIPT = """
 <script>
   (function () {
     var orig_date = Date;
-    var x = 0;
+    var random_count = 0;
+    var date_count = 0;
+    var random_seed = 0.462;
     var time_seed = 1204251968254;
+    var random_count_threshold = 25;
+    var date_count_threshold = 25;
     Math.random = function() {
-      x += .1;
-      return (x % 1);
+      random_count++;
+      if (random_count > random_count_threshold){
+        random_seed += 0.1;
+        random_count = 1;
+      }
+      return (random_seed % 1);
     };
     Date = function() {
       if (this instanceof Date) {
+        date_count++;
+        if (date_count > date_count_threshold){
+          time_seed += 50;
+          date_count = 1;
+        }
         switch (arguments.length) {
-        case 0: return new orig_date(time_seed += 50);
+        case 0: return new orig_date(time_seed);
         case 1: return new orig_date(arguments[0]);
         default: return new orig_date(arguments[0], arguments[1],
            arguments.length >= 3 ? arguments[2] : 1,

@@ -102,7 +102,7 @@ class TrafficShaper(object):
         logging.warn('ipfw has existing rules:\n%s', ipfw_list)
         self._delete_rules(ipfw_list)
     except:
-      raise
+      pass
     if (self.up_bandwidth == '0' and self.down_bandwidth == '0' and
         self.delay_ms == '0' and self.packet_loss_rate == '0'):
       logging.info('Skipped shaping traffic.')

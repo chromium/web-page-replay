@@ -410,7 +410,7 @@ function Benchmark(url, setIds, callbackWhenFinished) {
                                      setIds_[LoadType.cold]);
 
     chrome.benchmarking.clearCache();
-    chrome.benchmarking.clearHostCache();
+    chrome.benchmarking.clearHostResolverCache();
     chrome.benchmarking.clearPredictorCache();
     chrome.benchmarking.closeConnections();
     me_.asyncClearCookies();
