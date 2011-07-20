@@ -32,6 +32,7 @@ To edit a particular URL:
 """
 
 import difflib
+import email.utils
 import httpzlib
 import logging
 import optparse
@@ -55,7 +56,7 @@ HEAD_RE = re.compile(r'<head[^>]*>', re.IGNORECASE)
 # value returned after every call. However, due to latency, scripts may be
 # executed in a non-deterministic order, causing race conditions.
 #
-# Fixing the returned values as constant was also an insufficient solution,
+# Fixing the returned values to constant was not a sufficient solution,
 # due to scripts that record real time such as:
 #   while ((new Date().getTime()) < endTime)
 #
@@ -114,6 +115,7 @@ class HttpArchiveException(Exception):
   """Base class for all exceptions in httparchive."""
   pass
 
+
 class InjectionFailedException(HttpArchiveException):
   def __init__(self, text):
     self.text = text
@@ -131,6 +133,149 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
   PersistentMixin adds CreateNew(filename), Load(filename), and Persist().
   """
 
+  def get(self, request, default=None):
+    """Return the archived response for a given request.
+
+    Does extra checking for handling some HTTP request headers.
+
+    Args:
+      request: instance of ArchivedHttpRequest
+      default: default value to return if request is not found
+
+    Returns:
+      Instance of ArchivedHttpResponse or default if no matching
+      response is found
+    """
+    if request in self:
+      return self[request]
+
+    logging.debug('Checking headers for: %s', request)
+
+    # Note: order matters! headers are checked in-order specified
+    #       by conditional_headers.
+    #       etag headers must be checked before non etag headers
+    # if-(none)-match should come first; from RFC 2068:
+    #   "If the request would, without the if-(none)-match header field,
+    #    result in anything other than a 2xx status,
+    #    then the if-(none)-match header MUST be ignored."
+    conditional_headers = [
+        'if-none-match', 'if-match',
+        'if-modified-since', 'if-unmodified-since']
+
+    matched_conditional_headers = [h for h in conditional_headers
+                                   if h in request.headers]
+
+    response = default
+    if matched_conditional_headers:
+      shortened_headers = dict((k, v) for k, v in request.headers.iteritems()
+                               if k.lower() not in conditional_headers)
+      # The request with conditional headers removed.
+      shortened_request = ArchivedHttpRequest(
+          request.command, request.host, request.path,
+          request.request_body, shortened_headers)
+      if shortened_request in self:
+        status, reason = self.handle_conditional_headers(
+            matched_conditional_headers, request, shortened_request)
+        if status == 200:
+          response = self[shortened_request]
+        else:
+          response = self.create_response(status, reason)
+      logging.debug('Checked headers, returning with %s, %s', status, reason)
+    return response
+
+
+  def handle_conditional_headers(self, matched_conditional_headers,
+                       request, shortened_request):
+    """Handles HTTP request headers properly.
+
+    Args:
+      matched_conditional_headers: headers to handle within the given request
+      request: Instance of ArchivedHttpRequest representing the original request
+      shortened_request: Instance of ArchivedHttpRequest representing the
+        original request with matched headers removed.
+
+    Returns:
+      Tuple of (status, reason) of the appropriate HTTP response
+    """
+    status, reason = 200, 'OK'
+    response = self[shortened_request]
+
+    last_modified_string = self.get_header_case_insensitive(
+        response.headers, 'last-modified')
+    last_modified = email.utils.parsedate(last_modified_string)
+    etag_response = self.get_header_case_insensitive(response.headers, 'etag')
+
+    for header in matched_conditional_headers:
+      if header == 'if-match':
+        etag_request = request.headers[header]
+        if self.entity_tag_match(etag_request, etag_response):
+          status, reason = 200, 'OK'
+        else:
+          status, reason = 412, 'Precondition Failed'
+      elif header == 'if-none-match':
+        etag_request = request.headers[header]
+        if self.entity_tag_match(etag_request, etag_response):
+          status, reason = 412, 'Precondition Failed'
+        else:
+          status, reason = 200, 'OK'
+      elif header in ('if-modified-since', 'if-unmodified-since'):
+        date_string = request.headers[header]
+        date = email.utils.parsedate(date_string)
+        # Only do checks for GET or HEAD requests (as per RFC)
+        if ((request.command.upper() not in ('GET', 'HEAD')) or
+            date is None or last_modified is None):
+          # Improperly formatted string; ignore header
+          continue
+        if ((header == 'if-modified-since' and last_modified > date) or
+            (header == 'if-unmodified-since' and last_modified < date)):
+          # Only update the status if etag check succeeds
+          if not status == 412:
+            status, reason = 200, 'OK'
+          continue
+        status, reason = 304, 'Not Modified'
+
+    return status, reason
+
+  def entity_tag_match(self, etag_request, etag_response):
+    """Determines whether the entity tags of the request/response matches.
+
+    Args:
+      etag_request: the value string of the "if-(none)-match:"
+                    portion of the request header
+      etag_response: the etag value of the response
+
+    Returns:
+      True on match, False otherwise
+    """
+    etag_response = etag_response.strip('" ')
+    for etag in etag_request.split(','):
+      etag = etag.strip('" ')
+      if etag in ('*', etag_response):
+        return True
+    return False
+
+  def get_header_case_insensitive(self, headers, key):
+    """Returns the specified key from a list of (key, value) tuples.
+
+    Args:
+      headers: a list of tuples
+      key: the key we want to search for in the list
+
+    Returns:
+      the value corresponding to the key if found, None otherwise
+    """
+    for k, v in headers:
+      if k.lower() == key.lower():
+        return v
+    return None
+
+  def create_response(self, status, reason):
+    headers = [
+        ('content-type', 'text/plain'),
+        ('content-length', str(len(reason))),
+    ]
+    return ArchivedHttpResponse(11, status, reason, headers, reason)
+
   def get_requests(self, command=None, host=None, path=None):
     """Return a list of requests that match the given args."""
     return [r for r in self if r.matches(command, host, path)]
@@ -138,7 +283,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
   def ls(self, command=None, host=None, path=None):
     """List all URLs that match given params."""
     return ''.join(sorted(
-        "%s\n" % r for r in self.get_requests(command, host, path)))
+        '%s\n' % r for r in self.get_requests(command, host, path)))
 
   def cat(self, command=None, host=None, path=None):
     """Print the contents of all URLs that match given params."""
@@ -155,7 +300,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       print >>out, 'Status: %s\nReason: %s\nheaders:\n' % (
           response.status, response.reason)
       for k, v in sorted(response.headers):
-        print >>out, "    %s: %s" % (k, v)
+        print >>out, '    %s: %s' % (k, v)
       headers = dict(response.headers)
       body = response.get_data_as_text()
       if body:
@@ -192,7 +337,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     """Diff the given request to the closest matching request in the archive.
 
     Args:
-      request: an ArchiveHttpRequest
+      request: an ArchivedHttpRequest
     Returns:
       If a close match is found, return a textual diff between the requests.
       Otherwise, return None.
@@ -260,6 +405,9 @@ class ArchivedHttpRequest(object):
     return '%s %s%s %s' % (self.command, self.host, self.path,
                            self.trimmed_headers)
 
+  def verbose(self):
+    return '%s %s%s %s' % (self.command, self.host, self.path, self.headers)
+
   def __repr__(self):
     return repr((self.command, self.host, self.path, self.request_body,
                  self.trimmed_headers))
@@ -275,8 +423,8 @@ class ArchivedHttpRequest(object):
   def __setstate__(self, state):
     """Influence how to unpickle.
 
-    The "full_headers" are the original request headers.  The
-    "headers" are the trimmed headers used for matching requests
+    "headers" are the original request headers.
+    "trimmed_headers" are the trimmed headers used for matching requests
     during replay.
 
     Args:
@@ -375,6 +523,18 @@ class ArchivedHttpResponse(object):
     self.reason = reason
     self.headers = headers
     self.response_data = response_data
+
+  def __repr__(self):
+    return repr((self.version, self.status, self.reason, sorted(self.headers),
+                 self.response_data))
+
+  def __hash__(self):
+    """Return a integer hash to use for hashed collections including dict."""
+    return hash(repr(self))
+
+  def __eq__(self, other):
+    """Define the __eq__ method to match the hash behavior."""
+    return repr(self) == repr(other)
 
   def get_header(self, key):
     for k, v in self.headers:

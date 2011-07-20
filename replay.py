@@ -41,9 +41,11 @@ Network simulation examples:
 
 import logging
 import optparse
+import os
 import sys
 import traceback
 
+import cachemissarchive
 import customhandlers
 import dnsproxy
 import httparchive
@@ -53,7 +55,6 @@ import platformsettings
 import replayspdyserver
 import servermanager
 import trafficshaper
-
 
 if sys.version < '2.6':
   print 'Need Python 2.6 or greater.'
@@ -108,7 +109,8 @@ def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
   server_manager.Append(dnsproxy.DnsProxyServer, dns_lookup, host)
 
 
-def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive):
+def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
+                cache_misses):
   http_custom_handlers = customhandlers.CustomHandlers(options.screenshot_dir)
   if options.spdy:
     assert not options.record, 'spdy cannot be used with --record.'
@@ -123,7 +125,8 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive):
     http_custom_handlers.add_server_manager_handler(server_manager)
     http_archive_fetch = httpclient.ControllableHttpArchiveFetch(
         http_archive, real_dns_lookup, options.deterministic_script,
-        options.diff_unknown_requests, options.record)
+        options.diff_unknown_requests, options.record,
+        cache_misses=cache_misses)
     server_manager.AppendRecordCallback(http_archive_fetch.SetRecordMode)
     server_manager.AppendReplayCallback(http_archive_fetch.SetReplayMode)
     server_manager.Append(
@@ -144,6 +147,17 @@ def main(options, replay_filename):
   configure_logging(platform_settings, options.log_level, options.log_file)
 
   server_manager = servermanager.ServerManager()
+  cache_misses = None
+  if options.cache_miss_file:
+    if os.path.exists(options.cache_miss_file):
+      logging.warning('Cache Miss Archive file %s already exists; '
+                      'replay will load and append entries to archive file',
+                      options.cache_miss_file)
+      cache_misses = cachemissarchive.CacheMissArchive.Load(
+          options.cache_miss_file)
+    else:
+      cache_misses = cachemissarchive.CacheMissArchive(
+          options.cache_miss_file)
   if options.server:
     AddDnsForward(server_manager, platform_settings, options.server)
   else:
@@ -164,7 +178,8 @@ def main(options, replay_filename):
       if not options.server_mode:
         AddDnsForward(server_manager, platform_settings, host)
       AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive)
-    AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive)
+    AddWebProxy(server_manager, options, host, real_dns_lookup,
+                http_archive, cache_misses)
     AddTrafficShaper(server_manager, options, host)
 
   exit_status = 0
@@ -175,7 +190,7 @@ def main(options, replay_filename):
   except (dnsproxy.DnsProxyException,
           trafficshaper.TrafficShaperException,
           platformsettings.DnsUpdateError) as e:
-    logging.critical("%s: %s", e.__class__.__name__, e)
+    logging.critical('%s: %s', e.__class__.__name__, e)
     exit_status = 1
   except:
     logging.critical(traceback.format_exc())
@@ -184,6 +199,12 @@ def main(options, replay_filename):
   if options.record:
     http_archive.Persist(replay_filename)
     logging.info('Saved %d responses to %s', len(http_archive), replay_filename)
+  if cache_misses:
+    cache_misses.Persist()
+    logging.info('Saved %d cache misses and %d requests to %s',
+                 cache_misses.get_total_cache_misses(),
+                 len(cache_misses.request_counts.keys()),
+                 options.cache_miss_file)
   return exit_status
 
 
@@ -216,6 +237,12 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Log file to use in addition to writting logs to stderr.')
+  option_parser.add_option('-e', '--cache_miss_file', default=None,
+      action='store',
+      dest='cache_miss_file',
+      type='string',
+      help='Archive file to record cache misses as pickled objects.'
+           'Cache misses occur when a request cannot be served in replay mode.')
 
   network_group = optparse.OptionGroup(option_parser,
       'Network Simulation Options',

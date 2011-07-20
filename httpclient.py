@@ -19,6 +19,7 @@ import httparchive
 import httplib
 import logging
 
+
 class DetailedHTTPResponse(httplib.HTTPResponse):
   """Preserve details relevant to replaying responses.
 
@@ -118,7 +119,8 @@ class RealHttpFetch(object):
 class RecordHttpArchiveFetch(object):
   """Make real HTTP fetches and save responses in the given HttpArchive."""
 
-  def __init__(self, http_archive, real_dns_lookup, use_deterministic_script):
+  def __init__(self, http_archive, real_dns_lookup, use_deterministic_script,
+               cache_misses=None):
     """Initialize RecordHttpArchiveFetch.
 
     Args:
@@ -126,10 +128,13 @@ class RecordHttpArchiveFetch(object):
       real_dns_lookup: a function that resolves a host to an IP.
       use_deterministic_script: If True, attempt to inject a script,
         when appropriate, to make JavaScript more deterministic.
+      cache_misses: instance of CacheMissArchive
     """
     self.http_archive = http_archive
     self.real_http_fetch = RealHttpFetch(real_dns_lookup)
     self.use_deterministic_script = use_deterministic_script
+    self.cache_misses = cache_misses
+    self.previous_request = None
 
   def __call__(self, request, request_headers):
     """Fetch the request and return the response.
@@ -138,6 +143,20 @@ class RecordHttpArchiveFetch(object):
       request: an instance of an ArchivedHttpRequest.
       request_headers: a dict of HTTP headers.
     """
+
+    if self.cache_misses:
+      self.cache_misses.record_request(
+          request, is_record_mode=True, is_cache_miss=False)
+
+    # if request has already been archived, return the archived version
+    if request in self.http_archive:
+      logging.debug('Repeated request found: %s\nPrevious Request was: %s\n',
+                    request.verbose(),
+                    self.previous_request.verbose() if self.previous_request
+                    else 'None')
+      return self.http_archive[request]
+
+    previous_request = request
     response, response_chunks = self.real_http_fetch(request, request_headers)
     if response is None:
       return None
@@ -155,31 +174,43 @@ class RecordHttpArchiveFetch(object):
         logging.debug('Request content: %s', err.text)
     logging.debug('Recorded: %s', request)
     self.http_archive[request] = archived_http_response
+
     return archived_http_response
 
 
 class ReplayHttpArchiveFetch(object):
   """Serve responses from the given HttpArchive."""
 
-  def __init__(self, http_archive, use_diff_on_unknown_requests=False):
+  def __init__(self, http_archive, use_diff_on_unknown_requests=False,
+               cache_misses=None):
     """Initialize ReplayHttpArchiveFetch.
 
     Args:
       http_archive: an instance of a HttpArchive
       use_diff_on_unknown_requests: If True, log unknown requests
         with a diff to requests that look similar.
+      cache_misses: Instance of CacheMissArchive.
+        Callback updates archive on cache misses
     """
     self.http_archive = http_archive
     self.use_diff_on_unknown_requests = use_diff_on_unknown_requests
+    self.cache_misses = cache_misses
 
-  def __call__(self, request, request_headers=None):
+  def __call__(self, request, request_headers):
     """Fetch the request and return the response.
 
     Args:
       request: an instance of an ArchivedHttpRequest.
       request_headers: a dict of HTTP headers.
+    Returns:
+      Instance of ArchivedHttpResponse (if found) or None
     """
     response = self.http_archive.get(request)
+
+    if self.cache_misses:
+      self.cache_misses.record_request(
+          request, is_record_mode=False, is_cache_miss=not response)
+
     if not response:
       reason = str(request)
       if self.use_diff_on_unknown_requests:
@@ -191,11 +222,13 @@ class ReplayHttpArchiveFetch(object):
       logging.warning('Could not replay: %s', reason)
     return response
 
+
 class ControllableHttpArchiveFetch(object):
   """Controllable fetch function that can swap between record and replay."""
 
-  def __init__(self, http_archive, real_dns_lookup, use_deterministic_script,
-               use_diff_on_unknown_requests, use_record_mode):
+  def __init__(self, http_archive, real_dns_lookup,
+               use_deterministic_script, use_diff_on_unknown_requests,
+               use_record_mode, cache_misses):
     """Initialize HttpArchiveFetch.
 
     Args:
@@ -206,11 +239,13 @@ class ControllableHttpArchiveFetch(object):
       use_diff_on_unknown_requests: If True, log unknown requests
         with a diff to requests that look similar.
       use_record_mode: If True, start in server in record mode.
+      cache_misses: Instance of CacheMissArchive.
     """
     self.record_fetch = RecordHttpArchiveFetch(
-        http_archive, real_dns_lookup, use_deterministic_script)
+        http_archive, real_dns_lookup, use_deterministic_script,
+        cache_misses)
     self.replay_fetch = ReplayHttpArchiveFetch(
-        http_archive, use_diff_on_unknown_requests)
+        http_archive, use_diff_on_unknown_requests, cache_misses)
     if use_record_mode:
       self.SetRecordMode()
     else:

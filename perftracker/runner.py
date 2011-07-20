@@ -15,6 +15,11 @@
 
 description = """
     This is a script for running automated network tests of chrome.
+
+    There is an optional -e <filename> flag that instead runs an automated
+    web-page-replay test. It runs WPR record mode on the set of URLs specified
+    in the config file, then runs replay mode on the same set of URLs and
+    records any cache misses to <filename>.
 """
 
 import sys
@@ -129,6 +134,7 @@ def _XvfbPidFilename(slave_build_name):
   """
   return os.path.join(tempfile.gettempdir(), 'xvfb-%s.pid' % slave_build_name)
 
+
 def StartVirtualX(slave_build_name, build_dir):
   """Start a virtual X server and set the DISPLAY environment variable so sub
   processes will use the virtual X server.  Also start icewm. This only works
@@ -151,7 +157,7 @@ def StartVirtualX(slave_build_name, build_dir):
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
   xvfb_pid_filename = _XvfbPidFilename(slave_build_name)
   open(xvfb_pid_filename, 'w').write(str(proc.pid))
-  os.environ['DISPLAY'] = ':9'
+  #os.environ['DISPLAY'] = ':9'
 
   # Verify that Xvfb has started by using xdisplaycheck.
   if len(build_dir) > 0:
@@ -224,7 +230,9 @@ def GetVersion():
 
 class TestInstance:
   def __init__(self, network, log_level, log_file, record,
-               diff_unknown_requests, screenshot_dir):
+               diff_unknown_requests, screenshot_dir, cache_miss_file=None,
+               use_deterministic_script=False,
+               use_chrome_deterministic_js=True):
     self.network = network
     self.log_level = log_level
     self.log_file = log_file
@@ -233,6 +241,9 @@ class TestInstance:
     self.spdy_proxy_process = None
     self.diff_unknown_requests = diff_unknown_requests
     self.screenshot_dir = screenshot_dir
+    self.cache_miss_file = cache_miss_file
+    self.use_deterministic_script = use_deterministic_script
+    self.use_chrome_deterministic_js = use_chrome_deterministic_js
 
   def GenerateConfigFile(self, notes=''):
     # The PerfTracker extension requires this name in order to kick off.
@@ -289,21 +300,24 @@ setTimeout(function() {
     init_cwnd = 10
     protocol = self.network['protocol']
     if 'spdy' in protocol:
-        port = BACKEND_SERVER_PORT
-        init_cwnd = 32
+      port = BACKEND_SERVER_PORT
+      init_cwnd = 32
 
     if protocol == 'http-base':
-        init_cwnd = 3   # See RFC3390
+      init_cwnd = 3   # See RFC3390
 
     cmdline = [
         REPLAY_PATH,
         '--no-dns_forwarding',
-        '--no-deterministic_script',
         '--port', str(port),
         '--shaping_port', str(SERVER_PORT),
-        '--init_cwnd', str(init_cwnd),
         '--log_level', self.log_level,
+        '--init_cwnd', str(init_cwnd),
         ]
+    if self.cache_miss_file:
+      cmdline += ['-e', self.cache_miss_file]
+    if not self.use_deterministic_script:
+      cmdline += ['--no-deterministic_script']
     if self.log_file:
       cmdline += ['--log_file', self.log_file]
     if self.network['bandwidth_kbps']['down']:
@@ -314,15 +328,15 @@ setTimeout(function() {
       cmdline += ['-m', str(self.network['round_trip_time_ms'])]
     if self.network['packet_loss_percent']:
       cmdline += ['-p', str(self.network['packet_loss_percent'] / 100.0)]
-    if self.diff_unknown_requests:
-      cmdline.append('--diff_unknown_requests')
+    if not self.diff_unknown_requests:
+      cmdline.append('--no-diff_unknown_requests')
     if self.screenshot_dir:
       cmdline += ['-I', self.screenshot_dir]
     if self.record:
       cmdline.append('-r')
     cmdline.append(runner_cfg.replay_data_archive)
 
-    logging.debug('Starting Web-Page-Replay: %s', ' '.join(cmdline))
+    logging.info('Starting Web-Page-Replay: %s', ' '.join(cmdline))
     self.proxy_process = subprocess.Popen(cmdline)
 
   def StopProxy(self):
@@ -404,7 +418,6 @@ setTimeout(function() {
           runner_cfg.chrome_path,
           '--activate-on-launch',
           '--disable-background-networking',
-
           # Stop the translate bar from appearing at the top of the page. When
           # it's there, the screenshots are shorter than they should be.
           '--disable-translate',
@@ -418,11 +431,14 @@ setTimeout(function() {
           '--load-extension=' + PERFTRACKER_EXTENSION_PATH,
           '--log-level=0',
           '--no-first-run',
-          '--no-js-randomness',
           '--no-proxy-server',
           '--start-maximized',
           '--user-data-dir=' + profile_dir,
           ]
+      if self.use_chrome_deterministic_js:
+        cmdline += ['--no-js-randomness']
+      if self.cache_miss_file:
+        cmdline += ['--no-sandbox']
 
       spdy_mode = None
       if self.network['protocol'] == 'spdy':
@@ -436,7 +452,7 @@ setTimeout(function() {
         cmdline.extend(chrome_cmdline.split(' '))
       cmdline.append(start_file_url)
 
-      logging.debug('Starting Chrome: %s', ' '.join(cmdline))
+      logging.info('Starting Chrome: %s', ' '.join(cmdline))
       chrome = subprocess.Popen(cmdline, preexec_fn=switch_away_from_root)
       returncode = chrome.wait()
       if returncode:
@@ -486,7 +502,7 @@ def ConfigureLogging(log_level_name, log_file_name):
     logging.getLogger().addHandler(fh)
 
 
-def main(options):
+def main(options, cache_miss_file):
   # When in record mode, override most of the configuration.
   if options.record:
     runner_cfg.replay_data_archive = options.record
@@ -508,7 +524,9 @@ def main(options):
       logging.debug("Running network configuration: %s", network)
       test = TestInstance(
           network, options.log_level, options.log_file, options.record,
-          options.diff_unknown_requests, options.screenshot_dir)
+          options.diff_unknown_requests, options.screenshot_dir,
+          cache_miss_file, options.use_deterministic_script,
+          options.use_chrome_deterministic_js)
       test.RunTest(options.notes, options.chrome_cmdline)
     if not options.infinite or options.record:
       break
@@ -542,10 +560,10 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Log file to use in addition to writting logs to stderr.')
-  option_parser.add_option('-r', '--record', default='',
-      action='store',
-      type='string',
-      help=('Record URLs in runner_cfg to this file.'))
+  option_parser.add_option('-r', '--record', default=False,
+      action='store_true',
+      dest='do_record',
+      help=('Record URLs to file specified by runner_cfg.'))
   option_parser.add_option('-i', '--infinite', default=False,
       action='store_true',
       help='Loop infinitely, repeating the test.')
@@ -561,14 +579,32 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Username for logging into appengine.')
-  option_parser.add_option('-D', '--diff_unknown_requests', default=False,
-      action='store_true',
-      help='During replay, show a unified diff of any unknown requests against '
+  option_parser.add_option('-D', '--no-diff_unknown_requests', default=True,
+      action='store_false',
+      dest='diff_unknown_requests',
+      help='During replay, do not show a diff of any unknown requests against '
            'their nearest match in the archive.')
   option_parser.add_option('-I', '--screenshot_dir', default=None,
       action='store',
       type='string',
       help='Save PNG images of the loaded page in the given directory.')
+  option_parser.add_option('-d', '--deterministic_script', default=False,
+      action='store_true',
+      dest='use_deterministic_script',
+      help='During a record, inject JavaScript to make sources of '
+           'entropy such as Date() and Math.random() deterministic. CAUTION: '
+           'Without this option many web pages will not replay properly.')
+  option_parser.add_option('-j', '--no_chrome_deterministic_js', default=True,
+      action='store_false',
+      dest='use_chrome_deterministic_js',
+      help='Enable Chrome\'s deterministic implementations of javascript.'
+           'This makes sources of entropy such as Date() and Math.random()'
+           'deterministic.')
+  option_parser.add_option('-e', '--cache_miss_file', default=None,
+      action='store',
+      dest='cache_miss_file',
+      type='string',
+      help='Archive file to record cache misses in replay mode.')
 
   options, args = option_parser.parse_args()
 
@@ -588,4 +624,14 @@ if __name__ == '__main__':
   else:
     options.login_url = ''
 
-  sys.exit(main(options))
+  # run the recording round, if specified
+  if options.do_record and options.cache_miss_file:
+    logging.debug("Running on record mode")
+    options.record = runner_cfg.replay_data_archive
+    main(options, options.cache_miss_file)
+    options.do_record = False
+
+  options.record = None
+  # run the replay round
+  logging.debug("Running on replay mode")
+  sys.exit(main(options, options.cache_miss_file))
