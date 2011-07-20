@@ -157,7 +157,7 @@ def StartVirtualX(slave_build_name, build_dir):
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
   xvfb_pid_filename = _XvfbPidFilename(slave_build_name)
   open(xvfb_pid_filename, 'w').write(str(proc.pid))
-  #os.environ['DISPLAY'] = ':9'
+  os.environ['DISPLAY'] = ':9'
 
   # Verify that Xvfb has started by using xdisplaycheck.
   if len(build_dir) > 0:
