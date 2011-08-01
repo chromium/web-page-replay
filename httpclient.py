@@ -174,7 +174,6 @@ class RecordHttpArchiveFetch(object):
         logging.debug('Request content: %s', err.text)
     logging.debug('Recorded: %s', request)
     self.http_archive[request] = archived_http_response
-
     return archived_http_response
 
 
@@ -182,7 +181,7 @@ class ReplayHttpArchiveFetch(object):
   """Serve responses from the given HttpArchive."""
 
   def __init__(self, http_archive, use_diff_on_unknown_requests=False,
-               cache_misses=None):
+               cache_misses=None, use_closest_match=False):
     """Initialize ReplayHttpArchiveFetch.
 
     Args:
@@ -191,10 +190,13 @@ class ReplayHttpArchiveFetch(object):
         with a diff to requests that look similar.
       cache_misses: Instance of CacheMissArchive.
         Callback updates archive on cache misses
+      use_closest_match: If True, on replay mode, serve the closest match
+        in the archive instead of giving a 404.
     """
     self.http_archive = http_archive
     self.use_diff_on_unknown_requests = use_diff_on_unknown_requests
     self.cache_misses = cache_misses
+    self.use_closest_match = use_closest_match
 
   def __call__(self, request, request_headers):
     """Fetch the request and return the response.
@@ -206,6 +208,15 @@ class ReplayHttpArchiveFetch(object):
       Instance of ArchivedHttpResponse (if found) or None
     """
     response = self.http_archive.get(request)
+
+    if self.use_closest_match and not response:
+      closest_request = self.http_archive.find_closest_request(
+          request, use_path=True)
+      if closest_request:
+        response = self.http_archive.get(closest_request)
+        if response:
+          logging.info('Request not found: %s\nUsing closest match: %s',
+                       request, closest_request)
 
     if self.cache_misses:
       self.cache_misses.record_request(
@@ -228,7 +239,7 @@ class ControllableHttpArchiveFetch(object):
 
   def __init__(self, http_archive, real_dns_lookup,
                use_deterministic_script, use_diff_on_unknown_requests,
-               use_record_mode, cache_misses):
+               use_record_mode, cache_misses, use_closest_match):
     """Initialize HttpArchiveFetch.
 
     Args:
@@ -240,12 +251,15 @@ class ControllableHttpArchiveFetch(object):
         with a diff to requests that look similar.
       use_record_mode: If True, start in server in record mode.
       cache_misses: Instance of CacheMissArchive.
+      use_closest_match: If True, on replay mode, serve the closest match
+        in the archive instead of giving a 404.
     """
     self.record_fetch = RecordHttpArchiveFetch(
         http_archive, real_dns_lookup, use_deterministic_script,
         cache_misses)
     self.replay_fetch = ReplayHttpArchiveFetch(
-        http_archive, use_diff_on_unknown_requests, cache_misses)
+        http_archive, use_diff_on_unknown_requests, cache_misses,
+        use_closest_match)
     if use_record_mode:
       self.SetRecordMode()
     else:

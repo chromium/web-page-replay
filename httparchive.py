@@ -42,6 +42,7 @@ import re
 import StringIO
 import subprocess
 import tempfile
+import urlparse
 
 
 HTML_RE = re.compile(r'<html[^>]*>', re.IGNORECASE)
@@ -180,7 +181,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
           response = self[shortened_request]
         else:
           response = self.create_response(status, reason)
-      logging.debug('Checked headers, returning with %s, %s', status, reason)
+        logging.debug('Checked headers, returning with %s, %s', status, reason)
     return response
 
 
@@ -276,9 +277,10 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     ]
     return ArchivedHttpResponse(11, status, reason, headers, reason)
 
-  def get_requests(self, command=None, host=None, path=None):
+  def get_requests(self, command=None, host=None, path=None, use_query=True):
     """Return a list of requests that match the given args."""
-    return [r for r in self if r.matches(command, host, path)]
+    return [r for r in self if r.matches(command, host, path,
+                                         use_query=use_query)]
 
   def ls(self, command=None, host=None, path=None):
     """List all URLs that match given params."""
@@ -333,6 +335,53 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     response.set_data(''.join(open(tmp_file.name).readlines()))
     os.remove(tmp_file.name)
 
+  def _format_request_lines(self, req):
+    """Format request to make diffs easier to read.
+
+    Args:
+      req: an ArchivedHttpRequest
+    Returns:
+      Example:
+      ['GET www.example.com/path\n', 'Header-Key: header value\n', ...]
+    """
+    parts = ['%s %s%s\n' % (req.command, req.host, req.path)]
+    if req.request_body:
+      parts.append('%s\n' % req.request_body)
+    for k, v in req.trimmed_headers:
+      k = '-'.join(x.capitalize() for x in k.split('-'))
+      parts.append('%s: %s\n' % (k, v))
+    return parts
+
+  def find_closest_request(self, request, use_path=False):
+    """Find the closest matching request in the archive to the given request.
+
+    Args:
+      request: an ArchivedHttpRequest
+      use_path: If True, closest matching request's path component must match.
+        (Note: this refers to the 'path' component within the URL, not the
+         query string component.)
+        If use_path=False, candidate will NOT match in example below
+        e.g. request   = GET www.test.com/path?aaa
+             candidate = GET www.test.com/diffpath?aaa
+    Returns:
+      If a close match is found, return the instance of ArchivedHttpRequest.
+      Otherwise, return None.
+    """
+    best_match = None
+    request_lines = self._format_request_lines(request)
+    matcher = difflib.SequenceMatcher(b=''.join(request_lines))
+    path = None
+    if use_path:
+      path = request.path
+    for candidate in self.get_requests(request.command, request.host, path,
+                                       use_query=not use_path):
+      candidate_lines = self._format_request_lines(candidate)
+      matcher.set_seq1(''.join(candidate_lines))
+      best_match = max(best_match, (matcher.ratio(), candidate))
+    if best_match:
+      return best_match[1]
+    return None
+
   def diff(self, request):
     """Diff the given request to the closest matching request in the archive.
 
@@ -342,30 +391,11 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       If a close match is found, return a textual diff between the requests.
       Otherwise, return None.
     """
-    def req_lines(req):
-      """Format request to make diffs easier to read.
-      Args:
-        req: an ArchiveHttpRequest
-      Returns:
-        Example:
-        ['GET www.example.com/path\n', 'Header-Key: header value\n', ...]
-      """
-      parts = ['%s %s%s\n' % (req.command, req.host, req.path)]
-      if req.request_body:
-        parts.append('%s\n' % req.request_body)
-      for k, v in req.trimmed_headers:
-        k = '-'.join(x.capitalize() for x in k.split('-'))
-        parts.append('%s: %s\n' % (k, v))
-      return parts
-    best_match = None
-    request_lines = req_lines(request)
-    matcher = difflib.SequenceMatcher(b=''.join(request_lines))
-    for candidate in self.get_requests(request.command, request.host):
-      candidate_lines = req_lines(candidate)
-      matcher.set_seq1(''.join(candidate_lines))
-      best_match = max(best_match, (matcher.ratio(), candidate_lines))
-    if best_match:
-      return ''.join(difflib.ndiff(best_match[1], request_lines))
+    request_lines = self._format_request_lines(request)
+    closest_request = self.find_closest_request(request)
+    if closest_request:
+      closest_request_lines = self._format_request_lines(closest_request)
+      return ''.join(difflib.ndiff(closest_request_lines, request_lines))
     return None
 
 
@@ -451,11 +481,38 @@ class ArchivedHttpRequest(object):
     del state['trimmed_headers']
     return state
 
-  def matches(self, command=None, host=None, path=None):
-    """Returns true iff the request matches all parameters."""
+  def matches(self, command=None, host=None, path_with_query=None,
+              use_query=True):
+    """Returns true iff the request matches all parameters.
+
+    Args:
+      command: a string (e.g. 'GET' or 'POST').
+      host: a host name (e.g. 'www.google.com').
+      path_with_query: a request path with query string (e.g. '/search?q=dogs')
+      use_query:
+        If use_query is True, request matching uses both the hierarchical path
+        and query string component.
+        If use_query is False, request matching only uses the hierarchical path
+
+        e.g. req1 = GET www.test.com/index?aaaa
+             req2 = GET www.test.com/index?bbbb
+
+        If use_query is True, req1.matches(req2) evaluates to False
+        If use_query is False, req1.matches(req2) evaluates to True
+
+    Returns:
+      True iff the request matches all parameters
+    """
+    path_match = path_with_query == self.path
+    if not use_query:
+      self_path = urlparse.urlparse('http://%s%s' % (
+          self.host or '', self.path or '')).path
+      other_path = urlparse.urlparse('http://%s%s' % (
+          host or '', path_with_query or '')).path
+      path_match = self_path == other_path
     return ((command is None or command == self.command) and
             (host is None or host == self.host) and
-            (path is None or path == self.path))
+            (path_with_query is None or path_match))
 
   @classmethod
   def _TrimHeaders(cls, headers):
