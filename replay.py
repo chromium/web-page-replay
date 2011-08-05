@@ -126,7 +126,8 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
     http_archive_fetch = httpclient.ControllableHttpArchiveFetch(
         http_archive, real_dns_lookup, options.deterministic_script,
         options.diff_unknown_requests, options.record,
-        cache_misses=cache_misses, use_closest_match=options.use_closest_match)
+        cache_misses=cache_misses, use_closest_match=options.use_closest_match,
+        use_server_delay=options.use_server_delay)
     server_manager.AppendRecordCallback(http_archive_fetch.SetRecordMode)
     server_manager.AppendReplayCallback(http_archive_fetch.SetReplayMode)
     server_manager.Append(
@@ -299,6 +300,11 @@ if __name__ == '__main__':
       dest='use_closest_match',
       help='During replay, if a request is not found, serve the closest match'
            'in the archive instead of giving a 404.')
+  harness_group.add_option('-U', '--use_server_delay', default=False,
+      action='store_true',
+      dest='use_server_delay',
+      help='During replay, simulate server delay by delaying response time to'
+           'requests.')
   harness_group.add_option('-I', '--screenshot_dir', default=None,
       action='store',
       type='string',
