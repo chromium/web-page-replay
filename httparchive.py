@@ -132,61 +132,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
   """Dict with ArchivedHttpRequest keys and ArchivedHttpResponse values.
 
   PersistentMixin adds CreateNew(filename), Load(filename), and Persist().
-
-  Attributes:
-    server_rtt: dict of {hostname, server rtt in seconds}
   """
-
-  def __init__(self):
-    self.server_rtt = {}
-
-  def ping(self, hostname):
-    """Pings the hostname by calling the OS system ping command.
-    Also stores the result internally.
-
-    Args:
-      hostname: hostname of the server to be pinged
-
-    Returns:
-      round trip time to the server in seconds, or 0 if unable to calculate RTT
-    """
-    try:
-      # TODO: Untested for windows machines. May need to use 'ping.exe'
-      # Also, regex matching may need to differ for windows
-      # Regex matching may change depending on versions of ping? (unverified)
-      proc = subprocess.Popen(['ping', '-c', '3', '-i', '0.2', hostname],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-      output, errors = proc.communicate()
-
-      matcher = re.compile(
-          "rtt min/avg/max/mdev = (\d+.\d+)/(\d+.\d+)/(\d+.\d+)/(\d+.\d+)")
-      result = matcher.search(output)
-      if not result:
-        logging.warning('Unable to ping %s: ', hostname)
-        return 0
-      minimum, average, maximum, mdev = result.groups()
-      rtt = float(average)/1000
-      self.server_rtt[hostname] = rtt
-      return rtt
-    except Exception, e:
-      logging.warning('Unable to ping %s: %s', hostname, e)
-      return 0
-
-  def get_server_rtt(self, server):
-    """Retrieves the round trip time (rtt) to the server
-
-    Args:
-      server: the hostname of the server
-
-    Returns:
-      round trip time to the server in seconds, or 0 if unable to calculate RTT
-    """
-    rtt = 0
-    if not server in self.server_rtt:
-      rtt = self.ping(server)
-    else:
-      rtt = self.server_rtt[server]
-    return rtt
 
   def get(self, request, default=None):
     """Return the archived response for a given request.
@@ -383,10 +329,10 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
 
     response = self[matching_requests[0]]
     tmp_file = tempfile.NamedTemporaryFile(delete=False)
-    tmp_file.write(response.get_response_as_text())
+    tmp_file.write(response.get_data_as_text())
     tmp_file.close()
     subprocess.check_call([editor, tmp_file.name])
-    response.set_response_from_text(''.join(open(tmp_file.name).readlines()))
+    response.set_data(''.join(open(tmp_file.name).readlines()))
     os.remove(tmp_file.name)
 
   def _format_request_lines(self, req):
@@ -616,13 +562,7 @@ class ArchivedHttpResponse(object):
   # and removed by set_data().
   CHUNK_EDIT_SEPARATOR = '[WEB_PAGE_REPLAY_CHUNK_BOUNDARY]'
 
-  # SERVER_DELAY_EDIT_SEPARATOR is used to edit and view server delays.
-  DELAY_EDIT_SEPARATOR = ('\n[WEB_PAGE_REPLAY_EDIT_ARCHIVE '
-                          '--- Server delays per chunk are shown above. '
-                          'Response content is below.]\n')
-
-  def __init__(self, version, status, reason, headers, response_data,
-               server_delays=None):
+  def __init__(self, version, status, reason, headers, response_data):
     """Initialize an ArchivedHttpResponse.
 
     Args:
@@ -634,39 +574,12 @@ class ArchivedHttpResponse(object):
       response_data: list of content chunks where concatenating the chunks gives
           the complete contents (i.e. the chunks do not have any lengths or
           delimiters).
-          Must not include the last 'sentinel' chunk (i.e. the zero-length chunk
-          with no data, to mark termination of data transfer).
-      server_delays: list of server delays for each chunk. Note that
-          if chunked encoding is used, this will also record the ttfb for the
-          last 'sentinel' chunk (zero-length chunk with no data).
     """
     self.version = version
     self.status = status
     self.reason = reason
     self.headers = headers
     self.response_data = response_data
-    self.server_delays = server_delays
-    self.check_chunk_delays()
-
-  def check_chunk_delays(self):
-    """Returns true if the number of server delays match the number of chunks"""
-    response_data = self.response_data
-    server_delays = self.server_delays
-
-    use_chunked = [key for key in self.headers if 'transfer-encoding' in key]
-    # If we are using chunked encoding, subtract the offset for the 'sentinel'
-    # chunk.
-    server_delay_offset = 1 if use_chunked else 0
-
-    if (server_delays and
-        not len(response_data) == len(server_delays) - server_delay_offset):
-      logging.critical('Number of content chunks and server delays do not '
-                       'match for response: %s %s %s, with %d headers, '
-                       '%d chunks, %d delays', self.version, self.status,
-                       self.reason, len(self.headers),
-                       len(response_data), len(server_delays))
-      return False
-    return True
 
   def __repr__(self):
     return repr((self.version, self.status, self.reason, sorted(self.headers),
@@ -722,38 +635,6 @@ class ArchivedHttpResponse(object):
       uncompressed_chunks = self.response_data
     return self.CHUNK_EDIT_SEPARATOR.join(uncompressed_chunks)
 
-  def get_server_delays_as_text(self):
-    """Return server delays as multiple lines of numbers.
-
-    e.g.
-    10.0000
-    2.3211
-    1.5324
-    5.300
-
-    Returns 0 for each chunk for archives without server_delay data.
-    """
-    if not hasattr(self, 'server_delays'):
-       use_chunked = [key for key in self.headers if 'transfer-encoding' in key]
-       server_delay_offset = 1 if use_chunked else 0
-       total_offset = len(self.response_data) + server_delay_offset
-       return '\n'.join(['0' for i in xrange(total_offset)])
-    return '\n'.join(['%s' % delay for delay in self.server_delays])
-
-  def get_response_as_text(self):
-    """Returns response content as a single string.
-
-    Server delays are separated on a per-chunk basis. Delays are in seconds.
-    Response content begins after DELAY_EDIT_SEPARATOR
-    """
-    data = self.get_data_as_text()
-    if data is None:
-      logging.warning('Data is None')
-      data = ''
-    server_delays = self.get_server_delays_as_text()
-    response = [server_delays, data]
-    return self.DELAY_EDIT_SEPARATOR.join(response)
-
   def set_data(self, text):
     """Inverse of get_data_as_text().
 
@@ -767,40 +648,6 @@ class ArchivedHttpResponse(object):
     if not self.get_header('transfer-encoding'):
       content_length = sum(len(c) for c in self.response_data)
       self.set_header('content-length', str(content_length))
-
-  def set_server_delays(self, text):
-    """Inverse of get_server_delays_as_text().
-
-    Sets the server delay of each to its corresponding textual representation.
-    If the text can not be parsed, a default value of 0 is assumed.
-
-    This method does not enforce that the number of chunk delays matches the
-    number of chunks!
-    """
-    delays = text.split('\n')
-    server_delays = []
-    for elem in delays:
-      delay = 0
-      try:
-        delay = float(elem.strip(' \n'))
-      except ValueError, e:
-        logging.critical('Unable to parse server delay %s: %s', elem, e)
-      server_delays.append(delay)
-    self.server_delays = server_delays
-    self.check_chunk_delays()
-
-  def set_response_from_text(self, text):
-    """Inverse of get_response_as_text().
-
-    Modifies the state of the archive according to the textual representation.
-    """
-    partitions = text.split(self.DELAY_EDIT_SEPARATOR)
-    if not len(partitions) == 2:
-      logging.critical('Error parsing text representation. '
-                       'Edits will not be saved.')
-      return
-    self.set_server_delays(partitions[0])
-    self.set_data(partitions[1])
 
   def inject_deterministic_script(self):
     """Inject deterministic script immediately after <head> or <html>."""
@@ -863,9 +710,6 @@ if __name__ == '__main__':
     print http_archive.cat(options.command, options.host, options.path)
   elif command == 'edit':
     http_archive.edit(options.command, options.host, options.path)
-    http_archive.Persist(replay_file)
-  elif command == 'edittest':
-    http_archive.edit_test(options.command, options.host, options.path)
     http_archive.Persist(replay_file)
   else:
     option_parser.error('Unknown command "%s"' % command)

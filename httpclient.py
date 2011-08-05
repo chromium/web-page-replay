@@ -18,16 +18,6 @@
 import httparchive
 import httplib
 import logging
-import sys
-import time
-
-# from timeit.py
-if sys.platform == "win32":
-  # On Windows, the best timer is time.clock()
-  DEFAULT_TIMER = time.clock
-else:
-  # On most other platforms the best timer is time.time()
-  DEFAULT_TIMER = time.time
 
 
 class DetailedHTTPResponse(httplib.HTTPResponse):
@@ -38,28 +28,16 @@ class DetailedHTTPResponse(httplib.HTTPResponse):
   """
 
   def read_chunks(self):
-    """Return a tuple containing two arrays of data.
-
-    The first_array is the response body.
-    The second_array is the server response time for each chunk.
+    """Return an array of data.
 
     The returned chunked have the chunk size and CRLFs stripped off.
     If the response was compressed, the returned data is still compressed.
 
     Returns:
-      (first_array, second_array)
-    first_array:
       [response_body]  # non-chunked responses
       [response_body_chunk_1, response_body_chunk_2, ...]  # chunked responses
-    second_array:
-      []  # non-chunked responses
-      [response_delay_body_chunk_2, ...]  # chunked responses
-      # The delay for the first chunk and non-chunked responses should be
-      # recorded when the first byte of the HTTP response header arrives.
-      # Therefore, it is out of the scope of this method.
     """
     buf = []
-    response_times = [DEFAULT_TIMER()]
     if not self.chunked:
       chunks = [self.read()]
     else:
@@ -68,7 +46,6 @@ class DetailedHTTPResponse(httplib.HTTPResponse):
         while True:
           line = self.fp.readline()
           chunk_size = self._read_chunk_size(line)
-          response_times.append(DEFAULT_TIMER())
           if chunk_size is None:
             raise httplib.IncompleteRead(''.join(chunks))
           if chunk_size == 0:
@@ -83,9 +60,7 @@ class DetailedHTTPResponse(httplib.HTTPResponse):
             break
       finally:
         self.close()
-    response_delays = [response_times[i] - response_times[i-1]
-                           for i in xrange(2, len(response_times))]
-    return chunks, response_delays
+    return chunks
 
   @classmethod
   def _read_chunk_size(cls, line):
@@ -116,36 +91,29 @@ class RealHttpFetch(object):
       headers: a dict of HTTP headers
     Returns:
       (instance of httplib.HTTPResponse,
-       [response_body_chunk_1, response_body_chunk_2, ...],
-       [response_delay_body_chunk_1, response_delay_body_chunk_2, ...])
+       [response_body_chunk_1, response_body_chunk_2, ...])
       # If the response did not use chunked encoding, there is only one chunk.
-      # response_delay is the time taken (in seconds) to receive the first
-      # byte for each chunk. This time includes the network RTT time.
     """
     logging.debug('RealHttpRequest: %s %s', request.host, request.path)
     host_ip = self._real_dns_lookup(request.host)
     if not host_ip:
       logging.critical('Unable to find host ip for name: %s', request.host)
-      return None, None, None
+      return None, None
     try:
       connection = DetailedHTTPConnection(host_ip)
-      start = DEFAULT_TIMER()
       connection.request(
           request.command,
           request.path,
           request.request_body,
           headers)
       response = connection.getresponse()
-      end = DEFAULT_TIMER()
-      delay = end - start
-      chunks, response_delays = response.read_chunks()
-      response_delays.insert(0, delay)
-      return response, chunks, response_delays
+      chunks = response.read_chunks()
+      return response, chunks
     except Exception, e:
       logging.critical('Could not fetch %s: %s', request, e)
       import traceback
       logging.critical(traceback.format_exc())
-      return None, None, None
+      return None, None
 
 
 class RecordHttpArchiveFetch(object):
@@ -189,28 +157,15 @@ class RecordHttpArchiveFetch(object):
       return self.http_archive[request]
 
     previous_request = request
-    response, response_chunks, response_delays = self.real_http_fetch(
-        request, request_headers)
+    response, response_chunks = self.real_http_fetch(request, request_headers)
     if response is None:
       return None
-
-    server_rtt = 0
-    if self.http_archive.get_server_rtt:
-      server_rtt = self.http_archive.get_server_rtt(request.host)
-    server_delays = []
-    for i in xrange(len(response_delays)):
-      if response_delays[i] - server_rtt > 0:
-        server_delays.append(response_delays[i])
-      else:
-        server_delays.append(0)
-
     archived_http_response = httparchive.ArchivedHttpResponse(
         response.version,
         response.status,
         response.reason,
         response.getheaders(),
-        response_chunks,
-        server_delays)
+        response_chunks)
     if self.use_deterministic_script:
       try:
         archived_http_response.inject_deterministic_script()
@@ -284,8 +239,7 @@ class ControllableHttpArchiveFetch(object):
 
   def __init__(self, http_archive, real_dns_lookup,
                use_deterministic_script, use_diff_on_unknown_requests,
-               use_record_mode, cache_misses, use_closest_match,
-               use_server_delay):
+               use_record_mode, cache_misses, use_closest_match):
     """Initialize HttpArchiveFetch.
 
     Args:
@@ -299,8 +253,6 @@ class ControllableHttpArchiveFetch(object):
       cache_misses: Instance of CacheMissArchive.
       use_closest_match: If True, on replay mode, serve the closest match
         in the archive instead of giving a 404.
-      use_server_delay: If True, on replay mode, simulate server delay by
-        delaying response time to requests.
     """
     self.record_fetch = RecordHttpArchiveFetch(
         http_archive, real_dns_lookup, use_deterministic_script,
@@ -308,7 +260,6 @@ class ControllableHttpArchiveFetch(object):
     self.replay_fetch = ReplayHttpArchiveFetch(
         http_archive, use_diff_on_unknown_requests, cache_misses,
         use_closest_match)
-    self.use_server_delay = use_server_delay
     if use_record_mode:
       self.SetRecordMode()
     else:
@@ -316,11 +267,9 @@ class ControllableHttpArchiveFetch(object):
 
   def SetRecordMode(self):
     self.fetch = self.record_fetch
-    self.is_record_mode = True
 
   def SetReplayMode(self):
     self.fetch = self.replay_fetch
-    self.is_record_mode = False
 
   def __call__(self, *args, **kwargs):
     """Forward calls to Replay/Record fetch functions depending on mode."""

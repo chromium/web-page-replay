@@ -81,36 +81,16 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       for header, value in response.headers:
         if header != 'server':
           self.send_header(header, value)
-
-      # For backwards compatibility
-      server_delays = []
-      if hasattr(response, 'server_delays'):
-        server_delays = response.server_delays
-
-      logging.info('delays %s', server_delays)
-
-      # We don't want our proxy to simulate server delay on record mode
-      use_server_delay = (self.server.http_archive_fetch.use_server_delay and
-                          not self.server.http_archive_fetch.is_record_mode)
-
-      if use_server_delay and server_delays:
-        time.sleep(server_delays[0])
       self.end_headers()
 
-      # Extract server delays for non-first and non-last chunks
-      for chunk, delay in map(None, response.response_data,
-                             server_delays[1:-1]):
+      for chunk in response.response_data:
         if use_chunked:
-          if use_server_delay and delay:
-            time.sleep(delay)
           # Write chunk length (hex) and data (e.g. "A\r\nTESSELATED\r\n").
           self.wfile.write('%x\r\n%s\r\n' % (len(chunk), chunk))
         else:
           self.wfile.write(chunk)
       if use_chunked and (not response.response_data or
                           response.response_data[-1]):
-        if use_server_delay and server_delays:
-          time.sleep(server_delays[-1])
         # Write last chunk as a zero-length chunk with no data.
         self.wfile.write('0\r\n\r\n')
       self.wfile.flush()
