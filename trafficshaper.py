@@ -162,7 +162,7 @@ class TrafficShaper(object):
           'ip',
           'from', self.host,
           'to', 'any',
-          'out'
+          'out',
           'src-port', ports,
           )
       logging.info('Started shaping traffic')
