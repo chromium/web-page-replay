@@ -83,7 +83,7 @@ class DetailedHTTPResponse(httplib.HTTPResponse):
             break
       finally:
         self.close()
-    response_delays = [(response_times[i] - response_times[i-1]) * 1000
+    response_delays = [(response_times[i] - response_times[i-1]) * 1000.0
                        for i in xrange(2, len(response_times))]
     return chunks, response_delays
 

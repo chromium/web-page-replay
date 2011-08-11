@@ -546,6 +546,7 @@ class ArchivedHttpRequest(object):
     - cookie: Extremely sensitive to request/response order.
     - keep-alive: Not supported by Web Page Replay.
     - user-agent: Changes with every Chrome version.
+    - proxy-connection: Sent for proxy requests.
 
     Another variant to consider is dropping only the value from the header.
     However, this is particularly bad for the cookie header, because the
@@ -569,7 +570,7 @@ class ArchivedHttpRequest(object):
     undesirable_keys = [
         'accept', 'accept-charset', 'accept-language',
         'connection', 'cookie', 'keep-alive', 'method',
-        'referer', 'scheme', 'url', 'version', 'user-agent']
+        'referer', 'scheme', 'url', 'version', 'user-agent', 'proxy-connection']
     return sorted([(k, v) for k, v in headers.items()
                    if k.lower() not in undesirable_keys])
 

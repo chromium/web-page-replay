@@ -22,6 +22,7 @@ import socket
 import SocketServer
 import subprocess
 import time
+import urlparse
 
 
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -51,10 +52,15 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       logging.error('Request without host header')
       return None
 
+    parsed = urlparse.urlparse(self.path)
+    query = '?%s' % parsed.query if parsed.query else ''
+    fragment = '#%s' % parsed.fragment if parsed.fragment else ''
+    full_path = '%s%s%s' % (parsed.path, query, fragment)
+
     return httparchive.ArchivedHttpRequest(
         self.command,
         host,
-        self.path,
+        full_path,
         self.read_request_body(),
         self.get_header_dict())
 
