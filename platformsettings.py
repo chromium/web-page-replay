@@ -156,9 +156,21 @@ class PlatformSettings(object):
     """Return a handler for the logging module (optional)."""
     return None
 
+  def ping(self, hostname):
+    """Pings the hostname by calling the OS system ping command.
+    Also stores the result internally.
+
+    Args:
+      hostname: hostname of the server to be pinged
+
+    Returns:
+      round trip time to the server in seconds, or 0 if unable to calculate RTT
+    """
+    raise NotImplementedError
 
 class PosixPlatformSettings(PlatformSettings):
   _IPFW_BIN = 'ipfw'
+  PING_PATTERN = r'rtt min/avg/max/mdev = \d+\.\d+/(\d+\.\d+)/\d+\.\d+/\d+\.\d+'
 
   def _get_dns_update_error(self):
     return DnsUpdateError('Did you run under sudo?')
@@ -189,6 +201,35 @@ class PosixPlatformSettings(PlatformSettings):
     else:
       logging.error("Unable to get sysctl %s: %s", name, rv)
       return None
+
+  def ping(self, hostname):
+    """Pings the hostname by calling the OS system ping command.
+    Also stores the result internally.
+
+    Args:
+      hostname: hostname of the server to be pinged
+
+    Returns:
+      round trip time to the server in milliseconds, or 0 if unavailable
+    """
+    rtt = 0
+    try:
+      # Regex matching may change depending on versions of ping? (unverified)
+      proc = subprocess.Popen(['ping', '-c', '3', '-i', '0.2', hostname],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      output, errors = proc.communicate()
+
+      result = re.search(self.PING_PATTERN, output)
+      if not result:
+        logging.warning('Unable to ping %s: ', hostname)
+      else:
+        average = result.groups()
+        rtt = float(average[0])
+    except OSError, e:
+      logging.critical('System error while trying to ping %s: %s', hostname, e)
+    except ValueError, e:
+      logging.critical('Subprocess called with invalid arguments: %s',e)
+    return rtt
 
 
 class OsxPlatformSettings(PosixPlatformSettings):

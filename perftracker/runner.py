@@ -233,7 +233,8 @@ class TestInstance:
                diff_unknown_requests, screenshot_dir, cache_miss_file=None,
                use_deterministic_script=False,
                use_chrome_deterministic_js=True,
-               use_closest_match=False):
+               use_closest_match=False,
+               use_server_delay=False):
     self.network = network
     self.log_level = log_level
     self.log_file = log_file
@@ -246,6 +247,7 @@ class TestInstance:
     self.use_deterministic_script = use_deterministic_script
     self.use_chrome_deterministic_js = use_chrome_deterministic_js
     self.use_closest_match = use_closest_match
+    self.use_server_delay = use_server_delay
 
   def GenerateConfigFile(self, notes=''):
     # The PerfTracker extension requires this name in order to kick off.
@@ -320,6 +322,8 @@ setTimeout(function() {
       cmdline += ['-e', self.cache_miss_file]
     if self.use_closest_match:
       cmdline += ['--use_closest_match']
+    if self.use_server_delay:
+      cmdline += ['--use_server_delay']
     if not self.use_deterministic_script:
       cmdline += ['--no-deterministic_script']
     if self.log_file:
@@ -530,7 +534,8 @@ def main(options, cache_miss_file):
           network, options.log_level, options.log_file, options.record,
           options.diff_unknown_requests, options.screenshot_dir,
           cache_miss_file, options.use_deterministic_script,
-          options.use_chrome_deterministic_js, options.use_closest_match)
+          options.use_chrome_deterministic_js, options.use_closest_match,
+          options.use_server_delay)
       test.RunTest(options.notes, options.chrome_cmdline)
     if not options.infinite or options.record:
       break
@@ -614,6 +619,12 @@ if __name__ == '__main__':
       dest='use_closest_match',
       help='During replay, if a request is not found, serve the closest match'
            'in the archive instead of giving a 404.')
+  option_parser.add_option('-U', '--use_server_delay', default=False,
+      action='store_true',
+      dest='use_server_delay',
+      help='During replay, simulate server delay by delaying response time to'
+           'requests.')
+
 
   options, args = option_parser.parse_args()
 
