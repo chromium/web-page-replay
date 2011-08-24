@@ -18,6 +18,8 @@
 import httparchive
 import httplib
 import logging
+import os
+import re
 import sys
 import time
 
@@ -28,6 +30,48 @@ if sys.platform == "win32":
 else:
   # On most other platforms the best timer is time.time()
   DEFAULT_TIMER = time.time
+
+
+HTML_RE = re.compile(r'<html[^>]*>', re.IGNORECASE)
+HEAD_RE = re.compile(r'<head[^>]*>', re.IGNORECASE)
+
+
+class InjectionFailedException(Exception):
+  def __init__(self, text):
+    self.text = text
+
+  def __str__(self):
+    return repr(text)
+
+
+def GetInjectScript(scripts):
+  """Loads |script| from disk and returns a string of their content."""
+  lines = []
+  for script in scripts:
+    if not os.path.isabs(script):
+      script = os.path.join(sys.path[0], script)
+    assert os.path.exists(script)
+    lines += open(script).readlines()
+  return '\n'.join(lines)
+
+
+def _InjectScripts(response, inject_script):
+  """Injects |inject_script| immediately after <head> or <html>."""
+  content_type = response.get_header('content-type')
+  if not content_type or not content_type.startswith('text/html'):
+    return
+  text = response.get_data_as_text()
+
+  def InsertScriptAfter(matchobj):
+    return '%s<script>%s</script>' % (matchobj.group(0), inject_script)
+
+  if text:
+    text, is_injected = HEAD_RE.subn(InsertScriptAfter, text, 1)
+    if not is_injected:
+      text, is_injected = HTML_RE.subn(InsertScriptAfter, text, 1)
+      if not is_injected:
+        raise InjectionFailedException(text)
+    response.set_data(text)
 
 
 class DetailedHTTPResponse(httplib.HTTPResponse):
@@ -152,20 +196,19 @@ class RealHttpFetch(object):
 class RecordHttpArchiveFetch(object):
   """Make real HTTP fetches and save responses in the given HttpArchive."""
 
-  def __init__(self, http_archive, real_dns_lookup, use_deterministic_script,
+  def __init__(self, http_archive, real_dns_lookup, inject_script,
                cache_misses=None):
     """Initialize RecordHttpArchiveFetch.
 
     Args:
       http_archve: an instance of a HttpArchive
       real_dns_lookup: a function that resolves a host to an IP.
-      use_deterministic_script: If True, attempt to inject a script,
-        when appropriate, to make JavaScript more deterministic.
+      inject_script: script string to inject in all pages
       cache_misses: instance of CacheMissArchive
     """
     self.http_archive = http_archive
     self.real_http_fetch = RealHttpFetch(real_dns_lookup)
-    self.use_deterministic_script = use_deterministic_script
+    self.inject_script = inject_script
     self.cache_misses = cache_misses
     self.previous_request = None
 
@@ -206,11 +249,11 @@ class RecordHttpArchiveFetch(object):
         response.getheaders(),
         response_chunks,
         server_delays)
-    if self.use_deterministic_script:
+    if self.inject_script:
       try:
-        archived_http_response.inject_deterministic_script()
-      except httparchive.InjectionFailedException as err:
-        logging.error('Failed to inject deterministic script for %s', request)
+        _InjectScripts(archived_http_response, self.inject_script)
+      except InjectionFailedException as err:
+        logging.error('Failed to inject scripts for %s', request)
         logging.debug('Request content: %s', err.text)
     logging.debug('Recorded: %s', request)
     self.http_archive[request] = archived_http_response
@@ -278,7 +321,7 @@ class ControllableHttpArchiveFetch(object):
   """Controllable fetch function that can swap between record and replay."""
 
   def __init__(self, http_archive, real_dns_lookup,
-               use_deterministic_script, use_diff_on_unknown_requests,
+               inject_script, use_diff_on_unknown_requests,
                use_record_mode, cache_misses, use_closest_match,
                use_server_delay):
     """Initialize HttpArchiveFetch.
@@ -286,8 +329,7 @@ class ControllableHttpArchiveFetch(object):
     Args:
       http_archive: an instance of a HttpArchive
       real_dns_lookup: a function that resolves a host to an IP.
-      use_deterministic_script: If True, attempt to inject a script,
-        when appropriate, to make JavaScript more deterministic.
+      inject_script: script string to inject in all pages.
       use_diff_on_unknown_requests: If True, log unknown requests
         with a diff to requests that look similar.
       use_record_mode: If True, start in server in record mode.
@@ -298,7 +340,7 @@ class ControllableHttpArchiveFetch(object):
         delaying response time to requests.
     """
     self.record_fetch = RecordHttpArchiveFetch(
-        http_archive, real_dns_lookup, use_deterministic_script,
+        http_archive, real_dns_lookup, inject_script,
         cache_misses)
     self.replay_fetch = ReplayHttpArchiveFetch(
         http_archive, use_diff_on_unknown_requests, cache_misses,

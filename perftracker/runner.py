@@ -325,7 +325,7 @@ setTimeout(function() {
     if self.use_server_delay:
       cmdline += ['--use_server_delay']
     if not self.use_deterministic_script:
-      cmdline += ['--no-deterministic_script']
+      cmdline += ['--inject_scripts=""']
     if self.log_file:
       cmdline += ['--log_file', self.log_file]
     if self.network['bandwidth_kbps']['down']:

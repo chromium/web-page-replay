@@ -124,7 +124,8 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
   else:
     http_custom_handlers.add_server_manager_handler(server_manager)
     http_archive_fetch = httpclient.ControllableHttpArchiveFetch(
-        http_archive, real_dns_lookup, options.deterministic_script,
+        http_archive, real_dns_lookup,
+        httpclient.GetInjectScript(options.inject_scripts.split(',')),
         options.diff_unknown_requests, options.record,
         cache_misses=cache_misses, use_closest_match=options.use_closest_match,
         use_server_delay=options.use_server_delay)
@@ -284,12 +285,14 @@ if __name__ == '__main__':
            'without changing the primary DNS nameserver. '
            'Other hosts may connect to this using "replay.py --server" '
            'or by pointing their DNS to this server.')
-  harness_group.add_option('-n', '--no-deterministic_script', default=True,
-      action='store_false',
-      dest='deterministic_script',
-      help='During a record, do not inject JavaScript to make sources of '
-           'entropy such as Date() and Math.random() deterministic. CAUTION: '
-           'With this option many web pages will not replay properly.')
+  harness_group.add_option('-i', '--inject_scripts', default='deterministic.js',
+      action='store',
+      dest='inject_scripts',
+      help='A comma separated list of JavaScript sources to inject in all '
+           'pages at record time. By default a script is injected that '
+           'eliminates sources of entropy such as Date() and Math.random() '
+           'deterministic. CAUTION: Without deterministic.js many web pages '
+           'will not replay properly.')
   harness_group.add_option('-D', '--no-diff_unknown_requests', default=True,
       action='store_false',
       dest='diff_unknown_requests',

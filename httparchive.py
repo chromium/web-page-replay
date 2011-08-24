@@ -38,7 +38,6 @@ import logging
 import optparse
 import os
 import persistentmixin
-import re
 import StringIO
 import subprocess
 import tempfile
@@ -46,87 +45,10 @@ import urlparse
 
 import platformsettings
 
-HTML_RE = re.compile(r'<html[^>]*>', re.IGNORECASE)
-HEAD_RE = re.compile(r'<head[^>]*>', re.IGNORECASE)
-
-# Deterministic script to inject immediately after <head> or <html> tags.
-#
-# Overrides javascript's Math.random() and Date() functions for deterministic
-# behavior.
-#
-# The initial implementation was to always increment the random/date
-# value returned after every call. However, due to latency, scripts may be
-# executed in a non-deterministic order, causing race conditions.
-#
-# Fixing the returned values to constant was not a sufficient solution,
-# due to scripts that record real time such as:
-#   while ((new Date().getTime()) < endTime)
-#
-# Therefore, we settled on a step solution where values are returned
-# count_threshold times before being incremented. In practice, tweaking
-# count_threshold is sufficient to prevent race conditions.
-DETERMINISTIC_SCRIPT = """
-<script>
-  (function () {
-    var orig_date = Date;
-    var random_count = 0;
-    var date_count = 0;
-    var random_seed = 0.462;
-    var time_seed = 1204251968254;
-    var random_count_threshold = 25;
-    var date_count_threshold = 25;
-    Math.random = function() {
-      random_count++;
-      if (random_count > random_count_threshold){
-        random_seed += 0.1;
-        random_count = 1;
-      }
-      return (random_seed % 1);
-    };
-    Date = function() {
-      if (this instanceof Date) {
-        date_count++;
-        if (date_count > date_count_threshold){
-          time_seed += 50;
-          date_count = 1;
-        }
-        switch (arguments.length) {
-        case 0: return new orig_date(time_seed);
-        case 1: return new orig_date(arguments[0]);
-        default: return new orig_date(arguments[0], arguments[1],
-           arguments.length >= 3 ? arguments[2] : 1,
-           arguments.length >= 4 ? arguments[3] : 0,
-           arguments.length >= 5 ? arguments[4] : 0,
-           arguments.length >= 6 ? arguments[5] : 0,
-           arguments.length >= 7 ? arguments[6] : 0);
-        }
-      }
-      return new Date().toString();
-    };
-    Date.__proto__ = orig_date;
-    Date.prototype.constructor = Date;
-    orig_date.now = function() {
-      return new Date().getTime();
-    };
-  })();
-</script>
-"""
-
 
 class HttpArchiveException(Exception):
   """Base class for all exceptions in httparchive."""
   pass
-
-
-class InjectionFailedException(HttpArchiveException):
-  def __init__(self, text):
-    self.text = text
-
-  def __str__(self):
-    return repr(text)
-
-def _InsertScriptAfter(matchobj):
-  return matchobj.group(0) + DETERMINISTIC_SCRIPT
 
 
 class HttpArchive(dict, persistentmixin.PersistentMixin):
@@ -791,20 +713,6 @@ class ArchivedHttpResponse(object):
       return
     self.set_server_delays(partitions[0])
     self.set_data(partitions[1])
-
-  def inject_deterministic_script(self):
-    """Inject deterministic script immediately after <head> or <html>."""
-    content_type = self.get_header('content-type')
-    if not content_type or not content_type.startswith('text/html'):
-      return
-    text = self.get_data_as_text()
-    if text:
-      text, is_injected = HEAD_RE.subn(_InsertScriptAfter, text, 1)
-      if not is_injected:
-        text, is_injected = HTML_RE.subn(_InsertScriptAfter, text, 1)
-        if not is_injected:
-          raise InjectionFailedException(text)
-      self.set_data(text)
 
 
 if __name__ == '__main__':
