@@ -235,15 +235,15 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     for request in self.get_requests(command, host, path):
       print >>out, '%s %s %s\nrequest headers:\n' % (
           request.command, request.host, request.path)
-      for k, v in sorted(request.headers):
-        print >>out, "    %s: %s" % (k, v)
+      for k in request.headers:
+        print >>out, '    %s: %s' % (k, request.headers[k])
       if request.request_body:
         print >>out, request.request_body
       print >>out, '-' * 70
       response = self[request]
       print >>out, 'Status: %s\nReason: %s\nheaders:\n' % (
           response.status, response.reason)
-      for k, v in sorted(response.headers):
+      for k, v in response.headers:
         print >>out, '    %s: %s' % (k, v)
       headers = dict(response.headers)
       body = response.get_data_as_text()

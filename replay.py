@@ -289,10 +289,9 @@ if __name__ == '__main__':
       action='store',
       dest='inject_scripts',
       help='A comma separated list of JavaScript sources to inject in all '
-           'pages at record time. By default a script is injected that '
-           'eliminates sources of entropy such as Date() and Math.random() '
-           'deterministic. CAUTION: Without deterministic.js many web pages '
-           'will not replay properly.')
+           'pages. By default a script is injected that eliminates sources '
+           'of entropy such as Date() and Math.random() deterministic. '
+           'CAUTION: Without deterministic.js, many pages will not replay.')
   harness_group.add_option('-D', '--no-diff_unknown_requests', default=True,
       action='store_false',
       dest='diff_unknown_requests',

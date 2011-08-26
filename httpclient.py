@@ -15,6 +15,7 @@
 
 """Retrieve web resources over http."""
 
+import copy
 import httparchive
 import httplib
 import logging
@@ -52,7 +53,7 @@ def GetInjectScript(scripts):
       script = os.path.join(sys.path[0], script)
     assert os.path.exists(script)
     lines += open(script).readlines()
-  return '\n'.join(lines)
+  return ''.join(lines)
 
 
 def _InjectScripts(response, inject_script):
@@ -65,7 +66,7 @@ def _InjectScripts(response, inject_script):
   def InsertScriptAfter(matchobj):
     return '%s<script>%s</script>' % (matchobj.group(0), inject_script)
 
-  if text:
+  if text and not inject_script in text:
     text, is_injected = HEAD_RE.subn(InsertScriptAfter, text, 1)
     if not is_injected:
       text, is_injected = HTML_RE.subn(InsertScriptAfter, text, 1)
@@ -249,26 +250,31 @@ class RecordHttpArchiveFetch(object):
         response.getheaders(),
         response_chunks,
         server_delays)
+    self.http_archive[request] = archived_http_response
     if self.inject_script:
       try:
+        # Make a copy so the version saved in the archive doesn't have the
+        # injected scripts.
+        archived_http_response = copy.deepcopy(archived_http_response)
         _InjectScripts(archived_http_response, self.inject_script)
       except InjectionFailedException as err:
         logging.error('Failed to inject scripts for %s', request)
         logging.debug('Request content: %s', err.text)
     logging.debug('Recorded: %s', request)
-    self.http_archive[request] = archived_http_response
     return archived_http_response
 
 
 class ReplayHttpArchiveFetch(object):
   """Serve responses from the given HttpArchive."""
 
-  def __init__(self, http_archive, use_diff_on_unknown_requests=False,
-               cache_misses=None, use_closest_match=False):
+  def __init__(self, http_archive, inject_script,
+               use_diff_on_unknown_requests=False, cache_misses=None,
+               use_closest_match=False):
     """Initialize ReplayHttpArchiveFetch.
 
     Args:
       http_archive: an instance of a HttpArchive
+      inject_script: script string to inject in all pages
       use_diff_on_unknown_requests: If True, log unknown requests
         with a diff to requests that look similar.
       cache_misses: Instance of CacheMissArchive.
@@ -277,6 +283,7 @@ class ReplayHttpArchiveFetch(object):
         in the archive instead of giving a 404.
     """
     self.http_archive = http_archive
+    self.inject_script = inject_script
     self.use_diff_on_unknown_requests = use_diff_on_unknown_requests
     self.cache_misses = cache_misses
     self.use_closest_match = use_closest_match
@@ -314,6 +321,8 @@ class ReplayHttpArchiveFetch(object):
               "\nNearest request diff "
               "('-' for archived request, '+' for current request):\n%s" % diff)
       logging.warning('Could not replay: %s', reason)
+    else:
+      _InjectScripts(response, self.inject_script)
     return response
 
 
@@ -343,7 +352,7 @@ class ControllableHttpArchiveFetch(object):
         http_archive, real_dns_lookup, inject_script,
         cache_misses)
     self.replay_fetch = ReplayHttpArchiveFetch(
-        http_archive, use_diff_on_unknown_requests, cache_misses,
+        http_archive, inject_script, use_diff_on_unknown_requests, cache_misses,
         use_closest_match)
     self.use_server_delay = use_server_delay
     if use_record_mode:
