@@ -173,25 +173,29 @@ class RealHttpFetch(object):
     if not host_ip:
       logging.critical('Unable to find host ip for name: %s', request.host)
       return None, None, None
-    try:
-      connection = DetailedHTTPConnection(host_ip)
-      start = DEFAULT_TIMER()
-      connection.request(
-          request.command,
-          request.path,
-          request.request_body,
-          headers)
-      response = connection.getresponse()
-      end = DEFAULT_TIMER()
-      delay = (end - start) * 1000
-      chunks, response_delays = response.read_chunks()
-      response_delays.insert(0, delay)
-      return response, chunks, response_delays
-    except Exception, e:
-      logging.critical('Could not fetch %s: %s', request, e)
-      import traceback
-      logging.critical(traceback.format_exc())
-      return None, None, None
+    retries = 3
+    while True:
+      try:
+        connection = DetailedHTTPConnection(host_ip)
+        start = DEFAULT_TIMER()
+        connection.request(
+            request.command,
+            request.path,
+            request.request_body,
+            headers)
+        response = connection.getresponse()
+        end = DEFAULT_TIMER()
+        delay = (end - start) * 1000
+        chunks, response_delays = response.read_chunks()
+        response_delays.insert(0, delay)
+        return response, chunks, response_delays
+      except Exception, e:
+        if retries:
+          retries -= 1
+          logging.warning('Retrying fetch %s: %s', request, e)
+          continue
+        logging.critical('Could not fetch %s: %s', request, e)
+        return None, None, None
 
 
 class RecordHttpArchiveFetch(object):
