@@ -37,14 +37,6 @@ HTML_RE = re.compile(r'<html[^>]*>', re.IGNORECASE)
 HEAD_RE = re.compile(r'<head[^>]*>', re.IGNORECASE)
 
 
-class InjectionFailedException(Exception):
-  def __init__(self, text):
-    self.text = text
-
-  def __str__(self):
-    return repr(text)
-
-
 def GetInjectScript(scripts):
   """Loads |script| from disk and returns a string of their content."""
   lines = []
@@ -71,7 +63,9 @@ def _InjectScripts(response, inject_script):
     if not is_injected:
       text, is_injected = HTML_RE.subn(InsertScriptAfter, text, 1)
       if not is_injected:
-        raise InjectionFailedException(text)
+        logging.warning('Failed to inject scripts.')
+        logging.debug('Response content: %s', text)
+        return
     response.set_data(text)
 
 
@@ -256,14 +250,10 @@ class RecordHttpArchiveFetch(object):
         server_delays)
     self.http_archive[request] = archived_http_response
     if self.inject_script:
-      try:
-        # Make a copy so the version saved in the archive doesn't have the
-        # injected scripts.
-        archived_http_response = copy.deepcopy(archived_http_response)
-        _InjectScripts(archived_http_response, self.inject_script)
-      except InjectionFailedException as err:
-        logging.error('Failed to inject scripts for %s', request)
-        logging.debug('Request content: %s', err.text)
+      # Make a copy so the version saved in the archive doesn't have the
+      # injected scripts.
+      archived_http_response = copy.deepcopy(archived_http_response)
+      _InjectScripts(archived_http_response, self.inject_script)
     logging.debug('Recorded: %s', request)
     return archived_http_response
 
