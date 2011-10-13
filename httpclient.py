@@ -147,13 +147,12 @@ class RealHttpFetch(object):
   def __init__(self, real_dns_lookup):
     self._real_dns_lookup = real_dns_lookup
 
-  def __call__(self, request, headers):
+  def __call__(self, request):
     """Fetch an HTTP request and return the response, response_body and
     response_delays.
 
     Args:
       request: an instance of an ArchivedHttpRequest
-      headers: a dict of HTTP headers
     Returns:
       (instance of httplib.HTTPResponse,
        [response_body_chunk_1, response_body_chunk_2, ...],
@@ -176,7 +175,7 @@ class RealHttpFetch(object):
             request.command,
             request.path,
             request.request_body,
-            headers)
+            request.headers)
         response = connection.getresponse()
         end = DEFAULT_TIMER()
         delay = (end - start) * 1000
@@ -211,12 +210,11 @@ class RecordHttpArchiveFetch(object):
     self.cache_misses = cache_misses
     self.previous_request = None
 
-  def __call__(self, request, request_headers):
+  def __call__(self, request):
     """Fetch the request and return the response.
 
     Args:
       request: an instance of an ArchivedHttpRequest.
-      request_headers: a dict of HTTP headers.
     """
     if self.cache_misses:
       self.cache_misses.record_request(
@@ -231,8 +229,7 @@ class RecordHttpArchiveFetch(object):
       return self.http_archive[request]
 
     previous_request = request
-    response, response_chunks, response_delays = self.real_http_fetch(
-        request, request_headers)
+    response, response_chunks, response_delays = self.real_http_fetch(request)
     if response is None:
       return None
 
@@ -282,12 +279,11 @@ class ReplayHttpArchiveFetch(object):
     self.cache_misses = cache_misses
     self.use_closest_match = use_closest_match
 
-  def __call__(self, request, request_headers):
+  def __call__(self, request):
     """Fetch the request and return the response.
 
     Args:
       request: an instance of an ArchivedHttpRequest.
-      request_headers: a dict of HTTP headers.
     Returns:
       Instance of ArchivedHttpResponse (if found) or None
     """

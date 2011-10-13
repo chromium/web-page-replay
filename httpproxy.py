@@ -159,7 +159,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     if response_code:
       self.send_error(response_code)
       return
-    response = self.server.http_archive_fetch(request, self.get_header_dict())
+    response = self.server.http_archive_fetch(request)
     if response:
       self.send_archived_http_response(response)
       request_time_ms = (time.time() - start_time) * 1000.0;
