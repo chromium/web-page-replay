@@ -66,18 +66,25 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
     Based on method, host and uri to fetch the matching response and reply
     to browser using spdy.
     """
+    dummy = http_common.dummy
+    def simple_responder(code, content):
+      res_hdrs = [('Content-Type', 'text/html'), ('version', 'HTTP/1.1')]
+      res_body, res_done = res_start(str(code), content, res_hdrs, dummy)
+      res_body(None)
+      res_done(None)
+
     host = ''
-    for (name, value) in hdrs:
+    for name, value in hdrs:
       if name.lower() == 'host':
         host = value
     self.log.debug("request: %s, uri: %s, method: %s", host, uri, method)
 
-    dummy = http_common.dummy
     if method == 'GET':
-      request = httparchive.ArchivedHttpRequest(method, host, uri, None)
+      request = httparchive.ArchivedHttpRequest(
+          method, host, uri, None, dict(hdrs))
       response_code = self.custom_handlers.handle(request)
       if response_code:
-        self.send_simple_response(response_code, "Handled by custom handlers")
+        simple_responder(response_code, "Handled by custom handlers")
         return dummy, dummy
       response = self.http_archive_fetch(request)
       if response:
@@ -92,28 +99,21 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
             pass
           else:
             res_hdrs.append((name, value))
-        res_body, res_done = res_start(str(response.status),
-                                       response.reason,
-                                       res_hdrs, dummy)
+        res_body, res_done = res_start(
+            str(response.status), response.reason, res_hdrs, dummy)
         body = ''
         for item in response.response_data:
           res_body(item)
         res_done(None)
       else:
         self.log.error("404 returned: %s %s", method, uri)
-        self.send_simple_response(404, "file not found")
+        simple_responder(404, "file not found")
     else:
       # TODO(lzheng): Add support for other methods.
       self.log.error("method: %s is not supported: %s", method, uri)
-      self.send_simple_response(500, "Not supported")
-
+      simple_responder(500, "Not supported")
     return dummy, dummy
 
-  def send_simple_response(self, code, phrase):
-      res_hdrs = [('Content-Type', 'text/html'), ('version', 'HTTP/1.1')]
-      res_body, res_done = res_start(str(code), phrase, res_hdrs, dummy)
-      res_body(None)
-      res_done(None)
 
 if __name__ == "__main__":
     logging.basicConfig()

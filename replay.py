@@ -115,7 +115,11 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
   if options.spdy:
     assert not options.record, 'spdy cannot be used with --record.'
     http_archive_fetch = httpclient.ReplayHttpArchiveFetch(
-        http_archive, options.diff_unknown_requests)
+        http_archive,
+        httpclient.GetInjectScript(options.inject_scripts.split(',')),
+        options.diff_unknown_requests,
+        cache_misses=cache_misses,
+        use_closest_match=options.use_closest_match)
     server_manager.Append(
         replayspdyserver.ReplaySpdyServer, http_archive_fetch,
         http_custom_handlers, host=host, port=options.port,
