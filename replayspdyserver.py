@@ -68,7 +68,7 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
     """
     dummy = http_common.dummy
     def simple_responder(code, content):
-      res_hdrs = [('Content-Type', 'text/html'), ('version', 'HTTP/1.1')]
+      res_hdrs = [('content-type', 'text/html'), ('version', 'HTTP/1.1')]
       res_body, res_done = res_start(str(code), content, res_hdrs, dummy)
       res_body(None)
       res_done(None)
@@ -89,16 +89,14 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
       response = self.http_archive_fetch(request)
       if response:
         res_hdrs = [('version', 'HTTP/1.1')]
-        for (name, value) in response.headers:
+        for name, value in response.headers:
           name_lower = name.lower()
-          if name.lower() == CONTENT_LENGTH:
+          if name_lower == CONTENT_LENGTH:
             res_hdrs.append((name, str(value)))
-          elif name_lower == STATUS:
-            pass
-          elif name_lower == VERSION:
+          elif name_lower in (STATUS, VERSION):
             pass
           else:
-            res_hdrs.append((name, value))
+            res_hdrs.append((name_lower, value))
         res_body, res_done = res_start(
             str(response.status), response.reason, res_hdrs, dummy)
         body = ''
