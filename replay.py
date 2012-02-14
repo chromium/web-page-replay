@@ -61,6 +61,16 @@ if sys.version < '2.6':
   sys.exit(1)
 
 
+# Settings for the --net option taken from http://www.webpagetest.org/.
+# WebPagetest does not have an official source.
+NET_OPTIONS = (
+  # key        --down         --up  --delay_ms
+  ('dsl', '1536Kbit/s', '384Kbit/s',       '50'),
+  ('cable',  '5Mbit/s',   '1Mbit/s',       '28'),
+  ('fios',  '20Mbit/s',   '5Mbit/s',        '4'),
+)
+
+
 def configure_logging(platform_settings, log_level_name, log_file_name=None):
   """Configure logging level and format.
 
@@ -273,6 +283,11 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Set initial cwnd (linux only, requires kernel patch)')
+  network_group.add_option('-n', '--net', default=None,
+      action='store',
+      type='choice',
+      choices=[key for key, down, up, delay_ms in NET_OPTIONS],
+      help='Select a set of network options')
   option_parser.add_option_group(network_group)
 
   harness_group = optparse.OptionGroup(option_parser,
@@ -355,21 +370,23 @@ if __name__ == '__main__':
   else:
     replay_filename = args[0]
 
-  if options.record:
-    if options.up != '0':
-      option_parser.error('Option --up cannot be used with --record.')
-    if options.down != '0':
-      option_parser.error('Option --down cannot be used with --record.')
-    if options.delay_ms != '0':
-      option_parser.error('Option --delay_ms cannot be used with --record.')
-    if options.packet_loss_rate != '0':
-      option_parser.error(
-          'Option --packet_loss_rate cannot be used with --record.')
-    if options.spdy:
-      option_parser.error('Option --spdy cannot be used with --record.')
-
-  if options.server and options.server_mode:
-    option_parser.error('Cannot run with both --server and --server_mode')
+  CONFLICTING_OPTIONS = (
+    ('record', ('down', 'up', 'delay_ms', 'packet_loss_rate', 'net', 'spdy')),
+    ('net', ('down', 'up', 'delay_ms')),
+    ('server', ('server_mode',)),
+  )
+  def IsOptionSet(name):
+    return getattr(options, name) != option_parser.defaults[name]
+  for option, bad_options in CONFLICTING_OPTIONS:
+    if IsOptionSet(option):
+      for bad_option in bad_options:
+        if IsOptionSet(bad_option):
+          option_parser.error('Option --%s cannot be used with --%s.' %
+                              (bad_option, option))
+  if options.net:
+    for key, down, up, delay_ms in NET_OPTIONS:
+      if options.net == key:
+        options.down, options.up, options.delay_ms = down, up, delay_ms
 
   if options.shaping_port == 0:
     options.shaping_port = options.port
