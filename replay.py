@@ -200,11 +200,13 @@ def main(options, replay_filename):
 
   exit_status = 0
   try:
+    platform_settings.rerun_as_administrator()
     server_manager.Run()
   except KeyboardInterrupt:
     logging.info('Shutting down.')
   except (dnsproxy.DnsProxyException,
           trafficshaper.TrafficShaperException,
+          platformsettings.NotAdministratorError,
           platformsettings.DnsUpdateError) as e:
     logging.critical('%s: %s', e.__class__.__name__, e)
     exit_status = 1

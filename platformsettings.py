@@ -21,6 +21,7 @@ import platform
 import re
 import socket
 import subprocess
+import sys
 import tempfile
 
 
@@ -36,6 +37,11 @@ class DnsReadError(PlatformSettingsError):
 
 class DnsUpdateError(PlatformSettingsError):
   """Raised when unable to update DNS settings."""
+  pass
+
+
+class NotAdministratorError(PlatformSettingsError):
+  """Raised when not running as administrator."""
   pass
 
 
@@ -168,6 +174,14 @@ class PlatformSettings(object):
     """
     raise NotImplementedError
 
+  def rerun_as_administrator(self):
+    """If needed, rerun the program with administrative privileges.
+
+    Raises NotAdministratorError if unable to rerun.
+    """
+    pass
+
+
 class PosixPlatformSettings(PlatformSettings):
   _IPFW_BIN = 'ipfw'
   PING_PATTERN = r'rtt min/avg/max/mdev = \d+\.\d+/(\d+\.\d+)/\d+\.\d+/\d+\.\d+'
@@ -230,6 +244,15 @@ class PosixPlatformSettings(PlatformSettings):
     except ValueError, e:
       logging.critical('Subprocess called with invalid arguments: %s',e)
     return rtt
+
+  def rerun_as_administrator(self):
+    """If needed, rerun the program with administrative privileges.
+
+    Raises NotAdministratorError if unable to rerun.
+    """
+    if os.geteuid() != 0:
+      logging.warn("Rerunning with sudo: %s", sys.argv)
+      os.execv('/usr/bin/sudo', ['--'] + sys.argv)
 
 
 class OsxPlatformSettings(PosixPlatformSettings):
@@ -507,6 +530,16 @@ Next
       def emit(self, record):
         output_debug_string("[wpr] " + self.format(record))
     return DebugViewHandler()
+
+  def rerun_as_administrator(self):
+    """If needed, rerun the program with administrative privileges.
+
+    Raises NotAdministratorError if unable to rerun.
+    """
+    import ctypes
+    if ctypes.windll.shell32.IsUserAnAdmin():
+      raise NotAdministratorError('Rerun with administrator privileges.')
+      #os.execv('runas', sys.argv)  # TODO: replace needed Windows magic
 
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
