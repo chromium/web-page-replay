@@ -18,8 +18,8 @@ import daemonserver
 import httparchive
 import logging
 import os
-import socket
 import SocketServer
+import ssl
 import subprocess
 import time
 import urlparse
@@ -171,6 +171,8 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 class HttpProxyServer(SocketServer.ThreadingMixIn,
                       BaseHTTPServer.HTTPServer,
                       daemonserver.DaemonServer):
+  HANDLER = HttpArchiveHandler
+
   def __init__(self, http_archive_fetch, custom_handlers,
                host='localhost', port=80):
     self.http_archive_fetch = http_archive_fetch
@@ -183,7 +185,7 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
     self.request_queue_size = 128
 
     try:
-      BaseHTTPServer.HTTPServer.__init__(self, (host, port), HttpArchiveHandler)
+      BaseHTTPServer.HTTPServer.__init__(self, (host, port), self.HANDLER)
     except Exception, e:
       logging.critical('Could not start HTTPServer on port %d: %s', port, e)
     logging.info('Started HTTP server on %s...', self.server_address)
@@ -194,3 +196,26 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
     except KeyboardInterrupt, e:
       pass
     logging.info('Stopped HTTP server')
+
+
+class HttpsArchiveHandler(HttpArchiveHandler):
+  """SSL handler."""
+
+  def get_archived_http_request(self):
+    logging.debug('Get request via SSL.')
+    request = HttpArchiveHandler.get_archived_http_request(self)
+    request.is_ssl = True
+    return request
+
+class HttpsProxyServer(HttpProxyServer):
+  """SSL server."""
+
+  HANDLER = HttpsArchiveHandler
+
+  def __init__(self, http_archive_fetch, custom_handlers, certfile,
+               host='localhost', port=443):
+    HttpProxyServer.__init__(
+        self, http_archive_fetch, custom_handlers, host, port)
+    self.socket = ssl.wrap_socket(self.socket, certfile=certfile,
+                                  server_side=True)
+    # Ancestor class, deamonserver, calls serve_forever() during its __init__.

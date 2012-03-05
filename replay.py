@@ -148,6 +148,11 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
     server_manager.Append(
         httpproxy.HttpProxyServer, http_archive_fetch, http_custom_handlers,
         host=host, port=options.port)
+    if options.certfile:
+      server_manager.Append(
+          httpproxy.HttpsProxyServer, http_archive_fetch,
+          http_custom_handlers, options.certfile,
+          host=host, port=options.ssl_port)
 
 
 def AddTrafficShaper(server_manager, options, host):
@@ -160,6 +165,7 @@ def AddTrafficShaper(server_manager, options, host):
 
 def main(options, replay_filename):
   platform_settings = platformsettings.get_platform_settings()
+  platform_settings.rerun_as_administrator()
   configure_logging(platform_settings, options.log_level, options.log_file)
 
   server_manager = servermanager.ServerManager()
@@ -200,7 +206,6 @@ def main(options, replay_filename):
 
   exit_status = 0
   try:
-    platform_settings.rerun_as_administrator()
     server_manager.Run()
   except KeyboardInterrupt:
     logging.info('Shutting down.')
@@ -348,6 +353,10 @@ if __name__ == '__main__':
       action='store',
       type='int',
       help='Port number to listen on.')
+  harness_group.add_option('--ssl_port', default=443,
+      action='store',
+      type='int',
+      help='SSL port number to listen on.')
   harness_group.add_option('--shaping_port', default=0,
       action='store',
       type='int',

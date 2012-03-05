@@ -143,6 +143,15 @@ class DetailedHTTPConnection(httplib.HTTPConnection):
   response_class = DetailedHTTPResponse
 
 
+class DetailedHTTPSResponse(DetailedHTTPResponse):
+  """Preserve details relevant to replaying SSL responses."""
+  pass
+
+class DetailedHTTPSConnection(httplib.HTTPSConnection):
+  """Preserve details relevant to replaying SSL connections."""
+  response_class = DetailedHTTPSResponse
+
+
 class RealHttpFetch(object):
   def __init__(self, real_dns_lookup):
     self._real_dns_lookup = real_dns_lookup
@@ -169,7 +178,10 @@ class RealHttpFetch(object):
     retries = 3
     while True:
       try:
-        connection = DetailedHTTPConnection(host_ip)
+        if request.is_ssl:
+          connection = DetailedHTTPSConnection(host_ip)
+        else:
+          connection = DetailedHTTPConnection(host_ip)
         start = DEFAULT_TIMER()
         connection.request(
             request.command,
