@@ -68,6 +68,7 @@ def _InjectScripts(response, inject_script):
         return
     response.set_data(text)
 
+
 class DetailedHTTPResponse(httplib.HTTPResponse):
   """Preserve details relevant to replaying responses.
 
