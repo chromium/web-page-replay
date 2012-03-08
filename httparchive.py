@@ -116,7 +116,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       # The request with conditional headers removed.
       shortened_request = ArchivedHttpRequest(
           request.command, request.host, request.path,
-          request.request_body, shortened_headers)
+          request.request_body, shortened_headers, request.is_ssl)
       if shortened_request in self:
         status, reason = self.handle_conditional_headers(
             matched_conditional_headers, request, shortened_request)
@@ -356,7 +356,7 @@ class ArchivedHttpRequest(object):
   allows for changes to the trim function and can help with debugging.
   """
 
-  def __init__(self, command, host, path, request_body, headers):
+  def __init__(self, command, host, path, request_body, headers, is_ssl=False):
     """Initialize an ArchivedHttpRequest.
 
     Args:
@@ -365,12 +365,14 @@ class ArchivedHttpRequest(object):
       path: a request path (e.g. '/search?q=dogs').
       request_body: a request body string for a POST or None.
       headers: {key: value, ...} where key and value are strings.
+      is_ssl: a boolean which is True iff request is make via SSL.
     """
     self.command = command
     self.host = host
     self.path = path
     self.request_body = request_body
     self.headers = headers
+    self.is_ssl = is_ssl
     self.trimmed_headers = self._TrimHeaders(headers)
 
   def __str__(self):
@@ -382,7 +384,7 @@ class ArchivedHttpRequest(object):
 
   def __repr__(self):
     return repr((self.command, self.host, self.path, self.request_body,
-                 self.trimmed_headers))
+                 self.trimmed_headers, self.is_ssl))
 
   def __hash__(self):
     """Return a integer hash to use for hashed collections including dict."""
@@ -411,6 +413,8 @@ class ArchivedHttpRequest(object):
           'Archived HTTP request is missing "headers". The HTTP archive is'
           ' likely from a previous version and must be re-recorded.')
     state['trimmed_headers'] = self._TrimHeaders(dict(state['headers']))
+    if 'is_ssl' not in state:
+      state['is_ssl'] = False
     self.__dict__.update(state)
 
   def __getstate__(self):

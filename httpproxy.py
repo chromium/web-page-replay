@@ -46,7 +46,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def get_header_dict(self):
     return dict(self.headers.items())
 
-  def get_archived_http_request(self):
+  def get_archived_http_request(self, is_ssl=False):
     host = self.headers.get('host')
     if host is None:
       logging.error('Request without host header')
@@ -62,7 +62,8 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         host,
         full_path,
         self.read_request_body(),
-        self.get_header_dict())
+        self.get_header_dict(),
+        is_ssl)
 
   def send_archived_http_response(self, response):
     try:
@@ -203,7 +204,7 @@ class HttpsArchiveHandler(HttpArchiveHandler):
 
   def get_archived_http_request(self):
     logging.debug('Get request via SSL.')
-    request = HttpArchiveHandler.get_archived_http_request(self)
+    request = HttpArchiveHandler.get_archived_http_request(self, is_ssl=True)
     request.is_ssl = True
     return request
 
