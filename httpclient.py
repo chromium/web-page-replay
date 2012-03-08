@@ -49,10 +49,14 @@ def GetInjectScript(scripts):
 
 
 def _InjectScripts(response, inject_script):
-  """Injects |inject_script| immediately after <head> or <html>."""
+  """Injects |inject_script| immediately after <head> or <html>.
+
+  Returns:
+    False - if failed to inject on text content.
+  """
   content_type = response.get_header('content-type')
   if not content_type or not content_type.startswith('text/html'):
-    return
+    return True
   text = response.get_data_as_text()
 
   def InsertScriptAfter(matchobj):
@@ -63,11 +67,9 @@ def _InjectScripts(response, inject_script):
     if not is_injected:
       text, is_injected = HTML_RE.subn(InsertScriptAfter, text, 1)
       if not is_injected:
-        logging.warning('Failed to inject scripts.')
-        logging.debug('Response content: %s', text)
-        return
+        return False
     response.set_data(text)
-
+  return True
 
 class DetailedHTTPResponse(httplib.HTTPResponse):
   """Preserve details relevant to replaying responses.
@@ -262,7 +264,9 @@ class RecordHttpArchiveFetch(object):
       # Make a copy so the version saved in the archive doesn't have the
       # injected scripts.
       archived_http_response = copy.deepcopy(archived_http_response)
-      _InjectScripts(archived_http_response, self.inject_script)
+      if (not _InjectScripts(archived_http_response, self.inject_script)):
+        logging.warning('Failed to inject scripts.')
+        logging.debug('Response content: %s', text)
     logging.debug('Recorded: %s', request)
     return archived_http_response
 
