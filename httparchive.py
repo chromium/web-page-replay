@@ -376,8 +376,9 @@ class ArchivedHttpRequest(object):
     self.trimmed_headers = self._TrimHeaders(headers)
 
   def __str__(self):
-    return '%s %s%s %s' % (self.command, self.host, self.path,
-                           self.trimmed_headers)
+    return '%s %s://%s%s %s' % (
+        self.command, (self.is_ssl and 'https' or 'http'),
+        self.host, self.path, self.trimmed_headers)
 
   def verbose(self):
     return '%s %s%s %s' % (self.command, self.host, self.path, self.headers)
