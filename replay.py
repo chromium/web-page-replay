@@ -155,7 +155,27 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
           host=host, port=options.ssl_port)
 
 
+def RequiresTrafficShaping(options):
+  """Returns True iff the options require traffic shaping."""
+  return bool(options.up != '0' or
+              options.down != '0' or
+              options.delay_ms != '0' or
+              options.packet_loss_rate != '0' or
+              options.init_cwnd != '0' or
+              options.net)
+
+
+def RequiresRoot(options):
+  """Returns True iff the options require root access."""
+  return bool(options.dns_forwarding or
+              options.port < 1024 or
+              options.ssl_port < 1024 or
+              RequiresTrafficShaping(options))
+
+
 def AddTrafficShaper(server_manager, options, host):
+  if not RequiresTrafficShaping(options):
+    return
   server_manager.Append(
       trafficshaper.TrafficShaper, host=host, port=options.shaping_port,
       up_bandwidth=options.up, down_bandwidth=options.down,
@@ -165,7 +185,8 @@ def AddTrafficShaper(server_manager, options, host):
 
 def main(options, replay_filename):
   platform_settings = platformsettings.get_platform_settings()
-  platform_settings.rerun_as_administrator()
+  if RequiresRoot(options):
+    platform_settings.rerun_as_administrator()
   configure_logging(platform_settings, options.log_level, options.log_file)
 
   server_manager = servermanager.ServerManager()
