@@ -377,8 +377,8 @@ class ArchivedHttpRequest(object):
 
   def __str__(self):
     scheme = 'https' if self.is_ssl else 'http'
-    return '%s %s://%s%s %s' % (
-        self.command, scheme, self.host, self.path, self.trimmed_headers)
+    return '%s %s://%s%s %s' % (self.command, scheme, self.host, self.path,
+                                self.trimmed_headers)
 
   def verbose(self):
     return '%s %s%s %s' % (self.command, self.host, self.path, self.headers)
