@@ -61,16 +61,6 @@ if sys.version < '2.6':
   sys.exit(1)
 
 
-# Settings for the --net option taken from http://www.webpagetest.org/.
-# WebPagetest does not have an official source.
-NET_OPTIONS = (
-  # key        --down         --up  --delay_ms
-  ('dsl', '1536Kbit/s', '384Kbit/s',       '50'),
-  ('cable',  '5Mbit/s',   '1Mbit/s',       '28'),
-  ('fios',  '20Mbit/s',   '5Mbit/s',        '4'),
-)
-
-
 def configure_logging(platform_settings, log_level_name, log_file_name=None):
   """Configure logging level and format.
 
@@ -155,37 +145,86 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
           host=host, port=options.ssl_port)
 
 
-def RequiresTrafficShaping(options):
-  """Returns True iff the options require traffic shaping."""
-  return bool(options.up != '0' or
-              options.down != '0' or
-              options.delay_ms != '0' or
-              options.packet_loss_rate != '0' or
-              options.init_cwnd != '0' or
-              options.net)
-
-
-def RequiresRoot(options):
-  """Returns True iff the options require root access."""
-  return bool(options.dns_forwarding or
-              options.port < 1024 or
-              options.ssl_port < 1024 or
-              RequiresTrafficShaping(options))
-
-
 def AddTrafficShaper(server_manager, options, host):
-  if not RequiresTrafficShaping(options):
-    return
-  server_manager.Append(
-      trafficshaper.TrafficShaper, host=host, port=options.shaping_port,
-      up_bandwidth=options.up, down_bandwidth=options.down,
-      delay_ms=options.delay_ms, packet_loss_rate=options.packet_loss_rate,
-      init_cwnd=options.init_cwnd, use_loopback=not options.server_mode)
+  if options.HasTrafficShaping():
+    server_manager.Append(
+        trafficshaper.TrafficShaper, host=host, port=options.shaping_port,
+        up_bandwidth=options.up, down_bandwidth=options.down,
+        delay_ms=options.delay_ms, packet_loss_rate=options.packet_loss_rate,
+        init_cwnd=options.init_cwnd, use_loopback=not options.server_mode)
+
+
+class OptionsWrapper(object):
+  """Add checks, updates, and methods to option values.
+
+  Example:
+    options, args = option_parser.parse_args()
+    options = OptionsWrapper(options, option_parser)  # run checks and updates
+    if options.record and options.HasTrafficShaping():
+       [...]
+  """
+  _TRAFFICSHAPING_OPTIONS = set(
+      ['down', 'up', 'delay_ms', 'packet_loss_rate', 'init_cwnd', 'net'])
+  _CONFLICTING_OPTIONS = (
+      ('record', ('down', 'up', 'delay_ms', 'packet_loss_rate', 'net', 'spdy')),
+      ('net', ('down', 'up', 'delay_ms')),
+      ('server', ('server_mode',)),
+  )
+  # The --net values come from http://www.webpagetest.org/.
+  # https://sites.google.com/a/webpagetest.org/docs/other-resources/2011-fcc-broadband-data
+  _NET_CONFIGS = (
+      # key           --down         --up  --delay_ms
+      ('dsl',   ('1536Kbit/s', '384Kbit/s',       '50')),
+      ('cable', (   '5Mbit/s',   '1Mbit/s',       '28')),
+      ('fios',  (  '20Mbit/s',   '5Mbit/s',        '4')),
+  )
+  NET_CHOICES = [key for key, values in _NET_CONFIGS]
+
+  def __init__(self, options, parser):
+    self._options = options
+    self._parser = parser
+    self._nondefaults = set([
+        name for name, value in parser.defaults.items()
+        if getattr(options, name) != value])
+    self._CheckConflicts()
+    self._MassageValues()
+
+  def _CheckConflicts(self):
+    """Give an error if mutually exclusive options are used."""
+    for option, bad_options in self._CONFLICTING_OPTIONS:
+      if option in self._nondefaults:
+        for bad_option in bad_options:
+          if bad_option in self._nondefaults:
+            self._parser.error('Option --%s cannot be used with --%s.' %
+                                (bad_option, option))
+
+  def _MassageValues(self):
+    """Set options that depend on the values of other options."""
+    for net_choice, values in self._NET_CONFIGS:
+      if net_choice == self.net:
+        self._options.down, self._options.up, self._options.delay_ms = values
+    if not self.shaping_port:
+      self._options.shaping_port = self.port
+
+  def __getattr__(self, name):
+    """Make the original option values available."""
+    return getattr(self._options, name)
+
+  def HasTrafficShaping(self):
+    """Returns True iff the options require traffic shaping."""
+    return bool(self._TRAFFICSHAPING_OPTIONS & self._nondefaults)
+
+  def IsRootRequired(self):
+    """Returns True iff the options require root access."""
+    return (self.HasTrafficShaping() or
+            self.dns_forwarding or
+            self.port < 1024 or
+            self.ssl_port < 1024)
 
 
 def main(options, replay_filename):
   platform_settings = platformsettings.get_platform_settings()
-  if RequiresRoot(options):
+  if options.IsRootRequired():
     platform_settings.rerun_as_administrator()
   configure_logging(platform_settings, options.log_level, options.log_file)
 
@@ -311,11 +350,12 @@ if __name__ == '__main__':
       action='store',
       type='string',
       help='Set initial cwnd (linux only, requires kernel patch)')
-  network_group.add_option('-n', '--net', default=None,
+  network_group.add_option('--net', default=None,
       action='store',
       type='choice',
-      choices=[key for key, down, up, delay_ms in NET_OPTIONS],
-      help='Select a set of network options')
+      choices=OptionsWrapper.NET_CHOICES,
+      help='Select a set of network options: %s.' % ', '.join(
+          OptionsWrapper.NET_CHOICES))
   option_parser.add_option_group(network_group)
 
   harness_group = optparse.OptionGroup(option_parser,
@@ -378,11 +418,11 @@ if __name__ == '__main__':
       action='store',
       type='int',
       help='SSL port number to listen on.')
-  harness_group.add_option('--shaping_port', default=0,
+  harness_group.add_option('--shaping_port', default=None,
       action='store',
       type='int',
-      help='Port to apply traffic shaping to.  \'0\' means use the same '
-           'port as the listen port (--port)')
+      help='Port on which to apply traffic shaping.  Defaults to the '
+           'listen port (--port)')
   harness_group.add_option('-c', '--certfile', default='',
       action='store',
       type='string',
@@ -394,6 +434,7 @@ if __name__ == '__main__':
   option_parser.add_option_group(harness_group)
 
   options, args = option_parser.parse_args()
+  options = OptionsWrapper(options, option_parser)
 
   if options.server:
     replay_filename = None
@@ -402,25 +443,5 @@ if __name__ == '__main__':
   else:
     replay_filename = args[0]
 
-  CONFLICTING_OPTIONS = (
-    ('record', ('down', 'up', 'delay_ms', 'packet_loss_rate', 'net', 'spdy')),
-    ('net', ('down', 'up', 'delay_ms')),
-    ('server', ('server_mode',)),
-  )
-  def IsOptionSet(name):
-    return getattr(options, name) != option_parser.defaults[name]
-  for option, bad_options in CONFLICTING_OPTIONS:
-    if IsOptionSet(option):
-      for bad_option in bad_options:
-        if IsOptionSet(bad_option):
-          option_parser.error('Option --%s cannot be used with --%s.' %
-                              (bad_option, option))
-  if options.net:
-    for key, down, up, delay_ms in NET_OPTIONS:
-      if options.net == key:
-        options.down, options.up, options.delay_ms = down, up, delay_ms
-
-  if options.shaping_port == 0:
-    options.shaping_port = options.port
 
   sys.exit(main(options, replay_filename))
