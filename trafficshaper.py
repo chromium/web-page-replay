@@ -53,6 +53,7 @@ class TrafficShaper(object):
                dont_use=None,
                host='127.0.0.1',
                port='80',
+               ssl_port='443',
                dns_port='53',
                up_bandwidth='0',
                down_bandwidth='0',
@@ -65,6 +66,7 @@ class TrafficShaper(object):
     Args:
       host: a host string (name or IP) for the web proxy.
       port: a port string (e.g. '80') for the web proxy.
+      ssl_port: a port string (e.g. '443') for the SSL web proxy.
       dns_port: a port string for the dns proxy (for unit testing).
       up_bandwidth: Upload bandwidth
       down_bandwidth: Download bandwidth
@@ -78,6 +80,7 @@ class TrafficShaper(object):
     self.platformsettings = platformsettings.get_platform_settings()
     self.host = host
     self.port = port
+    self.ssl_port = ssl_port
     self.dns_port = dns_port
     self.up_bandwidth = up_bandwidth
     self.down_bandwidth = down_bandwidth
@@ -110,7 +113,8 @@ class TrafficShaper(object):
     if not self.dns_port and not self.port:
       raise TrafficShaperException('No ports on which to shape traffic.')
 
-    ports = ','.join(str(p) for p in (self.port, self.dns_port) if p)
+    ports = ','.join(
+        str(p) for p in (self.port, self.ssl_port, self.dns_port) if p)
     queue_size = self.platformsettings.get_ipfw_queue_slots()
     half_delay_ms = int(self.delay_ms) / 2  # split over up/down links
 

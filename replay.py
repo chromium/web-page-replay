@@ -149,6 +149,7 @@ def AddTrafficShaper(server_manager, options, host):
   if options.HasTrafficShaping():
     server_manager.Append(
         trafficshaper.TrafficShaper, host=host, port=options.shaping_port,
+        ssl_port=(options.ssl_shaping_port if options.certfile else None),
         up_bandwidth=options.up, down_bandwidth=options.down,
         delay_ms=options.delay_ms, packet_loss_rate=options.packet_loss_rate,
         init_cwnd=options.init_cwnd, use_loopback=not options.server_mode)
@@ -205,6 +206,8 @@ class OptionsWrapper(object):
         self._options.down, self._options.up, self._options.delay_ms = values
     if not self.shaping_port:
       self._options.shaping_port = self.port
+    if not self.ssl_shaping_port:
+      self._options.ssl_shaping_port = self.ssl_port
 
   def __getattr__(self, name):
     """Make the original option values available."""
@@ -423,14 +426,19 @@ if __name__ == '__main__':
       type='int',
       help='Port on which to apply traffic shaping.  Defaults to the '
            'listen port (--port)')
+  harness_group.add_option('--ssl_shaping_port', default=None,
+      action='store',
+      type='int',
+      help='SSL port on which to apply traffic shaping.  Defaults to the '
+           'SSL listen port (--ssl_port)')
   harness_group.add_option('-c', '--certfile', default='',
       action='store',
       type='string',
-      help='Certificate file for use with SSL')
+      help='Certificate file to use with SSL.')
   harness_group.add_option('-k', '--keyfile', default='',
       action='store',
       type='string',
-      help='Key file for use with SSL')
+      help='Key file to use with SSL.')
   option_parser.add_option_group(harness_group)
 
   options, args = option_parser.parse_args()
