@@ -19,7 +19,7 @@
   - Return the given RESPONSE_CODE.
 /web-page-replay-post-image-[FILENAME]
   - Save the posted image to local disk.
-/web-page-replay-command-[record|replay]
+/web-page-replay-command-[record|replay|status]
   - Optional. Enable by calling custom_handlers.add_server_manager_handler(...).
   - Change the server mode to either record or replay.
     + When switching to record, the http_archive is cleared.
@@ -27,6 +27,9 @@
 """
 
 import base64
+import httparchive
+import httplib
+import json
 import logging
 import os
 
@@ -35,6 +38,23 @@ COMMAND_URL_PREFIX = COMMON_URL_PREFIX + 'command-'
 GENERATOR_URL_PREFIX = COMMON_URL_PREFIX + 'generate-'
 POST_IMAGE_URL_PREFIX = COMMON_URL_PREFIX + 'post-image-'
 IMAGE_DATA_PREFIX = 'data:image/png;base64,'
+
+
+def SimpleResponse(status):
+  """Return a ArchivedHttpResponse with |status| code and a simple text body."""
+  reason = httplib.responses.get(status, 'Unknown')
+  headers = [('content-type', 'text/plain')]
+  body = '%s %s' % (status, reason)
+  return httparchive.ArchivedHttpResponse(11, status, reason, headers, body)
+
+
+def JsonResponse(data):
+  """Return a ArchivedHttpResponse with |data| encoded as json in the body."""
+  status = 200
+  reason = 'OK'
+  headers = [('content-type', 'application/json')]
+  body = json.dumps(data)
+  return httparchive.ArchivedHttpResponse(11, status, reason, headers, body)
 
 
 class CustomHandlers(object):
@@ -65,14 +85,11 @@ class CustomHandlers(object):
     Args:
       request: an http request
     Returns:
-      If request is for a special URL, a 3-digit integer like 404.
-      Otherwise, None.
+      ArchivedHttpResponse or None.
     """
     for prefix, handler in self.handlers:
       if request.path.startswith(prefix):
-        response_code = handler(request, request.path[len(prefix):])
-        if response_code:
-          return response_code
+        return handler(request, request.path[len(prefix):])
     return None
 
   def get_generator_url_response_code(self, request, url_suffix):
@@ -85,12 +102,12 @@ class CustomHandlers(object):
       request: an ArchivedHttpRequest instance
       url_suffix: string that is after the handler prefix (e.g. 304)
     Returns:
-      On a match, a 3-digit integer like 404.
+      On a match, an ArchivedHttpResponse.
       Otherwise, None.
     """
     try:
       response_code = int(url_suffix)
-      return response_code
+      return SimpleResponse(response_code)
     except ValueError:
       return None
 
@@ -105,8 +122,8 @@ class CustomHandlers(object):
       request: an ArchivedHttpRequest instance
       url_suffix: string that is after the handler prefix (e.g. 'foo.png')
     Returns:
-      On a match, a 3-digit integer response code.
-      False otherwise.
+      On a match, an ArchivedHttpResponse.
+      Otherwise, None.
     """
     basename = url_suffix
     if not basename:
@@ -115,7 +132,7 @@ class CustomHandlers(object):
     data = request.request_body
     if not data.startswith(IMAGE_DATA_PREFIX):
       logging.error('Unexpected image format for: %s', basename)
-      return 400
+      return SimpleResponse(400)
 
     data = data[len(IMAGE_DATA_PREFIX):]
     png = base64.b64decode(data)
@@ -123,11 +140,11 @@ class CustomHandlers(object):
                             '%s-%s.png' % (request.host, basename))
     if not os.access(self.screenshot_dir, os.W_OK):
       logging.error('Unable to write to: %s', filename)
-      return 400
+      return SimpleResponse(400)
 
     with file(filename, 'w') as f:
       f.write(png)
-    return 200
+    return SimpleResponse(200)
 
   def add_server_manager_handler(self, server_manager):
     """Add the ability to change the server mode (e.g. to record mode).
@@ -153,14 +170,17 @@ class CustomHandlers(object):
       request: an ArchivedHttpRequest instance
       url_suffix: string that is after the handler prefix (e.g. 'record')
     Returns:
-      200 if the command is handled.
+      On a match, an ArchivedHttpResponse.
       Otherwise, None.
     """
     command = url_suffix
     if command == 'record':
       self.server_manager.SetRecordMode()
-      return 200
+      return SimpleResponse(200)
     elif command == 'replay':
       self.server_manager.SetReplayMode()
-      return 200
+      return SimpleResponse(200)
+    elif command == 'status':
+      is_record_mode = self.server_manager.IsRecordMode()
+      return JsonResponse({'is_record_mode': is_record_mode})
     return None

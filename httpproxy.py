@@ -156,11 +156,9 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     if request is None:
       self.send_error(500)
       return
-    response_code = self.server.custom_handlers.handle(request)
-    if response_code:
-      self.send_error(response_code)
-      return
-    response = self.server.http_archive_fetch(request)
+    response = self.server.custom_handlers.handle(request)
+    if not response:
+      response = self.server.http_archive_fetch(request)
     if response:
       self.send_archived_http_response(response)
       request_time_ms = (time.time() - start_time) * 1000.0;

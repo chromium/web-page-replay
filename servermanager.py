@@ -28,11 +28,12 @@ class ServerManager(object):
   is guaranteed to be called when ServerManager.Run() completes.
   """
 
-  def __init__(self):
+  def __init__(self, is_record_mode):
     """Initialize a server manager."""
     self.initializers = []
     self.record_callbacks = []
     self.replay_callbacks = []
+    self.is_record_mode = is_record_mode
 
   def Append(self, initializer, *init_args, **init_kwargs):
     """Append a server to the end of the list to run.
@@ -64,13 +65,19 @@ class ServerManager(object):
     """
     self.replay_callbacks.append(func)
 
+  def IsRecordMode(self):
+    """Call all the functions that have been registered to enter replay mode."""
+    return self.is_record_mode
+
   def SetRecordMode(self):
     """Call all the functions that have been registered to enter record mode."""
+    self.is_record_mode = True
     for record_func in self.record_callbacks:
       record_func()
 
   def SetReplayMode(self):
     """Call all the functions that have been registered to enter replay mode."""
+    self.is_record_mode = False
     for replay_func in self.replay_callbacks:
       replay_func()
 

@@ -228,7 +228,7 @@ def main(options, replay_filename):
     platform_settings.rerun_as_administrator()
   configure_logging(platform_settings, options.log_level, options.log_file)
 
-  server_manager = servermanager.ServerManager()
+  server_manager = servermanager.ServerManager(options.record)
   cache_misses = None
   if options.cache_miss_file:
     if os.path.exists(options.cache_miss_file):
