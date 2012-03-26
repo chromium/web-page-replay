@@ -263,7 +263,7 @@ class PosixPlatformSettings(PlatformSettings):
     """Create a certfile for serving SSL traffic and return its name."""
     filename = os.path.join(tempfile.gettempdir(), self._CERT_FILE)
     if not os.path.exists(filename):
-      self._check_output(
+      _check_output(
           'openssl', 'req', '-batch', '-new', '-x509', '-days', '365',
           '-nodes', '-out', filename, '-keyout', filename)
     return filename
