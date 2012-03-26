@@ -138,7 +138,7 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
     server_manager.Append(
         httpproxy.HttpProxyServer, http_archive_fetch, http_custom_handlers,
         host=host, port=options.port)
-    if options.certfile:
+    if options.ssl:
       server_manager.Append(
           httpproxy.HttpsProxyServer, http_archive_fetch,
           http_custom_handlers, options.certfile,
@@ -149,7 +149,7 @@ def AddTrafficShaper(server_manager, options, host):
   if options.HasTrafficShaping():
     server_manager.Append(
         trafficshaper.TrafficShaper, host=host, port=options.shaping_port,
-        ssl_port=(options.ssl_shaping_port if options.certfile else None),
+        ssl_port=(options.ssl_shaping_port if options.ssl else None),
         up_bandwidth=options.up, down_bandwidth=options.down,
         delay_ms=options.delay_ms, packet_loss_rate=options.packet_loss_rate,
         init_cwnd=options.init_cwnd, use_loopback=not options.server_mode)
@@ -263,6 +263,8 @@ def main(options, replay_filename):
       if not options.server_mode:
         AddDnsForward(server_manager, platform_settings, host)
       AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive)
+    if options.ssl and options.certfile is None:
+      options.certfile = platform_settings.create_certfile()
     AddWebProxy(server_manager, options, host, real_dns_lookup,
                 http_archive, cache_misses)
     AddTrafficShaper(server_manager, options, host)
@@ -431,14 +433,14 @@ if __name__ == '__main__':
       type='int',
       help='SSL port on which to apply traffic shaping.  Defaults to the '
            'SSL listen port (--ssl_port)')
-  harness_group.add_option('-c', '--certfile', default='',
+  harness_group.add_option('-c', '--certfile', default=None,
       action='store',
       type='string',
-      help='Certificate file to use with SSL.')
-  harness_group.add_option('-k', '--keyfile', default='',
-      action='store',
-      type='string',
-      help='Key file to use with SSL.')
+      help='Certificate file to use with SSL (gets auto-generated if needed).')
+  harness_group.add_option('--no-ssl', default=True,
+      action='store_false',
+      dest='ssl',
+      help='Do not setup an SSL proxy.')
   option_parser.add_option_group(harness_group)
 
   options, args = option_parser.parse_args()

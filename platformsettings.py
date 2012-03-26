@@ -73,6 +73,7 @@ def _check_output(*args):
 class PlatformSettings(object):
   _IPFW_BIN = None
   _IPFW_QUEUE_SLOTS = 100
+  _CERT_FILE = 'wpr_cert.pm'
 
   # Some platforms do not shape traffic with the loopback address.
   _USE_REAL_IP_FOR_TRAFFIC_SHAPING = False
@@ -181,6 +182,10 @@ class PlatformSettings(object):
     """
     pass
 
+  def create_certfile(self):
+    """Create a certfile for serving SSL traffic and return its name."""
+    raise NotImplementedError
+
 
 class PosixPlatformSettings(PlatformSettings):
   _IPFW_BIN = 'ipfw'
@@ -253,6 +258,15 @@ class PosixPlatformSettings(PlatformSettings):
     if os.geteuid() != 0:
       logging.warn("Rerunning with sudo: %s", sys.argv)
       os.execv('/usr/bin/sudo', ['--'] + sys.argv)
+
+  def create_certfile(self):
+    """Create a certfile for serving SSL traffic and return its name."""
+    filename = os.path.join(tempfile.gettempdir(), self._CERT_FILE)
+    if not os.path.exists(filename):
+      self._check_output(
+          'openssl', 'req', '-batch', '-new', '-x509', '-days', '365',
+          '-nodes', '-out', filename, '-keyout', filename)
+    return filename
 
 
 class OsxPlatformSettings(PosixPlatformSettings):
@@ -540,6 +554,14 @@ Next
     if ctypes.windll.shell32.IsUserAnAdmin():
       raise NotAdministratorError('Rerun with administrator privileges.')
       #os.execv('runas', sys.argv)  # TODO: replace needed Windows magic
+
+  def create_certfile(self):
+    """Create a certfile for serving SSL traffic and return its name.
+
+    TODO: Check for Windows SDK makecert.exe tool.
+    """
+    raise PlatformSettingsError('Certificate file does not exist.')
+    #return filename
 
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
