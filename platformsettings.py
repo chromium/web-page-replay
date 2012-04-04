@@ -71,7 +71,6 @@ def _check_output(*args):
 
 
 class PlatformSettings(object):
-  _IPFW_BIN = None
   _IPFW_QUEUE_SLOTS = 100
   _CERT_FILE = 'wpr_cert.pm'
 
@@ -131,12 +130,12 @@ class PlatformSettings(object):
       self.set_cwnd(self.original_cwnd)
       self.original_cwnd = None
 
+  def _ipfw_bin(self):
+    raise NotImplementedError
+
   def ipfw(self, *args):
-    if self._IPFW_BIN:
-      ipfw_args = [self._IPFW_BIN] + [str(a) for a in args]
-      return _check_output(*ipfw_args)
-    else:
-      raise NotImplementedError
+    ipfw_args = [self._ipfw_bin()] + [str(a) for a in args]
+    return _check_output(*ipfw_args)
 
   def get_ipfw_queue_slots(self):
     return self._IPFW_QUEUE_SLOTS
@@ -188,13 +187,15 @@ class PlatformSettings(object):
 
 
 class PosixPlatformSettings(PlatformSettings):
-  _IPFW_BIN = 'ipfw'
   PING_PATTERN = r'rtt min/avg/max/mdev = \d+\.\d+/(\d+\.\d+)/\d+\.\d+/\d+\.\d+'
 
   def _get_dns_update_error(self):
     return DnsUpdateError('Did you run under sudo?')
 
   def _sysctl(self, *args):
+    sysctl = '/usr/sbin/sysctl'
+    if not os.path.exists(sysctl):
+      sysctl = '/sbin/sysctl'
     sysctl = subprocess.Popen(
         ['sysctl'] + [str(a) for a in args],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -264,21 +265,26 @@ class PosixPlatformSettings(PlatformSettings):
     filename = os.path.join(tempfile.gettempdir(), self._CERT_FILE)
     if not os.path.exists(filename):
       _check_output(
-          'openssl', 'req', '-batch', '-new', '-x509', '-days', '365',
+          '/usr/bin/openssl', 'req', '-batch', '-new', '-x509', '-days', '365',
           '-nodes', '-out', filename, '-keyout', filename)
     return filename
 
+  def _ipfw_bin(self):
+    for ipfw in ['/usr/local/sbin/ipfw', '/sbin/ipfw']:
+      if os.path.exists(ipfw):
+        return ipfw
+    raise PlatformSettingsError("ipfw not found.")
 
 class OsxPlatformSettings(PosixPlatformSettings):
   LOCAL_SLOWSTART_MIB_NAME = 'net.inet.tcp.local_slowstart_flightsize'
 
   def _scutil(self, cmd):
     scutil = subprocess.Popen(
-        ['scutil'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        ['/usr/sbin/scutil'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     return scutil.communicate(cmd)[0]
 
   def _ifconfig(self, *args):
-    return _check_output('ifconfig', *args)
+    return _check_output('/sbin/ifconfig', *args)
 
   def set_sysctl(self, name, value):
     rv = self._sysctl('-w', '%s=%s' % (name, value))[0]
@@ -565,7 +571,8 @@ Next
 
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
-  _IPFW_BIN = r'third_party\ipfw_win32\ipfw.exe'
+  def _ipfw_bin(self):
+    return r'third_party\ipfw_win32\ipfw.exe'
 
 
 def _new_platform_settings():
