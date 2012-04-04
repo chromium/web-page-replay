@@ -33,6 +33,7 @@ To edit a particular URL:
 
 import difflib
 import email.utils
+import httplib
 import httpzlib
 import logging
 import optparse
@@ -92,132 +93,81 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     """
     if request in self:
       return self[request]
+    return self.get_conditional_response(request, default)
 
-    logging.debug('Checking headers for: %s', request)
-
-    # Note: order matters! headers are checked in-order specified
-    #       by conditional_headers.
-    #       etag headers must be checked before non etag headers
-    # if-(none)-match should come first; from RFC 2068:
-    #   "If the request would, without the if-(none)-match header field,
-    #    result in anything other than a 2xx status,
-    #    then the if-(none)-match header MUST be ignored."
-    conditional_headers = [
-        'if-none-match', 'if-match',
-        'if-modified-since', 'if-unmodified-since']
-
-    matched_conditional_headers = [h for h in conditional_headers
-                                   if h in request.headers]
-
-    response = default
-    if matched_conditional_headers:
-      shortened_headers = dict((k, v) for k, v in request.headers.iteritems()
-                               if k.lower() not in conditional_headers)
-      # The request with conditional headers removed.
-      shortened_request = ArchivedHttpRequest(
-          request.command, request.host, request.path,
-          request.request_body, shortened_headers, request.is_ssl)
-      if shortened_request in self:
-        status, reason = self.handle_conditional_headers(
-            matched_conditional_headers, request, shortened_request)
-        if status == 200:
-          response = self[shortened_request]
-        else:
-          response = self.create_response(status, reason)
-        logging.debug('Checked headers, returning with %s, %s', status, reason)
-    return response
-
-  def handle_conditional_headers(self, matched_conditional_headers,
-                       request, shortened_request):
-    """Handles HTTP request headers properly.
+  def get_conditional_response(self, request, default):
+    """Get the response based on the conditional HTTP request headers.
 
     Args:
-      matched_conditional_headers: headers to handle within the given request
-      request: Instance of ArchivedHttpRequest representing the original request
-      shortened_request: Instance of ArchivedHttpRequest representing the
-        original request with matched headers removed.
+      request: an ArchivedHttpRequest representing the original request.
+      default: default ArchivedHttpResponse
+          original request with matched headers removed.
 
     Returns:
-      Tuple of (status, reason) of the appropriate HTTP response
+      an ArchivedHttpResponse with a status of 200, 302 (not modified), or
+          412 (precondition failed)
     """
-    status, reason = 200, 'OK'
-    response = self[shortened_request]
+    response = default
+    if request.is_conditional():
+      stripped_request = request.create_request_without_conditions()
+      if stripped_request in self:
+        response = self[stripped_request]
+        if response.status == 200:
+          status = self.get_conditional_status(request, response)
+          if status != 200:
+            response = create_response(status)
+    return response
 
-    last_modified_string = self.get_header_case_insensitive(
-        response.headers, 'last-modified')
-    last_modified = email.utils.parsedate(last_modified_string)
-    etag_response = self.get_header_case_insensitive(response.headers, 'etag')
+  def get_conditional_status(self, request, response):
+    status = 200
+    last_modified = email.utils.parsedate(
+        response.get_header_case_insensitive('last-modified'))
+    response_etag = response.get_header_case_insensitive('etag')
+    is_get_or_head = request.command.upper() in ('GET', 'HEAD')
 
-    for header in matched_conditional_headers:
-      if header == 'if-match':
-        etag_request = request.headers[header]
-        if self.entity_tag_match(etag_request, etag_response):
-          status, reason = 200, 'OK'
-        else:
-          status, reason = 412, 'Precondition Failed'
-      elif header == 'if-none-match':
-        etag_request = request.headers[header]
-        if self.entity_tag_match(etag_request, etag_response):
-          status, reason = 412, 'Precondition Failed'
-        else:
-          status, reason = 200, 'OK'
-      elif header in ('if-modified-since', 'if-unmodified-since'):
-        date_string = request.headers[header]
-        date = email.utils.parsedate(date_string)
-        # Only do checks for GET or HEAD requests (as per RFC)
-        if ((request.command.upper() not in ('GET', 'HEAD')) or
-            date is None or last_modified is None):
-          # Improperly formatted string; ignore header
-          continue
-        if ((header == 'if-modified-since' and last_modified > date) or
-            (header == 'if-unmodified-since' and last_modified < date)):
-          # Only update the status if etag check succeeds
-          if not status == 412:
-            status, reason = 200, 'OK'
-          continue
-        status, reason = 304, 'Not Modified'
+    match_value = request.headers.get('if-match', None)
+    if match_value:
+      if self.is_etag_match(match_value, response_etag):
+        status = 200
+      else:
+        status = 412  # precondition failed
+    none_match_value = request.headers.get('if-none-match', None)
+    if none_match_value:
+      if self.is_etag_match(none_match_value, response_etag):
+        status = 304
+      elif is_get_or_head:
+        status = 200
+      else:
+        status = 412
+    if is_get_or_head and last_modified:
+      for header in ('if-modified-since', 'if-unmodified-since'):
+        date = email.utils.parsedate(request.headers.get(header, None))
+        if date:
+          if ((header == 'if-modified-since' and last_modified > date) or
+              (header == 'if-unmodified-since' and last_modified < date)):
+            if status != 412:
+              status = 200
+          else:
+            status = 304  # not modified
+    return status
 
-    return status, reason
-
-  def entity_tag_match(self, etag_request, etag_response):
+  def is_etag_match(self, request_etag, response_etag):
     """Determines whether the entity tags of the request/response matches.
 
     Args:
-      etag_request: the value string of the "if-(none)-match:"
+      request_etag: the value string of the "if-(none)-match:"
                     portion of the request header
-      etag_response: the etag value of the response
+      response_etag: the etag value of the response
 
     Returns:
       True on match, False otherwise
     """
-    etag_response = etag_response.strip('" ')
-    for etag in etag_request.split(','):
+    response_etag = response_etag.strip('" ')
+    for etag in request_etag.split(','):
       etag = etag.strip('" ')
-      if etag in ('*', etag_response):
+      if etag in ('*', response_etag):
         return True
     return False
-
-  def get_header_case_insensitive(self, headers, key):
-    """Returns the specified key from a list of (key, value) tuples.
-
-    Args:
-      headers: a list of tuples
-      key: the key we want to search for in the list
-
-    Returns:
-      the value corresponding to the key if found, None otherwise
-    """
-    for k, v in headers:
-      if k.lower() == key.lower():
-        return v
-    return None
-
-  def create_response(self, status, reason):
-    headers = [
-        ('content-type', 'text/plain'),
-        ('content-length', str(len(reason))),
-    ]
-    return ArchivedHttpResponse(11, status, reason, headers, reason)
 
   def get_requests(self, command=None, host=None, path=None, use_query=True):
     """Return a list of requests that match the given args."""
@@ -355,6 +305,9 @@ class ArchivedHttpRequest(object):
   For unpickling, 'trimmed_headers' is recreated from 'headers'. That
   allows for changes to the trim function and can help with debugging.
   """
+  CONDITIONAL_HEADERS = [
+      'if-none-match', 'if-match',
+      'if-modified-since', 'if-unmodified-since']
 
   def __init__(self, command, host, path, request_body, headers, is_ssl=False):
     """Initialize an ArchivedHttpRequest.
@@ -501,6 +454,19 @@ class ArchivedHttpRequest(object):
     return sorted([(k, v) for k, v in headers.items()
                    if k.lower() not in undesirable_keys])
 
+  def is_conditional(self):
+    """Return list of headers that match conditional headers."""
+    for header in self.CONDITIONAL_HEADERS:
+      if header in self.headers:
+        return True
+    return False
+
+  def create_request_without_conditions(self):
+    stripped_headers = dict((k, v) for k, v in self.headers.iteritems()
+                            if k.lower() not in self.CONDITIONAL_HEADERS)
+    return ArchivedHttpRequest(
+        self.command, self.host, self.path, self.request_body,
+        stripped_headers, self.is_ssl)
 
 class ArchivedHttpResponse(object):
   """All the data needed to recreate all HTTP response."""
@@ -598,6 +564,12 @@ class ArchivedHttpResponse(object):
   def get_header(self, key):
     for k, v in self.headers:
       if key == k:
+        return v
+    return None
+
+  def get_header_case_insensitive(self, key):
+    for k, v in self.headers:
+      if key.lower() == k.lower():
         return v
     return None
 
@@ -718,6 +690,17 @@ class ArchivedHttpResponse(object):
       return
     self.set_server_delays(partitions[0])
     self.set_data(partitions[1])
+
+
+def create_response(status, reason=None, headers=None, body=None):
+  """Convenience method for creating simple ArchivedHttpResponse objects."""
+  if reason is None:
+    reason = httplib.responses.get(status, 'Unknown')
+  if headers is None:
+    headers = [('content-type', 'text/plain')]
+  if body is None:
+    body = "%s %s" % (status, reason)
+  return ArchivedHttpResponse(11, status, reason, headers, body)
 
 
 if __name__ == '__main__':

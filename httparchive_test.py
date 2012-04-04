@@ -161,7 +161,7 @@ class HttpArchiveTest(unittest.TestCase):
     request = self.REQUEST
     response = self.RESPONSE
     archive = self.archive
-    not_modified_response = archive.create_response(304, 'Not Modified')
+    not_modified_response = archive.create_response(304)
 
     # Fail check and return response again
     request_headers = {'if-modified-since': self.DATE_PAST}
@@ -193,7 +193,7 @@ class HttpArchiveTest(unittest.TestCase):
     request = self.REQUEST
     response = self.RESPONSE
     archive = self.archive
-    not_modified_response = archive.create_response(304, 'Not Modified')
+    not_modified_response = archive.create_response(304)
 
     # Succeed check
     request_headers = {'if-unmodified-since': self.DATE_PAST}
@@ -225,9 +225,8 @@ class HttpArchiveTest(unittest.TestCase):
     request = self.REQUEST
     response = self.RESPONSE
     archive = self.archive
-    not_modified_response = archive.create_response(304, 'Not Modified')
-    precondition_failed_response = archive.create_response(
-        412, 'Precondition Failed')
+    not_modified_response = archive.create_response(304)
+    precondition_failed_response = archive.create_response(412)
 
     # if-match headers
     request_headers = {'if-match': self.ETAG_VALID}
@@ -241,7 +240,7 @@ class HttpArchiveTest(unittest.TestCase):
     # if-none-match headers
     request_headers = {'if-none-match': self.ETAG_VALID}
     request = create_request(request_headers)
-    self.assertEqual(archive.get(request), precondition_failed_response)
+    self.assertEqual(archive.get(request), not_modified_response)
 
     request_headers = {'if-none-match': self.ETAG_INVALID}
     request = create_request(request_headers)
@@ -251,9 +250,8 @@ class HttpArchiveTest(unittest.TestCase):
     request = self.REQUEST
     response = self.RESPONSE
     archive = self.archive
-    not_modified_response = archive.create_response(304, 'Not Modified')
-    precondition_failed_response = archive.create_response(
-        412, 'Precondition Failed')
+    not_modified_response = archive.create_response(304)
+    precondition_failed_response = archive.create_response(412)
 
     # if-match headers
     # If the request would, without the If-Match header field, 
@@ -303,9 +301,8 @@ class HttpArchiveTest(unittest.TestCase):
     request = self.REQUEST
     response = self.RESPONSE
     archive = self.archive
-    not_modified_response = archive.create_response(304, 'Not Modified')
-    precondition_failed_response = archive.create_response(
-        412, 'Precondition Failed')
+    not_modified_response = archive.create_response(304)
+    precondition_failed_response = archive.create_response(412)
 
     # if-none-match headers
     # If the request would, without the If-None-Match header field, 
@@ -317,7 +314,7 @@ class HttpArchiveTest(unittest.TestCase):
         'if-modified-since': self.DATE_PAST,
     }
     request = create_request(request_headers)
-    self.assertEqual(archive.get(request), precondition_failed_response)
+    self.assertEqual(archive.get(request), response)
 
     request_headers = {
         'if-none-match': self.ETAG_INVALID,

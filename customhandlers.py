@@ -42,10 +42,7 @@ IMAGE_DATA_PREFIX = 'data:image/png;base64,'
 
 def SimpleResponse(status):
   """Return a ArchivedHttpResponse with |status| code and a simple text body."""
-  reason = httplib.responses.get(status, 'Unknown')
-  headers = [('content-type', 'text/plain')]
-  body = '%s %s' % (status, reason)
-  return httparchive.ArchivedHttpResponse(11, status, reason, headers, body)
+  return httparchive.create_response(status)
 
 
 def JsonResponse(data):
@@ -54,7 +51,7 @@ def JsonResponse(data):
   reason = 'OK'
   headers = [('content-type', 'application/json')]
   body = json.dumps(data)
-  return httparchive.ArchivedHttpResponse(11, status, reason, headers, body)
+  return httparchive.create_response(status, reason, headers, body)
 
 
 class CustomHandlers(object):
