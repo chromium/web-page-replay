@@ -25,6 +25,15 @@ import time
 import urlparse
 
 
+class HttpProxyError(Exception):
+  """Module catch-all error."""
+  pass
+
+class HttpProxyServerError(HttpProxyError):
+  """Raised for errors like 'Address already in use'."""
+  pass
+
+
 class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   protocol_version = 'HTTP/1.1'  # override BaseHTTPServer setting
 
@@ -181,7 +190,8 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
     try:
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), self.HANDLER)
     except Exception, e:
-      logging.critical('Could not start HTTPServer on port %d: %s', port, e)
+      raise HttpProxyServerError('Could not start HTTPServer on port %d: %s' %
+                                 (port, e))
     logging.info('Started HTTP server on %s...', self.server_address)
 
   def cleanup(self):
