@@ -72,7 +72,7 @@ def _check_output(*args):
 
 class PlatformSettings(object):
   _IPFW_QUEUE_SLOTS = 100
-  _CERT_FILE = 'wpr_cert.pm'
+  _CERT_FILE = 'wpr_cert.pem'
 
   # Some platforms do not shape traffic with the loopback address.
   _USE_REAL_IP_FOR_TRAFFIC_SHAPING = False
@@ -181,8 +181,12 @@ class PlatformSettings(object):
     """
     pass
 
-  def create_certfile(self):
-    """Create a certfile for serving SSL traffic and return its name."""
+  def get_certfile_name(self):
+    """Get the file name for a temporary self-signed certificate."""
+    raise NotImplementedError
+
+  def create_certfile(self, certfile):
+    """Create a certfile for serving SSL traffic."""
     raise NotImplementedError
 
 
@@ -260,14 +264,16 @@ class PosixPlatformSettings(PlatformSettings):
       logging.warn("Rerunning with sudo: %s", sys.argv)
       os.execv('/usr/bin/sudo', ['--'] + sys.argv)
 
-  def create_certfile(self):
-    """Create a certfile for serving SSL traffic and return its name."""
-    filename = os.path.join(tempfile.gettempdir(), self._CERT_FILE)
-    if not os.path.exists(filename):
+  def get_certfile_name(self):
+    """Get the file name for a temporary self-signed certificate."""
+    return os.path.join(tempfile.gettempdir(), self._CERT_FILE)
+
+  def create_certfile(self, certfile):
+    """Create a certfile for serving SSL traffic."""
+    if not os.path.exists(certfile):
       _check_output(
           '/usr/bin/openssl', 'req', '-batch', '-new', '-x509', '-days', '365',
-          '-nodes', '-out', filename, '-keyout', filename)
-    return filename
+          '-nodes', '-out', certfile, '-keyout', certfile)
 
   def _ipfw_bin(self):
     for ipfw in ['/usr/local/sbin/ipfw', '/sbin/ipfw']:
@@ -561,13 +567,16 @@ Next
       raise NotAdministratorError('Rerun with administrator privileges.')
       #os.execv('runas', sys.argv)  # TODO: replace needed Windows magic
 
-  def create_certfile(self):
+  def get_certfile_name(self):
+    """Get the file name for a temporary self-signed certificate."""
+    raise PlatformSettingsError('Certificate file does not exist.')
+
+  def create_certfile(self, certfile):
     """Create a certfile for serving SSL traffic and return its name.
 
     TODO: Check for Windows SDK makecert.exe tool.
     """
     raise PlatformSettingsError('Certificate file does not exist.')
-    #return filename
 
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):

@@ -55,7 +55,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def get_header_dict(self):
     return dict(self.headers.items())
 
-  def get_archived_http_request(self, is_ssl=False):
+  def get_archived_http_request(self):
     host = self.headers.get('host')
     if host is None:
       logging.error('Request without host header')
@@ -72,7 +72,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         full_path,
         self.read_request_body(),
         self.get_header_dict(),
-        is_ssl)
+        self.server.is_ssl)
 
   def send_archived_http_response(self, response):
     try:
@@ -176,23 +176,25 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
                       daemonserver.DaemonServer):
   HANDLER = HttpArchiveHandler
 
+  # Increase the request queue size. The default value, 5, is set in
+  # SocketServer.TCPServer (the parent of BaseHTTPServer.HTTPServer).
+  # Since we're intercepting many domains through this single server,
+  # it is quite possible to get more than 5 concurrent requests.
+  request_queue_size = 128
+
   def __init__(self, http_archive_fetch, custom_handlers,
-               host='localhost', port=80):
-    self.http_archive_fetch = http_archive_fetch
-    self.custom_handlers = custom_handlers
-
-    # Increase the listen queue size. The default, 5, is set in
-    # SocketServer.TCPServer (the parent of BaseHTTPServer.HTTPServer).
-    # Since we're intercepting many domains through this single server,
-    # it is quite possible to get more than 5 concurrent connection requests.
-    self.request_queue_size = 128
-
+               host='localhost', port=80, is_ssl=False):
     try:
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), self.HANDLER)
     except Exception, e:
       raise HttpProxyServerError('Could not start HTTPServer on port %d: %s' %
                                  (port, e))
-    logging.info('Started HTTP server on %s...', self.server_address)
+    self.http_archive_fetch = http_archive_fetch
+    self.custom_handlers = custom_handlers
+    self.is_ssl = is_ssl
+
+    protocol = 'HTTPS' if self.is_ssl else 'HTTP'
+    logging.info('Started %s server on %s...', protocol, self.server_address)
 
   def cleanup(self):
     try:
@@ -202,24 +204,13 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
     logging.info('Stopped HTTP server')
 
 
-class HttpsArchiveHandler(HttpArchiveHandler):
-  """SSL handler."""
-
-  def get_archived_http_request(self):
-    logging.debug('Get request via SSL.')
-    request = HttpArchiveHandler.get_archived_http_request(self, is_ssl=True)
-    request.is_ssl = True
-    return request
-
 class HttpsProxyServer(HttpProxyServer):
   """SSL server."""
-
-  HANDLER = HttpsArchiveHandler
 
   def __init__(self, http_archive_fetch, custom_handlers, certfile,
                host='localhost', port=443):
     HttpProxyServer.__init__(
-        self, http_archive_fetch, custom_handlers, host, port)
-    self.socket = ssl.wrap_socket(self.socket, certfile=certfile,
-                                  server_side=True)
+        self, http_archive_fetch, custom_handlers, host, port, is_ssl=True)
+    self.socket = ssl.wrap_socket(
+        self.socket, certfile=certfile, server_side=True)
     # Ancestor class, deamonserver, calls serve_forever() during its __init__.

@@ -106,17 +106,13 @@ def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
   server_manager.Append(dnsproxy.DnsProxyServer, dns_lookup, host)
 
 
-def AddTemporaryCertFile(server_manager, options, platform_settings):
-  """Create a temporary certificate file and clean up on exit.
-
-  Updates options.certfile with the temporary file name.
-  """
+def AddTemporaryCertFile(server_manager, platform_settings, certfile):
+  """Create a temporary certificate file and clean up on exit."""
   @contextlib.contextmanager
   def TemporaryCertFileContext():
-    options.certfile = platform_settings.create_certfile()
+    platform_settings.create_certfile(certfile)
     yield
-    os.unlink(options.certfile)
-    options.certfile = None
+    os.unlink(certfile)
   server_manager.Append(TemporaryCertFileContext)
 
 
@@ -241,7 +237,6 @@ def main(options, replay_filename):
   if options.IsRootRequired():
     platform_settings.rerun_as_administrator()
   configure_logging(platform_settings, options.log_level, options.log_file)
-
   server_manager = servermanager.ServerManager(options.record)
   cache_misses = None
   if options.cache_miss_file:
@@ -275,7 +270,8 @@ def main(options, replay_filename):
         AddDnsForward(server_manager, platform_settings, host)
       AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive)
     if options.ssl and options.certfile is None:
-      AddTemporaryCertFile(server_manager, options, platform_settings)
+      options.certfile = platform_settings.get_certfile_name()
+      AddTemporaryCertFile(server_manager, platform_settings, options.certfile)
     AddWebProxy(server_manager, options, host, real_dns_lookup,
                 http_archive, cache_misses)
     AddTrafficShaper(server_manager, options, host)
