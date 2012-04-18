@@ -703,7 +703,7 @@ def create_response(status, reason=None, headers=None, body=None):
   return ArchivedHttpResponse(11, status, reason, headers, body)
 
 
-if __name__ == '__main__':
+def main():
   class PlainHelpFormatter(optparse.IndentedHelpFormatter):
     def format_description(self, description):
       if description:
@@ -752,3 +752,8 @@ if __name__ == '__main__':
     http_archive.Persist(replay_file)
   else:
     option_parser.error('Unknown command "%s"' % command)
+  return 0
+
+
+if __name__ == '__main__':
+  sys.exit(main())

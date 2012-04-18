@@ -232,7 +232,7 @@ class OptionsWrapper(object):
             self.ssl_port < 1024)
 
 
-def main(options, replay_filename):
+def replay(options, replay_filename):
   platform_settings = platformsettings.get_platform_settings()
   if options.IsRootRequired():
     platform_settings.rerun_as_administrator()
@@ -303,7 +303,7 @@ def main(options, replay_filename):
   return exit_status
 
 
-if __name__ == '__main__':
+def main():
   class PlainHelpFormatter(optparse.IndentedHelpFormatter):
     def format_description(self, description):
       if description:
@@ -460,5 +460,8 @@ if __name__ == '__main__':
   else:
     replay_filename = args[0]
 
+  return replay(options, replay_filename)
 
-  sys.exit(main(options, replay_filename))
+
+if __name__ == '__main__':
+  sys.exit(main())

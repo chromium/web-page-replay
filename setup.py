@@ -1,0 +1,50 @@
+#!/usr/bin/env python
+# Copyright 2012 Google Inc. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Creates a distributable python egg.
+
+Creating new eggs:
+  1. $ python setup.py egg_info -r bdist_egg
+  2. This will generate dist/webpagereplay-1.0_rXXX-py2.6.egg
+  3. Upload the egg to http://code.google.com/p/web-page-replay/downloads/entry
+
+Installing eggs:
+  1. $ easy_install http://web-page-replay.googlecode.com/files/webpagereplay-1.0_rXXX-py2.6.egg
+  2. The replay and httparchive commands are now on your PATH.
+"""
+
+import setuptools
+
+setuptools.setup(
+    name='webpagereplay',
+    version='1.0',
+    description='Record and replay web content',
+    author='Web Page Replay Project Authors',
+    author_email='web-page-replay-dev@googlegroups.com',
+    url='http://code.google.com/p/web-page-replay/',
+    license='Apache License 2.0',
+    packages=['.', 'ipaddr', 'nbhttp'],
+    package_dir = {
+        '': '.',
+        'ipaddr': 'third_party/ipaddr',
+        'nbhttp': 'third_party/nbhttp',
+        },
+    entry_points={
+        'console_scripts': [
+            'httparchive = httparchive:main',
+            'replay = replay:main',
+            ]
+        }
+    )
