@@ -41,6 +41,7 @@ import os
 import persistentmixin
 import StringIO
 import subprocess
+import sys
 import tempfile
 import urlparse
 
