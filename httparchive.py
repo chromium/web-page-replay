@@ -701,7 +701,7 @@ def create_response(status, reason=None, headers=None, body=None):
     headers = [('content-type', 'text/plain')]
   if body is None:
     body = "%s %s" % (status, reason)
-  return ArchivedHttpResponse(11, status, reason, headers, body)
+  return ArchivedHttpResponse(11, status, reason, headers, [body])
 
 
 def main():
