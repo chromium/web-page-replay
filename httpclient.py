@@ -49,24 +49,34 @@ def GetInjectScript(scripts):
 
 
 def _InjectScripts(response, inject_script):
-  """Injects |inject_script| immediately after <head> or <html>."""
+  """Injects |inject_script| immediately after <head> or <html>.
+
+  Copies |response| if it is modified.
+
+  Args:
+    response: An ArchivedHttpResponse
+    inject_script: JavaScript string (e.g. "Math.random = function(){...}")
+  Returns:
+    an ArchivedHttpResponse
+  """
   content_type = response.get_header('content-type')
-  if not content_type or not content_type.startswith('text/html'):
-    return
-  text = response.get_data_as_text()
+  if content_type and content_type.startswith('text/html'):
+    text = response.get_data_as_text()
 
-  def InsertScriptAfter(matchobj):
-    return '%s<script>%s</script>' % (matchobj.group(0), inject_script)
+    def InsertScriptAfter(matchobj):
+      return '%s<script>%s</script>' % (matchobj.group(0), inject_script)
 
-  if text and not inject_script in text:
-    text, is_injected = HEAD_RE.subn(InsertScriptAfter, text, 1)
-    if not is_injected:
-      text, is_injected = HTML_RE.subn(InsertScriptAfter, text, 1)
+    if text and not inject_script in text:
+      text, is_injected = HEAD_RE.subn(InsertScriptAfter, text, 1)
+      if not is_injected:
+        text, is_injected = HTML_RE.subn(InsertScriptAfter, text, 1)
       if not is_injected:
         logging.warning('Failed to inject scripts.')
         logging.debug('Response content: %s', text)
-        return
-    response.set_data(text)
+      else:
+        response = copy.deepcopy(response)
+        response.set_data(text)
+  return response
 
 
 class DetailedHTTPResponse(httplib.HTTPResponse):
@@ -250,21 +260,18 @@ class RecordHttpArchiveFetch(object):
       server_rtt = self.http_archive.get_server_rtt(request.host)
     server_delays = [max(delay - server_rtt, 0) for delay in response_delays]
 
-    archived_http_response = httparchive.ArchivedHttpResponse(
+    response = httparchive.ArchivedHttpResponse(
         response.version,
         response.status,
         response.reason,
         response.getheaders(),
         response_chunks,
         server_delays)
-    self.http_archive[request] = archived_http_response
+    self.http_archive[request] = response
     if self.inject_script:
-      # Make a copy so the version saved in the archive doesn't have the
-      # injected scripts.
-      archived_http_response = copy.deepcopy(archived_http_response)
-      _InjectScripts(archived_http_response, self.inject_script)
+      response = _InjectScripts(response, self.inject_script)
     logging.debug('Recorded: %s', request)
-    return archived_http_response
+    return response
 
 
 class ReplayHttpArchiveFetch(object):
@@ -324,7 +331,7 @@ class ReplayHttpArchiveFetch(object):
               "('-' for archived request, '+' for current request):\n%s" % diff)
       logging.warning('Could not replay: %s', reason)
     else:
-      _InjectScripts(response, self.inject_script)
+      response = _InjectScripts(response, self.inject_script)
     return response
 
 
