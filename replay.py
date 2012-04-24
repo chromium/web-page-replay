@@ -118,12 +118,13 @@ def AddTemporaryCertFile(server_manager, platform_settings, certfile):
 
 def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
                 cache_misses):
+  inject_script = httpclient.GetInjectScript(options.inject_scripts.split(','))
   http_custom_handlers = customhandlers.CustomHandlers(options.screenshot_dir)
   if options.spdy:
     assert not options.record, 'spdy cannot be used with --record.'
     http_archive_fetch = httpclient.ReplayHttpArchiveFetch(
         http_archive,
-        httpclient.GetInjectScript(options.inject_scripts.split(',')),
+        inject_script,
         options.diff_unknown_requests,
         cache_misses=cache_misses,
         use_closest_match=options.use_closest_match)
@@ -136,7 +137,7 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
     http_custom_handlers.add_server_manager_handler(server_manager)
     http_archive_fetch = httpclient.ControllableHttpArchiveFetch(
         http_archive, real_dns_lookup,
-        httpclient.GetInjectScript(options.inject_scripts.split(',')),
+        inject_script,
         options.diff_unknown_requests, options.record,
         cache_misses=cache_misses, use_closest_match=options.use_closest_match)
     server_manager.AppendRecordCallback(http_archive_fetch.SetRecordMode)

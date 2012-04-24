@@ -30,9 +30,6 @@ def create_response(headers):
 
 class HttpArchiveTest(unittest.TestCase):
 
-  BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-  MOCK_ARCHIVE = os.path.join(BASE_DIR, 'mock-archive.txt')
-
   REQUEST_HEADERS = {}
   REQUEST = create_request(REQUEST_HEADERS)
 

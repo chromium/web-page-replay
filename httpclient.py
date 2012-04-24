@@ -20,6 +20,7 @@ import httparchive
 import httplib
 import logging
 import os
+import pkg_resources
 import re
 import sys
 import time
@@ -37,14 +38,21 @@ HTML_RE = re.compile(r'<html[^>]*>', re.IGNORECASE)
 HEAD_RE = re.compile(r'<head[^>]*>', re.IGNORECASE)
 
 
+class HttpClientException(Exception):
+  """Base class for all exceptions in httpclient."""
+  pass
+
+
 def GetInjectScript(scripts):
-  """Loads |script| from disk and returns a string of their content."""
+  """Loads |scripts| from disk and returns a string of their content."""
   lines = []
   for script in scripts:
-    if not os.path.isabs(script):
-      script = os.path.join(sys.path[0], script)
-    assert os.path.exists(script)
-    lines += open(script).readlines()
+    if os.path.exists(script):
+      lines += open(script).read()
+    elif pkg_resources.resource_exists(__name__, script):
+      lines += pkg_resources.resource_string(__name__, script)
+    else:
+      raise HttpClientException('Script does not exist: %s', script)
   return ''.join(lines)
 
 

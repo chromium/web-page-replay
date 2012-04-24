@@ -17,10 +17,13 @@ import ast
 import cachemissarchive
 from mockhttprequest import ArchivedHttpRequest
 import os
+import pkg_resources
 import unittest
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MOCK_ARCHIVE = os.path.join(BASE_DIR, 'mock-archive.txt')
+
+def get_mock_requests():
+  return pkg_resource.resourced_string(
+      __name__, 'mock-archive.txt').splitlines(keepends=True)
 
 
 class CacheMissArchiveTest(unittest.TestCase):
@@ -42,7 +45,7 @@ class CacheMissArchiveTest(unittest.TestCase):
         'http://www.google.com/',
     ]
     self.cache_archive.set_urls_list(urls_list)
-    with open(MOCK_ARCHIVE) as f:
+    with get_mock_requests() as f:
       for line in f:
         # Each line contains: (command, host, path, request_body, headers)
         # Delimited by '%'

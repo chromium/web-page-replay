@@ -16,12 +16,12 @@
 """Creates a distributable python egg.
 
 Creating new eggs:
-  1. $ python setup.py egg_info -r bdist_egg
-  2. This will generate dist/webpagereplay-1.0_rXXX-py2.6.egg
-  3. Upload the egg to http://code.google.com/p/web-page-replay/downloads/entry
+  1. $ python setup.py sdist
+  2. This will generate dist/webpagereplay-X.X.tar.gz
+  3. Upload the tar to http://code.google.com/p/web-page-replay/downloads/entry
 
 Installing eggs:
-  1. $ easy_install http://web-page-replay.googlecode.com/files/webpagereplay-1.0_rXXX-py2.6.egg
+  1. $ easy_install http://web-page-replay.googlecode.com/files/webpagereplay-X.X.tar.gz
   2. The replay and httparchive commands are now on your PATH.
 """
 
@@ -29,22 +29,28 @@ import setuptools
 
 setuptools.setup(
     name='webpagereplay',
-    version='1.0',
+    version='1.0.1',
     description='Record and replay web content',
     author='Web Page Replay Project Authors',
     author_email='web-page-replay-dev@googlegroups.com',
     url='http://code.google.com/p/web-page-replay/',
     license='Apache License 2.0',
-    packages=['.', 'ipaddr', 'nbhttp'],
-    package_dir = {
-        '': '.',
-        'ipaddr': 'third_party/ipaddr',
-        'nbhttp': 'third_party/nbhttp',
+    install_requires=['dnspython>=1.8'],
+    packages=[
+        '',
+        'perftracker',
+        'third_party',
+        'third_party.ipaddr',
+        'third_party.nbhttp'
+        ],
+    package_dir={'': '.'},
+    package_data={
+        '': ['*.js', '*.txt', 'COPYING', 'LICENSE'],
         },
     entry_points={
         'console_scripts': [
             'httparchive = httparchive:main',
             'replay = replay:main',
             ]
-        }
+        },
     )
