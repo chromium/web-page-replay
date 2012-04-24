@@ -54,7 +54,7 @@ def _InjectScripts(response, inject_script):
   Copies |response| if it is modified.
 
   Args:
-    response: An ArchivedHttpResponse
+    response: an ArchivedHttpResponse
     inject_script: JavaScript string (e.g. "Math.random = function(){...}")
   Returns:
     an ArchivedHttpResponse
@@ -87,43 +87,42 @@ class DetailedHTTPResponse(httplib.HTTPResponse):
   """
 
   def read_chunks(self):
-    """Return a tuple containing two arrays of data.
+    """Return the response body content and timing data.
 
-    The first_array is the response body.
-    The second_array is the server response time for each chunk in milliseconds.
-
-    The returned chunked have the chunk size and CRLFs stripped off.
+    The returned chunks have the chunk size and CRLFs stripped off.
     If the response was compressed, the returned data is still compressed.
 
     Returns:
-      (response_list, response_delay_list)
-    response_list:
-      [response_body]  # non-chunked responses
-      [response_body_chunk_1, response_body_chunk_2, ...]  # chunked responses
-    response_delay_list:
-      []  # non-chunked responses
-      [response_delay_body_chunk_2, ...]  # chunked responses
-      # The delay for the first chunk and non-chunked responses should be
-      # recorded when the first byte of the HTTP response header arrives.
-      # Therefore, it is out of the scope of this method.
+      (chunks, delays)
+        chunks:
+          [response_body]                  # non-chunked responses
+          [chunk_1, chunk_2, ...]          # chunked responses
+        delays:
+          [0]                              # non-chunked responses
+          [chunk_1_first_byte_delay, ...]  # chunked responses
+
+      The delay for the first body item should be recorded by the caller.
     """
     buf = []
-    response_times = [DEFAULT_TIMER()]
+    chunks = []
+    delays = []
     if not self.chunked:
-      chunks = [self.read()]
+      chunks.append(self.read())
+      delays.append(0)
     else:
+      start = DEFAULT_TIMER()
       try:
-        chunks = []
         while True:
           line = self.fp.readline()
           chunk_size = self._read_chunk_size(line)
-          response_times.append(DEFAULT_TIMER())
           if chunk_size is None:
             raise httplib.IncompleteRead(''.join(chunks))
           if chunk_size == 0:
             break
+          delays.append(DEFAULT_TIMER() - start)
           chunks.append(self._safe_read(chunk_size))
           self._safe_read(2)  # skip the CRLF at the end of the chunk
+          start = DEFAULT_TIMER()
 
         # Ignore any trailers.
         while True:
@@ -132,9 +131,7 @@ class DetailedHTTPResponse(httplib.HTTPResponse):
             break
       finally:
         self.close()
-    response_delays = [(response_times[i] - response_times[i-1]) * 1000.0
-                       for i in xrange(2, len(response_times))]
-    return chunks, response_delays
+    return chunks, delays
 
   @classmethod
   def _read_chunk_size(cls, line):
@@ -167,18 +164,12 @@ class RealHttpFetch(object):
     self._real_dns_lookup = real_dns_lookup
 
   def __call__(self, request):
-    """Fetch an HTTP request and return the response, response_body and
-    response_delays.
+    """Fetch an HTTP request.
 
     Args:
-      request: an instance of an ArchivedHttpRequest
+      request: an ArchivedHttpRequest
     Returns:
-      (instance of httplib.HTTPResponse,
-       [response_body_chunk_1, response_body_chunk_2, ...],
-       [response_delay_body_chunk_1, response_delay_body_chunk_2, ...])
-      # If the response did not use chunked encoding, there is only one chunk.
-      # response_delay is the time taken (in milliseconds) to receive the first
-      # byte for each chunk. This time includes the network RTT time.
+      an ArchivedHttpResponse
     """
     logging.debug('RealHttpRequest: %s %s', request.host, request.path)
     host_ip = self._real_dns_lookup(request.host)
@@ -199,18 +190,29 @@ class RealHttpFetch(object):
             request.request_body,
             request.headers)
         response = connection.getresponse()
-        end = DEFAULT_TIMER()
-        delay = (end - start) * 1000
-        chunks, response_delays = response.read_chunks()
-        response_delays.insert(0, delay)
-        return response, chunks, response_delays
+        headers_delay = int((DEFAULT_TIMER() - start) * 1000)
+        headers_delay -= self.http_archive.get_server_rtt(request.host)
+
+        chunks, chunk_delays = response.read_chunks()
+        delays = {
+            'headers': headers_delay,
+            'data': chunk_delays
+            }
+        archived_http_response = httparchive.ArchivedHttpResponse(
+            response.version,
+            response.status,
+            response.reason,
+            response.getheaders(),
+            chunks,
+            delays)
+        return archived_http_response
       except Exception, e:
         if retries:
           retries -= 1
           logging.warning('Retrying fetch %s: %s', request, e)
           continue
         logging.critical('Could not fetch %s: %s', request, e)
-        return None, None, None
+        return None
 
 
 class RecordHttpArchiveFetch(object):
@@ -230,44 +232,28 @@ class RecordHttpArchiveFetch(object):
     self.real_http_fetch = RealHttpFetch(real_dns_lookup)
     self.inject_script = inject_script
     self.cache_misses = cache_misses
-    self.previous_request = None
 
   def __call__(self, request):
     """Fetch the request and return the response.
 
     Args:
-      request: an instance of an ArchivedHttpRequest.
+      request: an ArchivedHttpRequest.
+    Returns:
+      an ArchivedHttpResponse
     """
     if self.cache_misses:
       self.cache_misses.record_request(
           request, is_record_mode=True, is_cache_miss=False)
 
-    # if request has already been archived, return the archived version
+    # If request is already in the archive, return the archived response.
     if request in self.http_archive:
-      logging.debug('Repeated request found: %s\nPrevious Request was: %s\n',
-                    request.verbose(),
-                    self.previous_request.verbose() if self.previous_request
-                    else 'None')
-      return self.http_archive[request]
-
-    previous_request = request
-    response, response_chunks, response_delays = self.real_http_fetch(request)
-    if response is None:
-      return None
-
-    server_rtt = 0
-    if self.http_archive.get_server_rtt:
-      server_rtt = self.http_archive.get_server_rtt(request.host)
-    server_delays = [max(delay - server_rtt, 0) for delay in response_delays]
-
-    response = httparchive.ArchivedHttpResponse(
-        response.version,
-        response.status,
-        response.reason,
-        response.getheaders(),
-        response_chunks,
-        server_delays)
-    self.http_archive[request] = response
+      logging.debug('Repeated request found: %s', request)
+      response = self.http_archive[request]
+    else:
+      response = self.real_http_fetch(request)
+      if response is None:
+        return None
+      self.http_archive[request] = response
     if self.inject_script:
       response = _InjectScripts(response, self.inject_script)
     logging.debug('Recorded: %s', request)
@@ -340,8 +326,7 @@ class ControllableHttpArchiveFetch(object):
 
   def __init__(self, http_archive, real_dns_lookup,
                inject_script, use_diff_on_unknown_requests,
-               use_record_mode, cache_misses, use_closest_match,
-               use_server_delay):
+               use_record_mode, cache_misses, use_closest_match):
     """Initialize HttpArchiveFetch.
 
     Args:
@@ -354,8 +339,6 @@ class ControllableHttpArchiveFetch(object):
       cache_misses: Instance of CacheMissArchive.
       use_closest_match: If True, on replay mode, serve the closest match
         in the archive instead of giving a 404.
-      use_server_delay: If True, on replay mode, simulate server delay by
-        delaying response time to requests.
     """
     self.record_fetch = RecordHttpArchiveFetch(
         http_archive, real_dns_lookup, inject_script,
@@ -363,7 +346,6 @@ class ControllableHttpArchiveFetch(object):
     self.replay_fetch = ReplayHttpArchiveFetch(
         http_archive, inject_script, use_diff_on_unknown_requests, cache_misses,
         use_closest_match)
-    self.use_server_delay = use_server_delay
     if use_record_mode:
       self.SetRecordMode()
     else:

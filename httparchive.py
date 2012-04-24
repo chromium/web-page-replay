@@ -35,6 +35,7 @@ import difflib
 import email.utils
 import httplib
 import httpzlib
+import json
 import logging
 import optparse
 import os
@@ -184,22 +185,29 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     """Print the contents of all URLs that match given params."""
     out = StringIO.StringIO()
     for request in self.get_requests(command, host, path):
-      print >>out, '%s %s %s\nrequest headers:\n' % (
-          request.command, request.host, request.path)
+      print >>out, str(request)
+      print >>out, 'Untrimmed request headers:'
       for k in request.headers:
         print >>out, '    %s: %s' % (k, request.headers[k])
       if request.request_body:
         print >>out, request.request_body
       print >>out, '-' * 70
       response = self[request]
-      print >>out, 'Status: %s\nReason: %s\nheaders:\n' % (
-          response.status, response.reason)
+      chunk_lengths = [len(x) for x in response.response_data]
+      print >>out, ('Status: %s\n'
+                    'Reason: %s\n'
+                    'Headers delay: %s\n'
+                    'Response headers:') % (
+          response.status, response.reason, response.delays['headers'])
       for k, v in response.headers:
         print >>out, '    %s: %s' % (k, v)
-      headers = dict(response.headers)
+      print >>out, ('Chunk count: %s\n'
+                    'Chunk lengths: %s\n'
+                    'Chunk delays: %s') % (
+          len(chunk_lengths), chunk_lengths, response.delays['data'])
       body = response.get_data_as_text()
+      print >>out, '.' * 70
       if body:
-        print >>out, '-' * 70
         print >>out, body
       print >>out, '=' * 70
     return out.getvalue()
@@ -331,11 +339,8 @@ class ArchivedHttpRequest(object):
 
   def __str__(self):
     scheme = 'https' if self.is_ssl else 'http'
-    return '%s %s://%s%s %s' % (self.command, scheme, self.host, self.path,
-                                self.trimmed_headers)
-
-  def verbose(self):
-    return '%s %s%s %s' % (self.command, self.host, self.path, self.headers)
+    return '%s %s://%s%s %s' % (
+        self.command, scheme, self.host, self.path, self.trimmed_headers)
 
   def __repr__(self):
     return repr((self.command, self.host, self.path, self.request_body,
@@ -477,13 +482,12 @@ class ArchivedHttpResponse(object):
   # and removed by set_data().
   CHUNK_EDIT_SEPARATOR = '[WEB_PAGE_REPLAY_CHUNK_BOUNDARY]'
 
-  # SERVER_DELAY_EDIT_SEPARATOR is used to edit and view server delays.
-  DELAY_EDIT_SEPARATOR = ('\n[WEB_PAGE_REPLAY_EDIT_ARCHIVE '
-                          '--- Server delays per chunk are shown above. '
-                          'Response content is below.]\n')
+  # DELAY_EDIT_SEPARATOR is used to edit and view server delays.
+  DELAY_EDIT_SEPARATOR = ('\n[WEB_PAGE_REPLAY_EDIT_ARCHIVE --- '
+                          'Delays are above. Response content is below.]\n')
 
   def __init__(self, version, status, reason, headers, response_data,
-               server_delays=None):
+               delays=None):
     """Initialize an ArchivedHttpResponse.
 
     Args:
@@ -492,52 +496,35 @@ class ArchivedHttpResponse(object):
       status: Status code returned by server (e.g. 200).
       reason: Reason phrase returned by server (e.g. "OK").
       headers: list of (header, value) tuples.
-      response_data: list of content chunks where concatenating the chunks gives
-          the complete contents (i.e. the chunks do not have any lengths or
-          delimiters).
-          Must not include the last 'sentinel' chunk (i.e. the zero-length chunk
-          with no data, to mark termination of data transfer).
-      server_delays: list of server delays for each chunk. Note that
-          if chunked encoding is used, this will also record the ttfb for the
-          last 'sentinel' chunk (zero-length chunk with no data).
+      response_data: list of content chunks.
+          Concatenating the chunks gives the complete contents
+          (i.e. the chunks do not have any lengths or delimiters).
+          Do not include the final, zero-length chunk that marks the end.
+      delays: dict of (ms) delays before "headers" and "data". For example,
+          {'headers': 50, 'data': [0, 10, 10]}
     """
     self.version = version
     self.status = status
     self.reason = reason
     self.headers = headers
     self.response_data = response_data
-    self.server_delays = server_delays
-    self.fix_chunk_delays()
+    self.delays = delays
+    self.fix_delays()
 
-  def fix_chunk_delays(self):
-    """Checks whether the number of server delays match the number of chunks.
-
-    If they do not match, either zeroes are appended or values truncated from
-    server_delays.
-    """
-    issue_warning = True
-    if not self.server_delays:
-      self.server_delays = []
-      issue_warning = False
-    server_delays = self.server_delays
-
-    use_chunked = 'transfer-encoding' in self.headers
-    # If we are using chunked encoding, subtract the offset for the 'sentinel'
-    # chunk.
-    server_delay_offset = 1 if use_chunked else 0
-
-    proper_server_delays_length = len(self.response_data) + server_delay_offset
-    length_delta = proper_server_delays_length - len(server_delays)
-    if length_delta < 0:
-      if issue_warning:
-        logging.warning('Server_delay contains too many elements; '
-                        'truncating %d elements', abs(length_delta))
-      del server_delays[proper_server_delays_length:]
-    elif length_delta > 0:
-      if issue_warning:
-        logging.warning('Server_delay contains too few elements; '
-                        'appending %d elements', length_delta)
-      server_delays += [0] * length_delta
+  def fix_delays(self):
+    """Initialize delays, or check the number of data delays."""
+    expected_num_delays = len(self.response_data)
+    if not self.delays:
+      self.delays = {
+          'headers': 0,
+          'data': [0] * expected_num_delays
+          }
+    else:
+      num_delays = len(self.delays['data'])
+      if num_delays != expected_num_delays:
+        raise HttpArchiveException(
+            'Server delay length mismatch: %d (expected %d): %s',
+            num_delays, expected_num_delays, self.delays['data'])
 
   def __repr__(self):
     return repr((self.version, self.status, self.reason, sorted(self.headers),
@@ -557,16 +544,22 @@ class ArchivedHttpResponse(object):
     Args:
       state: a dictionary for __dict__
     """
-    if 'server_delays' not in state:
-      state['server_delays'] = []
+    if 'server_delays' in state:
+      state['delays'] = {
+          'headers': 0,
+          'data': state['server_delays']
+          }
+      del state['server_delays']
+    elif 'delays' not in state:
+      state['delays'] = None
     self.__dict__.update(state)
-    self.fix_chunk_delays()
+    self.fix_delays()
 
-  def get_header(self, key):
+  def get_header(self, key, default=None):
     for k, v in self.headers:
       if key == k:
         return v
-    return None
+    return default
 
   def get_header_case_insensitive(self, key):
     for k, v in self.headers:
@@ -593,6 +586,9 @@ class ArchivedHttpResponse(object):
   def is_compressed(self):
     return self.get_header('content-encoding') in ('gzip', 'deflate')
 
+  def is_chunked(self):
+    return self.get_header('transfer-encoding') == 'chunked'
+
   def get_data_as_text(self):
     """Return content as a single string.
 
@@ -610,18 +606,9 @@ class ArchivedHttpResponse(object):
       uncompressed_chunks = self.response_data
     return self.CHUNK_EDIT_SEPARATOR.join(uncompressed_chunks)
 
-  def get_server_delays_as_text(self):
-    """Return server delays as multiple lines of numbers, one per line.
-
-    e.g.
-    10.0000
-    2.3211
-    1.5324
-    5.300
-
-    Returns 0 for each chunk for archives without server_delay data.
-    """
-    return '\n'.join('%s' % delay for delay in self.server_delays)
+  def get_delays_as_text(self):
+    """Return delays as editable text."""
+    return json.dumps(self.delays, indent=2)
 
   def get_response_as_text(self):
     """Returns response content as a single string.
@@ -633,8 +620,8 @@ class ArchivedHttpResponse(object):
     if data is None:
       logging.warning('Data can not be represented as text.')
       data = ''
-    server_delays = self.get_server_delays_as_text()
-    return self.DELAY_EDIT_SEPARATOR.join((server_delays, data))
+    delays = self.get_delays_as_text()
+    return self.DELAY_EDIT_SEPARATOR.join((delays, data))
 
   def set_data(self, text):
     """Inverse of get_data_as_text().
@@ -646,51 +633,41 @@ class ArchivedHttpResponse(object):
       self.response_data = httpzlib.compress_chunks(text_chunks, self.is_gzip())
     else:
       self.response_data = text_chunks
-    if not self.get_header('transfer-encoding'):
+    if self.is_chunked():
       content_length = sum(len(c) for c in self.response_data)
       self.set_header('content-length', str(content_length))
 
-  def set_server_delays(self, delays_text):
-    """Inverse of get_server_delays_as_text().
-
-    Sets the server delay of each to its corresponding textual representation.
-    If the delays_text can not be parsed, a default value of 0 is assumed.
-
-    This method does not enforce that the number of chunk delays matches the
-    number of chunks!
+  def set_delays(self, delays_text):
+    """Inverse of get_delays_as_text().
 
     Args:
-      delays_text: server delays as multiple lines of numbers, one per line.
-
-      e.g.
-      10.0000
-      2.3211
-      1.5324
-      5.300
+      delays_text: JSON encoded text such as the following:
+          {
+            headers: 80,
+            data: [6, 55, 0]
+          }
+        Times are in milliseconds.
+        Each data delay corresponds with one response_data value.
     """
-    server_delays = []
-    for delay_str in delays_text.split('\n'):
-      delay = 0
-      try:
-        delay = float(delay_str)
-      except ValueError, e:
-        logging.critical('Unable to parse server delay %s: %s', delay_str, e)
-      server_delays.append(delay)
-    self.server_delays = server_delays
-    self.fix_chunk_delays()
+    try:
+      self.delays = json.loads(delays_text)
+    except (ValueError, KeyError) as e:
+      logging.critical('Unable to parse delays %s: %s', delays_text, e)
+    self.fix_delays()
 
   def set_response_from_text(self, text):
     """Inverse of get_response_as_text().
 
     Modifies the state of the archive according to the textual representation.
     """
-    partitions = text.split(self.DELAY_EDIT_SEPARATOR)
-    if not len(partitions) == 2:
-      logging.critical('Error parsing text representation. '
-                       'Edits will not be saved.')
+    try:
+      delays, data = text.split(self.DELAY_EDIT_SEPARATOR)
+    except ValueError:
+      logging.critical(
+          'Error parsing text representation. Skipping edits.')
       return
-    self.set_server_delays(partitions[0])
-    self.set_data(partitions[1])
+    self.set_delays(delays)
+    self.set_data(data)
 
 
 def create_response(status, reason=None, headers=None, body=None):

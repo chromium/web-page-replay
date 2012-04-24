@@ -77,10 +77,9 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def send_archived_http_response(self, response):
     try:
       # We need to set the server name before we start the response.
-      headers = dict(response.headers)
-      use_chunked = 'transfer-encoding' in headers
-      has_content_length = 'content-length' in headers
-      self.server_version = headers.get('server', 'WebPageReplay')
+      is_chunked = response.is_chunked()
+      has_content_length = response.get_header('content-length') is not None
+      self.server_version = response.get_header('server', 'WebPageReplay')
       self.sys_version = ''
 
       if response.version == 10:
@@ -88,47 +87,32 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
       # If we don't have chunked encoding and there is no content length,
       # we need to manually compute the content-length.
-      if not use_chunked and not has_content_length:
+      if not is_chunked and not has_content_length:
         content_length = sum(len(c) for c in response.response_data)
         response.headers.append(('content-length', str(content_length)))
 
+      use_delays = (self.server.use_delays and
+                    not self.server.http_archive_fetch.is_record_mode)
+      if use_delays:
+        logging.debug('Using delays: %s', response.delays)
+        time.sleep(response.delays['headers'] / 1000.0)
       self.send_response(response.status, response.reason)
       # TODO(mbelshe): This is lame - each write is a packet!
       for header, value in response.headers:
         if header != 'server':
           self.send_header(header, value)
-
-      # For backwards compatibility
-      server_delays = []
-      if hasattr(response, 'server_delays'):
-        server_delays = response.server_delays
-
-      logging.debug('server delays: %s', server_delays)
-
-      # We don't want our proxy to simulate server delay on record mode
-      use_server_delay = (self.server.http_archive_fetch.use_server_delay and
-                          not self.server.http_archive_fetch.is_record_mode)
-
-      if use_server_delay and server_delays:
-        time.sleep(server_delays[0] / 1000.0)
       self.end_headers()
 
-      # Extract server delays for non-first and non-last chunks
-      for chunk, delay in map(None, response.response_data,
-                              server_delays[1:-1]):
-        if use_chunked:
-          if use_server_delay and delay:
-            time.sleep(delay / 1000.0)
+      for chunk, delay in zip(response.response_data, response.delays['data']):
+        if use_delays:
+          time.sleep(delay / 1000.0)
+        if is_chunked:
           # Write chunk length (hex) and data (e.g. "A\r\nTESSELATED\r\n").
           self.wfile.write('%x\r\n%s\r\n' % (len(chunk), chunk))
         else:
           self.wfile.write(chunk)
-      if use_chunked and (not response.response_data or
-                          response.response_data[-1]):
-        if use_server_delay and server_delays:
-          time.sleep(server_delays[-1] / 1000.0)
-        # Write last chunk as a zero-length chunk with no data.
-        self.wfile.write('0\r\n\r\n')
+      if is_chunked:
+        self.wfile.write('0\r\n\r\n')  # write final, zero-length chunk.
       self.wfile.flush()
 
       # TODO(mbelshe): This connection close doesn't seem to work.
@@ -137,9 +121,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     except Exception, e:
       logging.error('Error sending response for %s/%s: %s',
-                    self.headers['host'],
-                    self.path,
-                    e)
+                    self.headers['host'], self.path, e)
 
   def do_POST(self):
     self.do_GET()
@@ -183,7 +165,8 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
   request_queue_size = 128
 
   def __init__(self, http_archive_fetch, custom_handlers,
-               host='localhost', port=80, is_ssl=False):
+               host='localhost', port=80, use_delays=False,
+               is_ssl=False):
     try:
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), self.HANDLER)
     except Exception, e:
@@ -191,6 +174,7 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
                                  (port, e))
     self.http_archive_fetch = http_archive_fetch
     self.custom_handlers = custom_handlers
+    self.use_delays = use_delays
     self.is_ssl = is_ssl
 
     protocol = 'HTTPS' if self.is_ssl else 'HTTP'
@@ -208,9 +192,10 @@ class HttpsProxyServer(HttpProxyServer):
   """SSL server."""
 
   def __init__(self, http_archive_fetch, custom_handlers, certfile,
-               host='localhost', port=443):
+               host='localhost', port=443, use_delays=False):
     HttpProxyServer.__init__(
-        self, http_archive_fetch, custom_handlers, host, port, is_ssl=True)
+        self, http_archive_fetch, custom_handlers, host, port,
+        use_delays, is_ssl=True)
     self.socket = ssl.wrap_socket(
         self.socket, certfile=certfile, server_side=True)
     # Ancestor class, deamonserver, calls serve_forever() during its __init__.

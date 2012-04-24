@@ -138,18 +138,17 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
         http_archive, real_dns_lookup,
         httpclient.GetInjectScript(options.inject_scripts.split(',')),
         options.diff_unknown_requests, options.record,
-        cache_misses=cache_misses, use_closest_match=options.use_closest_match,
-        use_server_delay=options.use_server_delay)
+        cache_misses=cache_misses, use_closest_match=options.use_closest_match)
     server_manager.AppendRecordCallback(http_archive_fetch.SetRecordMode)
     server_manager.AppendReplayCallback(http_archive_fetch.SetReplayMode)
     server_manager.Append(
         httpproxy.HttpProxyServer, http_archive_fetch, http_custom_handlers,
-        host=host, port=options.port)
+        host=host, port=options.port, use_delays=options.use_server_delay)
     if options.ssl:
       server_manager.Append(
           httpproxy.HttpsProxyServer, http_archive_fetch,
           http_custom_handlers, options.certfile,
-          host=host, port=options.ssl_port)
+          host=host, port=options.ssl_port, use_delays=options.use_server_delay)
 
 
 def AddTrafficShaper(server_manager, options, host):
@@ -174,7 +173,8 @@ class OptionsWrapper(object):
   _TRAFFICSHAPING_OPTIONS = set(
       ['down', 'up', 'delay_ms', 'packet_loss_rate', 'init_cwnd', 'net'])
   _CONFLICTING_OPTIONS = (
-      ('record', ('down', 'up', 'delay_ms', 'packet_loss_rate', 'net', 'spdy')),
+      ('record', ('down', 'up', 'delay_ms', 'packet_loss_rate', 'net',
+                  'spdy', 'use_server_delay')),
       ('net', ('down', 'up', 'delay_ms')),
       ('server', ('server_mode',)),
   )
