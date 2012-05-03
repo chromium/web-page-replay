@@ -67,6 +67,8 @@ def _InjectScripts(response, inject_script):
   Returns:
     an ArchivedHttpResponse
   """
+  if type(response) == tuple:
+    logging.warn('tuple response: %s', response)
   content_type = response.get_header('content-type')
   if content_type and content_type.startswith('text/html'):
     text = response.get_data_as_text()
@@ -168,8 +170,14 @@ class DetailedHTTPSConnection(httplib.HTTPSConnection):
 
 
 class RealHttpFetch(object):
-  def __init__(self, real_dns_lookup):
+  def __init__(self, real_dns_lookup, get_server_rtt):
+    """Initialize RealHttpFetch.
+
+    Args:
+      get_server_rtt: a function that returns the round-trip time of a host.
+    """
     self._real_dns_lookup = real_dns_lookup
+    self._get_server_rtt = get_server_rtt
 
   def __call__(self, request):
     """Fetch an HTTP request.
@@ -179,11 +187,11 @@ class RealHttpFetch(object):
     Returns:
       an ArchivedHttpResponse
     """
-    logging.debug('RealHttpRequest: %s %s', request.host, request.path)
+    logging.debug('RealHttpFetch: %s %s', request.host, request.path)
     host_ip = self._real_dns_lookup(request.host)
     if not host_ip:
       logging.critical('Unable to find host ip for name: %s', request.host)
-      return None, None, None
+      return None
     retries = 3
     while True:
       try:
@@ -199,7 +207,7 @@ class RealHttpFetch(object):
             request.headers)
         response = connection.getresponse()
         headers_delay = int((DEFAULT_TIMER() - start) * 1000)
-        headers_delay -= self.http_archive.get_server_rtt(request.host)
+        headers_delay -= self._get_server_rtt(request.host)
 
         chunks, chunk_delays = response.read_chunks()
         delays = {
@@ -231,13 +239,14 @@ class RecordHttpArchiveFetch(object):
     """Initialize RecordHttpArchiveFetch.
 
     Args:
-      http_archve: an instance of a HttpArchive
+      http_archive: an instance of a HttpArchive
       real_dns_lookup: a function that resolves a host to an IP.
       inject_script: script string to inject in all pages
       cache_misses: instance of CacheMissArchive
     """
     self.http_archive = http_archive
-    self.real_http_fetch = RealHttpFetch(real_dns_lookup)
+    self.real_http_fetch = RealHttpFetch(real_dns_lookup,
+                                         http_archive.get_server_rtt)
     self.inject_script = inject_script
     self.cache_misses = cache_misses
 
