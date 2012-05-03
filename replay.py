@@ -91,8 +91,10 @@ def AddDnsForward(server_manager, platform_settings, host):
   @contextlib.contextmanager
   def DnsForwardContext():
     platform_settings.set_primary_dns(host)
-    yield
-    platform_settings.restore_primary_dns()
+    try:
+      yield
+    finally:
+      platform_settings.restore_primary_dns()
   server_manager.Append(DnsForwardContext)
 
 
@@ -111,8 +113,10 @@ def AddTemporaryCertFile(server_manager, platform_settings, certfile):
   @contextlib.contextmanager
   def TemporaryCertFileContext():
     platform_settings.create_certfile(certfile)
-    yield
-    os.unlink(certfile)
+    try:
+      yield
+    finally:
+      os.unlink(certfile)
   server_manager.Append(TemporaryCertFileContext)
 
 
