@@ -174,6 +174,7 @@ class RealHttpFetch(object):
     """Initialize RealHttpFetch.
 
     Args:
+      real_dns_lookup: a function that resolves a host to an IP.
       get_server_rtt: a function that returns the round-trip time of a host.
     """
     self._real_dns_lookup = real_dns_lookup
