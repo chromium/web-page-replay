@@ -49,6 +49,25 @@ class ServerManager(object):
     """
     self.initializers.append((initializer, init_args, init_kwargs))
 
+  def AppendStartStopFunctions(self, start_spec, stop_spec):
+    """Append functions to call before and after the main run-loop.
+
+    If the enter function succeeds, then the exit function will be
+    called when shutting down.
+
+    Args:
+      start_spec: (start_func, start_args_1, start_arg_2, ...)
+        # The arguments are optional.
+      stop_spec: (stop_func, stop_args_1, stop_arg_2, ...)
+        # The arguments are optional.
+    """
+    class Context(object):
+      def __enter__(self):
+        start_spec[0](*start_spec[1:])
+      def __exit__(self, type, value, traceback):
+        stop_spec[0](*stop_spec[1:])
+    self.Append(Context)
+
   def AppendRecordCallback(self, func):
     """Append a function to the list to call when switching to record mode.
 

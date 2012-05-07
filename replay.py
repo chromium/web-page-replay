@@ -39,7 +39,6 @@ Network simulation examples:
   $ sudo ./replay.py --packet_loss_rate=0.01 archive.wpr
 """
 
-import contextlib
 import logging
 import optparse
 import os
@@ -88,15 +87,9 @@ def configure_logging(platform_settings, log_level_name, log_file_name=None):
 
 def AddDnsForward(server_manager, platform_settings, host):
   """Forward DNS traffic."""
-  @contextlib.contextmanager
-  def DnsForwardContext():
-    platform_settings.set_primary_dns(host)
-    try:
-      yield
-    finally:
-      platform_settings.restore_primary_dns()
-  server_manager.Append(DnsForwardContext)
-
+  server_manager.AppendStartStopFunctions(
+      [platform_settings.set_primary_dns, host],
+      [platform_settings.restore_primary_dns])
 
 def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
   dns_lookup = None
@@ -106,18 +99,6 @@ def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
   server_manager.AppendRecordCallback(dns_lookup.InitializeArchiveHosts)
   server_manager.AppendReplayCallback(dns_lookup.InitializeArchiveHosts)
   server_manager.Append(dnsproxy.DnsProxyServer, dns_lookup, host)
-
-
-def AddTemporaryCertFile(server_manager, platform_settings, certfile):
-  """Create a temporary certificate file and clean up on exit."""
-  @contextlib.contextmanager
-  def TemporaryCertFileContext():
-    platform_settings.create_certfile(certfile)
-    try:
-      yield
-    finally:
-      os.unlink(certfile)
-  server_manager.Append(TemporaryCertFileContext)
 
 
 def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
@@ -276,7 +257,9 @@ def replay(options, replay_filename):
       AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive)
     if options.ssl and options.certfile is None:
       options.certfile = platform_settings.get_certfile_name()
-      AddTemporaryCertFile(server_manager, platform_settings, options.certfile)
+      server_manager.AppendStartStopFunctions(
+          [platform_settings.create_certfile, options.certfile],
+          [os.unlink, options.certfile])
     AddWebProxy(server_manager, options, host, real_dns_lookup,
                 http_archive, cache_misses)
     AddTrafficShaper(server_manager, options, host)
