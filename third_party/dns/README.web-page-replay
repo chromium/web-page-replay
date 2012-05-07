@@ -2,7 +2,7 @@ Name: A DNS toolkit for Python
 Short Name: dnspython
 URL: http://www.dnspython.org/
 Version: 1.8.0 (found in ./version.py)
-License: BSD-like
+License: ISC
 License File: LICENSE
 
 Description:
