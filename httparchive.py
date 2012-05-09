@@ -191,7 +191,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
         print >>out, '    %s: %s' % (k, request.headers[k])
       if request.request_body:
         print >>out, request.request_body
-      print >>out, '-' * 70
+      print >>out, '---- Response Info', '-' * 51
       response = self[request]
       chunk_lengths = [len(x) for x in response.response_data]
       print >>out, ('Status: %s\n'
@@ -206,9 +206,11 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
                     'Chunk delays: %s') % (
           len(chunk_lengths), chunk_lengths, response.delays['data'])
       body = response.get_data_as_text()
-      print >>out, '.' * 70
+      print >>out, '---- Response Data', '-' * 51
       if body:
         print >>out, body
+      else:
+        print >>out, '[binary data]'
       print >>out, '=' * 70
     return out.getvalue()
 
