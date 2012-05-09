@@ -88,6 +88,53 @@ Ethernet adapter Local Area Connection 2:
 """ % { 'ip_addr': WINDOWS_XP_IP, 'mac_addr': WINDOWS_XP_MAC }
 
 
+# scutil show State:/Network/Global/IPv4
+OSX_IPV4_STATE = """
+<dictionary> {
+  PrimaryInterface : en1
+  PrimaryService : 8824452C-FED4-4C09-9256-40FB146739E0
+  Router : 192.168.1.1
+}
+"""
+
+# scutil show State:/Network/Service/[PRIMARY_SERVICE_KEY]/DNS
+OSX_DNS_STATE_LION = """
+<dictionary> {
+  DomainName : mtv.corp.google.com
+  SearchDomains : <array> {
+    0 : mtv.corp.google.com
+    1 : corp.google.com
+    2 : prod.google.com
+    3 : prodz.google.com
+    4 : google.com
+  }
+  ServerAddresses : <array> {
+    0 : 172.72.255.1
+    1 : 172.49.117.57
+    2 : 172.54.116.57
+  }
+}
+"""
+
+OSX_DNS_STATE_SNOW_LEOPARD = """
+<dictionary> {
+  ServerAddresses : <array> {
+    0 : 172.27.1.1
+    1 : 172.94.117.57
+    2 : 172.45.116.57
+  }
+  DomainName : mtv.corp.google.com
+  SearchDomains : <array> {
+    0 : mtv.corp.google.com
+    1 : corp.google.com
+    2 : prod.google.com
+    3 : prodz.google.com
+    4 : google.com
+  }
+}
+"""
+
+
 class Win7Settings(platformsettings.WindowsPlatformSettings):
   @classmethod
   def _ipconfig(cls, *args):
@@ -111,6 +158,43 @@ class WindowsPlatformSettingsTest(unittest.TestCase):
   def test_get_mac_address_7(self):
     self.assertEqual(WINDOWS_7_MAC,
                      Win7Settings().get_mac_address(WINDOWS_7_IP))
+
+
+class OsxSettings(platformsettings.OsxPlatformSettings):
+  def __init__(self):
+    super(OsxSettings, self)
+    self.ipv4_state = OSX_IPV4_STATE
+    self.dns_state = None  # varies by test
+
+  def _scutil(self, cmd):
+    if cmd == 'show State:/Network/Global/IPv4':
+      return self.ipv4_state
+    elif cmd.startswith('show State:/Network/Service/'):
+      return self.dns_state
+    raise RuntimeError("Unrecognized cmd: %s", cmd)
+
+
+class OsxPlatformSettingsTest(unittest.TestCase):
+  def test_get_primary_dns_lion(self):
+    settings = OsxSettings()
+    settings.dns_state = OSX_DNS_STATE_LION
+    self.assertEqual('172.72.255.1', settings.get_primary_dns())
+
+  def test_get_primary_dns_snow_leopard(self):
+    settings = OsxSettings()
+    settings.dns_state = OSX_DNS_STATE_SNOW_LEOPARD
+    self.assertEqual('172.27.1.1', settings.get_primary_dns())
+
+  def test_get_primary_dns_unexpected_ipv4_state_raises(self):
+    settings = OsxSettings()
+    settings.ipv4_state = 'Some error'
+    settings.dns_state = OSX_DNS_STATE_SNOW_LEOPARD
+    self.assertRaises(platformsettings.DnsReadError, settings.get_primary_dns)
+
+  def test_get_primary_dns_unexpected_dns_state_raises(self):
+    settings = OsxSettings()
+    settings.dns_state = 'Some other error'
+    self.assertRaises(platformsettings.DnsReadError, settings.get_primary_dns)
 
 
 if __name__ == '__main__':

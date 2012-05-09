@@ -309,7 +309,7 @@ class OsxPlatformSettings(PosixPlatformSettings):
       key_value = line.split(' : ')
       if key_value[0] == '  PrimaryService':
         return 'State:/Network/Service/%s/DNS' % key_value[1]
-    raise self._get_dns_update_error()
+    raise DnsReadError('Unable to find DNS service key: %s', output)
 
   def get_primary_dns(self):
     # <dictionary> {
@@ -320,9 +320,14 @@ class OsxPlatformSettings(PosixPlatformSettings):
     #   DomainName : apple.co.uk
     # }
     output = self._scutil('show %s' % self._get_dns_service_key())
-    primary_line = output.split('\n')[2]
-    line_parts = primary_line.split(' ')
-    return line_parts[-1]
+    match = re.search(
+        br'ServerAddresses\s+:\s+<array>\s+{\s+0\s+:\s+((\d{1,3}\.){3}\d{1,3})',
+        output)
+    if match:
+      return match.group(1)
+    else:
+      raise DnsReadError('Unable to find primary DNS server: %s', output)
+
 
   def _set_primary_dns(self, dns):
     command = '\n'.join([
