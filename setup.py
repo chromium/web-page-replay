@@ -13,23 +13,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Creates a distributable python egg.
+"""Creates a distributable python package.
 
-Creating new eggs:
-  1. $ python setup.py sdist
-  2. This will generate dist/webpagereplay-X.X.tar.gz
-  3. Upload the tar to http://code.google.com/p/web-page-replay/downloads/entry
+Creating new packages:
+  1. Generate the package, dist/webpagereplay-X.X.tar.gz:
+       python setup.py sdist
+  2. Upload the package file to the following:
+       http://code.google.com/p/web-page-replay/downloads/entry
 
-Installing eggs:
-  1. $ easy_install http://web-page-replay.googlecode.com/files/webpagereplay-X.X.tar.gz
-  2. The replay and httparchive commands are now on your PATH.
+Installing packages:
+  $ easy_install http://web-page-replay.googlecode.com/files/webpagereplay-X.X.tar.gz
+  - The replay and httparchive commands are now on your PATH.
 """
 
 import setuptools
 
 setuptools.setup(
     name='webpagereplay',
-    version='1.1',
+    version='1.1.1',
     description='Record and replay web content',
     author='Web Page Replay Project Authors',
     author_email='web-page-replay-dev@googlegroups.com',
