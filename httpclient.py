@@ -34,8 +34,8 @@ else:
   DEFAULT_TIMER = time.time
 
 
-HTML_RE = re.compile(r'<html[^>]*>', re.IGNORECASE)
-HEAD_RE = re.compile(r'<head[^>]*>', re.IGNORECASE)
+HTML_RE = re.compile(r'^.{,256}?<html.*?>', re.IGNORECASE | re.DOTALL)
+HEAD_RE = re.compile(r'^.{,256}?<head.*?>', re.IGNORECASE | re.DOTALL)
 
 
 class HttpClientException(Exception):
