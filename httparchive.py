@@ -635,8 +635,9 @@ class ArchivedHttpResponse(object):
       self.response_data = httpzlib.compress_chunks(text_chunks, self.is_gzip())
     else:
       self.response_data = text_chunks
-    content_length = sum(len(c) for c in self.response_data)
-    self.set_header('content-length', str(content_length))
+    if not self.is_chunked():
+      content_length = sum(len(c) for c in self.response_data)
+      self.set_header('content-length', str(content_length))
 
   def set_delays(self, delays_text):
     """Inverse of get_delays_as_text().
