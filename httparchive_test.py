@@ -158,7 +158,7 @@ class HttpArchiveTest(unittest.TestCase):
     request = self.REQUEST
     response = self.RESPONSE
     archive = self.archive
-    not_modified_response = archive.create_response(304)
+    not_modified_response = httparchive.create_response(304)
 
     # Fail check and return response again
     request_headers = {'if-modified-since': self.DATE_PAST}
@@ -190,7 +190,7 @@ class HttpArchiveTest(unittest.TestCase):
     request = self.REQUEST
     response = self.RESPONSE
     archive = self.archive
-    not_modified_response = archive.create_response(304)
+    not_modified_response = httparchive.create_response(304)
 
     # Succeed check
     request_headers = {'if-unmodified-since': self.DATE_PAST}
@@ -222,8 +222,8 @@ class HttpArchiveTest(unittest.TestCase):
     request = self.REQUEST
     response = self.RESPONSE
     archive = self.archive
-    not_modified_response = archive.create_response(304)
-    precondition_failed_response = archive.create_response(412)
+    not_modified_response = httparchive.create_response(304)
+    precondition_failed_response = httparchive.create_response(412)
 
     # if-match headers
     request_headers = {'if-match': self.ETAG_VALID}
@@ -247,8 +247,8 @@ class HttpArchiveTest(unittest.TestCase):
     request = self.REQUEST
     response = self.RESPONSE
     archive = self.archive
-    not_modified_response = archive.create_response(304)
-    precondition_failed_response = archive.create_response(412)
+    not_modified_response = httparchive.create_response(304)
+    precondition_failed_response = httparchive.create_response(412)
 
     # if-match headers
     # If the request would, without the If-Match header field, 
@@ -298,8 +298,8 @@ class HttpArchiveTest(unittest.TestCase):
     request = self.REQUEST
     response = self.RESPONSE
     archive = self.archive
-    not_modified_response = archive.create_response(304)
-    precondition_failed_response = archive.create_response(412)
+    not_modified_response = httparchive.create_response(304)
+    precondition_failed_response = httparchive.create_response(412)
 
     # if-none-match headers
     # If the request would, without the If-None-Match header field, 
