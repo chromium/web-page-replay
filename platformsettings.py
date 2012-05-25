@@ -45,6 +45,17 @@ class NotAdministratorError(PlatformSettingsError):
   pass
 
 
+class CalledProcessError(PlatformSettingsError):
+    """Raised when a _check_output() process returns a non-zero exit status."""
+    def __init__(self, returncode, cmd):
+        self.returncode = returncode
+        self.cmd = cmd
+
+    def __str__(self):
+        return 'Command "%s" returned non-zero exit status %d' % (
+            ' '.join(self.cmd), self.returncode)
+
+
 def _check_output(*args):
   """Run Popen(*args) and return its output as a byte string.
 
@@ -55,7 +66,7 @@ def _check_output(*args):
   Args:
     *args: sequence of program arguments
   Raises:
-    subprocess.CalledProcessError if the program returns non-zero exit status.
+    CalledProcessError if the program returns non-zero exit status.
   Returns:
     output as a byte string.
   """
@@ -66,7 +77,7 @@ def _check_output(*args):
   output = process.communicate()[0]
   retcode = process.poll()
   if retcode:
-    raise subprocess.CalledProcessError(retcode, command_args)
+    raise CalledProcessError(retcode, command_args)
   return output
 
 
@@ -168,7 +179,6 @@ class PlatformSettings(object):
 
     Args:
       hostname: hostname of the server to be pinged
-
     Returns:
       round trip time to the server in seconds, or 0 if unable to calculate RTT
     """
@@ -192,6 +202,9 @@ class PlatformSettings(object):
 
 class PosixPlatformSettings(PlatformSettings):
   PING_PATTERN = r'rtt min/avg/max/mdev = \d+\.\d+/(\d+\.\d+)/\d+\.\d+/\d+\.\d+'
+  PING_CMD = ('ping', '-c', '3', '-i', '0.2', '-W', '1')
+  # For OsX Lion non-root:
+  PING_RESTRICTED_CMD = ('ping', '-c', '1', '-i', '1', '-W', '1')
 
   def _get_dns_update_error(self):
     return DnsUpdateError('Did you run under sudo?')
@@ -226,33 +239,59 @@ class PosixPlatformSettings(PlatformSettings):
       logging.error("Unable to get sysctl %s: %s", name, rv)
       return None
 
+  def _check_output(self, *args):
+    """Allow tests to override this."""
+    return _check_output(*args)
+
+  def _ping(self, hostname):
+    """Return ping output or None if ping fails.
+
+    Initially pings 'localhost' to test for ping command that works.
+    If the tests fails, subsequent calls will return None without calling ping.
+
+    Args:
+      hostname: host to ping
+    Returns:
+      ping stdout string, or None if ping unavailable
+    Raises:
+      CalledProcessError if ping returns non-zero exit
+    """
+    if not hasattr(self, 'ping_cmd'):
+      test_host = 'localhost'
+      for self.ping_cmd in (self.PING_CMD, self.PING_RESTRICTED_CMD):
+        try:
+          if self._ping(test_host):
+            break
+        except (CalledProcessError, OSError) as e:
+          last_ping_error = e
+      else:
+        logging.critical('Ping configuration failed: %s', last_ping_error)
+        self.ping_cmd = None
+    if self.ping_cmd:
+      cmd = list(self.ping_cmd) + [hostname]
+      return self._check_output(*cmd)
+    return None
+
   def ping(self, hostname):
     """Pings the hostname by calling the OS system ping command.
-    Also stores the result internally.
 
     Args:
       hostname: hostname of the server to be pinged
-
     Returns:
       round trip time to the server in milliseconds, or 0 if unavailable
     """
     rtt = 0
+    output = None
     try:
-      # Regex matching may change depending on versions of ping? (unverified)
-      proc = subprocess.Popen(['ping', '-c', '3', '-i', '0.2', hostname],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-      output, errors = proc.communicate()
-
-      result = re.search(self.PING_PATTERN, output)
-      if not result:
-        logging.warning('Unable to ping %s: ', hostname)
+      output = self._ping(hostname)
+    except CalledProcessError as e:
+      logging.critical('Ping failed: %s', e)
+    if output:
+      match = re.search(self.PING_PATTERN, output)
+      if match:
+        rtt = float(match.groups()[0])
       else:
-        average = result.groups()
-        rtt = float(average[0])
-    except OSError, e:
-      logging.critical('System error while trying to ping %s: %s', hostname, e)
-    except ValueError, e:
-      logging.critical('Subprocess called with invalid arguments: %s',e)
+        logging.warning('Unable to ping %s: %s', hostname, output)
     return rtt
 
   def rerun_as_administrator(self):
