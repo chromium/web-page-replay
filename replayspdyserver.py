@@ -32,8 +32,12 @@ VERSION = 'version'
 
 class ReplaySpdyServer(daemonserver.DaemonServer):
   def __init__(self, http_archive_fetch, custom_handlers,
-               host='localhost', port=80,
-               use_ssl=True, certfile=None, keyfile=None):
+               host='localhost', port=80, certfile=None, keyfile=None):
+    """Initialize ReplaySpdyServer.
+
+    The private key may be stored in |certfile|. If so, |keyfile|
+    may be left unset.
+    """
     #TODO(lzheng): figure out how to get the log level from main.
     self.log = logging.getLogger('ReplaySpdyServer')
     self.log.setLevel(logging.INFO)
@@ -41,17 +45,10 @@ class ReplaySpdyServer(daemonserver.DaemonServer):
     self.custom_handlers = custom_handlers
     self.host = host
     self.port = port
-    self.use_ssl = use_ssl
-    if self.use_ssl and (not certfile or not keyfile):
-        self.log.error('SPDY SSL mode requires a keyfile and certificate file')
-        raise Exception('keyfile or certfile missing')
-    self.spdy_server = spdy_server.SpdyServer(host,
-                                              port,
-                                              self.use_ssl,
-                                              certfile,
-                                              keyfile,
-                                              self.request_handler,
-                                              self.log)
+    self.use_ssl = certfile is not None
+    self.spdy_server = spdy_server.SpdyServer(
+        host, port, self.use_ssl, certfile, keyfile, self.request_handler,
+        self.log)
 
   def serve_forever(self):
     self.log.info('Replaying with SPDY on %s:%d', self.host, self.port)

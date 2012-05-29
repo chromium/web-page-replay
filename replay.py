@@ -116,8 +116,7 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
     server_manager.Append(
         replayspdyserver.ReplaySpdyServer, http_archive_fetch,
         http_custom_handlers, host=host, port=options.port,
-        use_ssl=(options.spdy != 'no-ssl'), certfile=options.certfile,
-        keyfile=options.keyfile)
+        certfile=options.certfile)
   else:
     http_custom_handlers.add_server_manager_handler(server_manager)
     http_archive_fetch = httpclient.ControllableHttpArchiveFetch(
@@ -201,6 +200,8 @@ class OptionsWrapper(object):
       self._options.shaping_port = self.port
     if not self.ssl_shaping_port:
       self._options.ssl_shaping_port = self.ssl_port
+    if not self.ssl:
+      self._options.certfile = None
 
   def __getattr__(self, name):
     """Make the original option values available."""
@@ -304,10 +305,9 @@ def main():
       description=__doc__,
       epilog='http://code.google.com/p/web-page-replay/')
 
-  option_parser.add_option('-s', '--spdy', default=False,
-      action='store',
-      type='string',
-      help='Use spdy to replay relay_file.  --spdy="no-ssl" uses SPDY without SSL.')
+  option_parser.add_option('--spdy', default=False,
+      action='store_true',
+      help='Replay via SPDY. (Can be combined with --no-ssl).')
   option_parser.add_option('-r', '--record', default=False,
       action='store_true',
       help='Download real responses and record them to replay_file')
