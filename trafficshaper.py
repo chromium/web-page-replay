@@ -46,6 +46,7 @@ class TrafficShaper(object):
   _DOWNLOAD_PIPE = '11'    # Enforces overall download bandwidth.
   _DOWNLOAD_QUEUE = '11'   # Shares download bandwidth among destination ports.
   _DOWNLOAD_RULE = '5100'  # Specifies when the download queue is used.
+  _QUEUE_SLOTS = 100       # Number of packets to queue.
 
   _BANDWIDTH_RE = re.compile(BANDWIDTH_PATTERN)
 
@@ -115,7 +116,6 @@ class TrafficShaper(object):
 
     ports = ','.join(
         str(p) for p in (self.port, self.ssl_port, self.dns_port) if p)
-    queue_size = self.platformsettings.get_ipfw_queue_slots()
     half_delay_ms = int(self.delay_ms) / 2  # split over up/down links
 
     try:
@@ -131,7 +131,7 @@ class TrafficShaper(object):
           'config',
           'pipe', self._UPLOAD_PIPE,
           'plr', self.packet_loss_rate,
-          'queue', queue_size,
+          'queue', self._QUEUE_SLOTS,
           'mask', 'src-port', '0xffff',
           )
       self.platformsettings.ipfw(
@@ -157,7 +157,7 @@ class TrafficShaper(object):
           'config',
           'pipe', self._DOWNLOAD_PIPE,
           'plr', self.packet_loss_rate,
-          'queue', queue_size,
+          'queue', self._QUEUE_SLOTS,
           'mask', 'dst-port', '0xffff',
           )
       self.platformsettings.ipfw(

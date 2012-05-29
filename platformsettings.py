@@ -82,7 +82,6 @@ def _check_output(*args):
 
 
 class PlatformSettings(object):
-  _IPFW_QUEUE_SLOTS = 100
   _CERT_FILE = 'wpr_cert.pem'
 
   # Some platforms do not shape traffic with the loopback address.
@@ -147,9 +146,6 @@ class PlatformSettings(object):
   def ipfw(self, *args):
     ipfw_args = [self._ipfw_bin()] + [str(a) for a in args]
     return _check_output(*ipfw_args)
-
-  def get_ipfw_queue_slots(self):
-    return self._IPFW_QUEUE_SLOTS
 
   def get_server_ip_address(self, is_server_mode=False):
     """Returns the IP address to use for dnsproxy, httpproxy, and ipfw."""
@@ -436,7 +432,6 @@ class LinuxPlatformSettings(PosixPlatformSettings):
   TCP_INIT_CWND = 'net.ipv4.tcp_init_cwnd'
   TCP_BASE_MSS = 'net.ipv4.tcp_base_mss'
   TCP_MTU_PROBING = 'net.ipv4.tcp_mtu_probing'
-  _IPFW_QUEUE_SLOTS = 500
 
   def get_primary_dns(self):
     try:
