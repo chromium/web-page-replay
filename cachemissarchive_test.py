@@ -22,8 +22,9 @@ import unittest
 
 
 def get_mock_requests():
-  return pkg_resource.resourced_string(
-      __name__, 'mock-archive.txt').splitlines(keepends=True)
+  keepends = True
+  return pkg_resources.resource_string(
+      __name__, 'mock-archive.txt').splitlines(keepends)
 
 
 class CacheMissArchiveTest(unittest.TestCase):
@@ -45,17 +46,16 @@ class CacheMissArchiveTest(unittest.TestCase):
         'http://www.google.com/',
     ]
     self.cache_archive.set_urls_list(urls_list)
-    with get_mock_requests() as f:
-      for line in f:
-        # Each line contains: (command, host, path, request_body, headers)
-        # Delimited by '%'
-        args = line.split('%')
-        headers = ast.literal_eval(args[4].strip('\n '))
-        request = ArchivedHttpRequest(
-            args[0], args[1], args[2], args[3], headers)
-        self.cache_archive.record_request(request, is_record_mode=False,
-                                          is_cache_miss=True)
-        self.num_requests += 1
+    for line in get_mock_requests():
+      # Each line contains: (command, host, path, request_body, headers)
+      # Delimited by '%'
+      args = line.split('%')
+      headers = ast.literal_eval(args[4].strip('\n '))
+      request = ArchivedHttpRequest(
+          args[0], args[1], args[2], args[3], headers)
+      self.cache_archive.record_request(request, is_record_mode=False,
+                                        is_cache_miss=True)
+      self.num_requests += 1
 
   def test_init(self):
     empty_archive = cachemissarchive.CacheMissArchive('empty-archive')
