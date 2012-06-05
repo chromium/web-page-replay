@@ -23,6 +23,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 
 
 class PlatformSettingsError(Exception):
@@ -194,6 +195,10 @@ class PlatformSettings(object):
   def create_certfile(self, certfile):
     """Create a certfile for serving SSL traffic."""
     raise NotImplementedError
+
+  def timer(self):
+    """Return the current time in seconds as a floating point number."""
+    return time.time()
 
 
 class PosixPlatformSettings(PlatformSettings):
@@ -617,6 +622,17 @@ Next
     """
     raise PlatformSettingsError('Certificate file does not exist.')
 
+  def timer(self):
+    """Return the current time in seconds as a floating point number.
+
+    From time module documentation:
+       On Windows, this function [time.clock()] returns wall-clock
+       seconds elapsed since the first call to this function, as a
+       floating point number, based on the Win32 function
+       QueryPerformanceCounter(). The resolution is typically better
+       than one microsecond.
+    """
+    return time.clock()
 
 class WindowsXpPlatformSettings(WindowsPlatformSettings):
   def _ipfw_bin(self):

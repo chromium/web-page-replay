@@ -25,24 +25,14 @@ import multiprocessing
 import platformsettings
 import socket
 import SocketServer
-import sys
-import time
 import trafficshaper
 import unittest
 
 
+RESPONSE_SIZE_KEY = 'response-size:'
 TEST_DNS_PORT = 5555
 TEST_HTTP_PORT = 8888
-RESPONSE_SIZE_KEY = 'response-size:'
-
-
-# from timeit.py
-if sys.platform == "win32":
-    # On Windows, the best timer is time.clock()
-    DEFAULT_TIMER = time.clock
-else:
-    # On most other platforms the best timer is time.time()
-    DEFAULT_TIMER = time.time
+TIMER = platformsettings.get_platform_settings().timer
 
 
 def GetElapsedMs(start_time, end_time):
@@ -100,7 +90,7 @@ class TimedUdpServer(SocketServer.ThreadingUDPServer,
   # Override SocketServer.TcpServer setting to avoid intermittent errors.
   allow_reuse_address = True
 
-  def __init__(self, host, port, timer=DEFAULT_TIMER):
+  def __init__(self, host, port, timer=TIMER):
     SocketServer.ThreadingUDPServer.__init__(
         self, (host, port), TimedUdpHandler)
     self.timer = timer
@@ -116,7 +106,7 @@ class TimedTcpServer(SocketServer.ThreadingTCPServer,
   # Override SocketServer.TcpServer setting to avoid intermittent errors.
   allow_reuse_address = True
 
-  def __init__(self, host, port, timer=DEFAULT_TIMER):
+  def __init__(self, host, port, timer=TIMER):
     SocketServer.ThreadingTCPServer.__init__(
         self, (host, port), TimedTcpHandler)
     self.timer = timer
@@ -162,7 +152,7 @@ class TcpTrafficShaperTest(TimedTestCase):
     self.host = platform_settings.get_server_ip_address()
     self.port = TEST_HTTP_PORT
     self.tcp_socket_creator = TcpTestSocketCreator(self.host, self.port)
-    self.timer = DEFAULT_TIMER
+    self.timer = TIMER
 
   def TrafficShaper(self, **kwargs):
     return trafficshaper.TrafficShaper(
@@ -236,7 +226,7 @@ class UdpTrafficShaperTest(TimedTestCase):
     platform_settings = platformsettings.get_platform_settings()
     self.host = platform_settings.get_server_ip_address()
     self.dns_port = TEST_DNS_PORT
-    self.timer = DEFAULT_TIMER
+    self.timer = TIMER
 
   def TrafficShaper(self, **kwargs):
     return trafficshaper.TrafficShaper(

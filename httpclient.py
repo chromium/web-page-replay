@@ -21,21 +21,13 @@ import httplib
 import logging
 import os
 import pkg_resources
+import platformsettings
 import re
-import sys
-import time
-
-# from timeit.py
-if sys.platform == "win32":
-  # On Windows, the best timer is time.clock()
-  DEFAULT_TIMER = time.clock
-else:
-  # On most other platforms the best timer is time.time()
-  DEFAULT_TIMER = time.time
 
 
 HTML_RE = re.compile(r'^.{,256}?<html.*?>', re.IGNORECASE | re.DOTALL)
 HEAD_RE = re.compile(r'^.{,256}?<head.*?>', re.IGNORECASE | re.DOTALL)
+TIMER = platformsettings.get_platform_settings().timer
 
 
 class HttpClientException(Exception):
@@ -120,7 +112,7 @@ class DetailedHTTPResponse(httplib.HTTPResponse):
       chunks.append(self.read())
       delays.append(0)
     else:
-      start = DEFAULT_TIMER()
+      start = TIMER()
       try:
         while True:
           line = self.fp.readline()
@@ -129,10 +121,10 @@ class DetailedHTTPResponse(httplib.HTTPResponse):
             raise httplib.IncompleteRead(''.join(chunks))
           if chunk_size == 0:
             break
-          delays.append(DEFAULT_TIMER() - start)
+          delays.append(TIMER() - start)
           chunks.append(self._safe_read(chunk_size))
           self._safe_read(2)  # skip the CRLF at the end of the chunk
-          start = DEFAULT_TIMER()
+          start = TIMER()
 
         # Ignore any trailers.
         while True:
@@ -200,14 +192,14 @@ class RealHttpFetch(object):
           connection = DetailedHTTPSConnection(host_ip)
         else:
           connection = DetailedHTTPConnection(host_ip)
-        start = DEFAULT_TIMER()
+        start = TIMER()
         connection.request(
             request.command,
             request.path,
             request.request_body,
             request.headers)
         response = connection.getresponse()
-        headers_delay = int((DEFAULT_TIMER() - start) * 1000)
+        headers_delay = int((TIMER() - start) * 1000)
         headers_delay -= self._get_server_rtt(request.host)
 
         chunks, chunk_delays = response.read_chunks()
