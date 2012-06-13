@@ -20,9 +20,9 @@ import httparchive
 import httplib
 import logging
 import os
-import pkg_resources
 import platformsettings
 import re
+import util
 
 
 HTML_RE = re.compile(r'^.{,256}?<html.*?>', re.IGNORECASE | re.DOTALL)
@@ -41,8 +41,8 @@ def GetInjectScript(scripts):
   for script in scripts:
     if os.path.exists(script):
       lines += open(script).read()
-    elif pkg_resources.resource_exists(__name__, script):
-      lines += pkg_resources.resource_string(__name__, script)
+    elif util.resource_exists(script):
+      lines += util.resource_string(script)
     else:
       raise HttpClientException('Script does not exist: %s', script)
   return ''.join(lines)

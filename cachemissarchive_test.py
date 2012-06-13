@@ -17,14 +17,13 @@ import ast
 import cachemissarchive
 from mockhttprequest import ArchivedHttpRequest
 import os
-import pkg_resources
 import unittest
+import util
 
 
 def get_mock_requests():
   keepends = True
-  return pkg_resources.resource_string(
-      __name__, 'mock-archive.txt').splitlines(keepends)
+  return util.resource_string('mock-archive.txt').splitlines(keepends)
 
 
 class CacheMissArchiveTest(unittest.TestCase):
