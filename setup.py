@@ -30,7 +30,7 @@ import setuptools
 
 setuptools.setup(
     name='webpagereplay',
-    version='1.1.1',
+    version='1.1.2',
     description='Record and replay web content',
     author='Web Page Replay Project Authors',
     author_email='web-page-replay-dev@googlegroups.com',
