@@ -18,9 +18,12 @@ import daemonserver
 import httparchive
 import logging
 import os
+import proxyshaper
+import re
 import SocketServer
 import ssl
 import subprocess
+import sys
 import time
 import urlparse
 
@@ -39,6 +42,18 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
   # Since we do lots of small wfile.write() calls, turn on buffering.
   wbufsize = -1  # override StreamRequestHandler (a base class) setting
+
+  def setup(self):
+    """Override StreamRequestHandler method."""
+    BaseHTTPServer.BaseHTTPRequestHandler.setup(self)
+    if self.server.traffic_shaping_up_bps:
+      self.rfile = proxyshaper.RateLimitedFile(
+          self.server.get_active_request_count, self.rfile,
+          self.server.traffic_shaping_up_bps)
+    if self.server.traffic_shaping_down_bps:
+      self.wfile = proxyshaper.RateLimitedFile(
+          self.server.get_active_request_count, self.wfile,
+          self.server.traffic_shaping_down_bps)
 
   # Make request handler logging match our logging format.
   def log_request(self, code='-', size='-'): pass
@@ -91,11 +106,17 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         content_length = sum(len(c) for c in response.response_data)
         response.headers.append(('content-length', str(content_length)))
 
-      use_delays = (self.server.use_delays and
-                    not self.server.http_archive_fetch.is_record_mode)
-      if use_delays:
-        logging.debug('Using delays: %s', response.delays)
+      is_replay = not self.server.http_archive_fetch.is_record_mode
+      if is_replay and self.server.traffic_shaping_delay_ms:
+        logging.debug('Using round trip delay: %sms',
+                      self.server.traffic_shaping_delay_ms)
+        time.sleep(self.server.traffic_shaping_delay_ms / 1000.0)
+      if is_replay and self.server.use_delays:
+        logging.debug('Using delays (ms): %s', response.delays)
         time.sleep(response.delays['headers'] / 1000.0)
+        delays = response.delays['data']
+      else:
+        delays = [0] * len(response.response_data)
       self.send_response(response.status, response.reason)
       # TODO(mbelshe): This is lame - each write is a packet!
       for header, value in response.headers:
@@ -103,8 +124,8 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
           self.send_header(header, value)
       self.end_headers()
 
-      for chunk, delay in zip(response.response_data, response.delays['data']):
-        if use_delays:
+      for chunk, delay in zip(response.response_data, delays):
+        if delay:
           time.sleep(delay / 1000.0)
         if is_chunked:
           # Write chunk length (hex) and data (e.g. "A\r\nTESSELATED\r\n").
@@ -120,8 +141,30 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.close_connection = 1
 
     except Exception, e:
-      logging.error('Error sending response for %s/%s: %s',
+      logging.error('Error sending response for %s%s: %s',
                     self.headers['host'], self.path, e)
+
+  def _manage_request_count(fn):
+    """Keep track of the current number active requests.
+
+    This is used for traffic shaping. The request and response are
+    wrapped separately because no single BaseHTTPRequestHandler
+    function handles an entire active request.
+    BaseHTTPRequestHandler.process_one_request() does not work because
+    when one request finishes it is called again to wait for another
+    request -- and another request may never arrive.
+    """
+    def wrapped(self, *args, **kwargs):
+      self.server.num_active_requests += 1
+      try:
+        return fn(self, *args, **kwargs)
+      finally:
+        self.server.num_active_requests -= 1
+    return wrapped
+
+  @_manage_request_count
+  def parse_request(self):
+    return BaseHTTPServer.BaseHTTPRequestHandler.parse_request(self)
 
   def do_POST(self):
     self.do_GET()
@@ -129,13 +172,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_HEAD(self):
     self.do_GET()
 
-  def send_error(self, status):
-    """Override the default send error with a version that doesn't unnecessarily
-    close the connection.
-    """
-    response = httparchive.create_response(status)
-    self.send_archived_http_response(response)
-
+  @_manage_request_count
   def do_GET(self):
     start_time = time.time()
     request = self.get_archived_http_request()
@@ -152,6 +189,13 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     else:
       self.send_error(404)
 
+  def send_error(self, status):
+    """Override the default send error with a version that doesn't unnecessarily
+    close the connection.
+    """
+    response = httparchive.create_response(status)
+    self.send_archived_http_response(response)
+
 
 class HttpProxyServer(SocketServer.ThreadingMixIn,
                       BaseHTTPServer.HTTPServer,
@@ -165,8 +209,20 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
   request_queue_size = 128
 
   def __init__(self, http_archive_fetch, custom_handlers,
-               host='localhost', port=80, use_delays=False,
-               is_ssl=False):
+               host='localhost', port=80, use_delays=False, is_ssl=False,
+               down_bandwidth='0', up_bandwidth='0', delay_ms='0'):
+    """Start HTTP server.
+
+    Args:
+      host: a host string (name or IP) for the web proxy.
+      port: a port string (e.g. '80') for the web proxy.
+      use_delays: if True, add response data delays during replay.
+      is_ssl: True iff proxy is using SSL.
+      up_bandwidth: Upload bandwidth
+      down_bandwidth: Download bandwidth
+           Bandwidths measured in [K|M]{bit/s|Byte/s}. '0' means unlimited.
+      delay_ms: Propagation delay in milliseconds. '0' means no delay.
+    """
     try:
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), self.HANDLER)
     except Exception, e:
@@ -176,7 +232,10 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
     self.custom_handlers = custom_handlers
     self.use_delays = use_delays
     self.is_ssl = is_ssl
-
+    self.traffic_shaping_down_bps = proxyshaper.GetBitsPerSecond(down_bandwidth)
+    self.traffic_shaping_up_bps = proxyshaper.GetBitsPerSecond(up_bandwidth)
+    self.traffic_shaping_delay_ms = int(delay_ms)
+    self.num_active_requests = 0
     protocol = 'HTTPS' if self.is_ssl else 'HTTP'
     logging.info('Started %s server on %s...', protocol, self.server_address)
 
@@ -187,15 +246,15 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
       pass
     logging.info('Stopped HTTP server')
 
+  def get_active_request_count(self):
+    return self.num_active_requests
 
 class HttpsProxyServer(HttpProxyServer):
   """SSL server."""
 
-  def __init__(self, http_archive_fetch, custom_handlers, certfile,
-               host='localhost', port=443, use_delays=False):
-    HttpProxyServer.__init__(
-        self, http_archive_fetch, custom_handlers, host, port,
-        use_delays, is_ssl=True)
+  def __init__(self, http_archive_fetch, custom_handlers, certfile, **kwargs):
+    HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
+                             is_ssl=True, **kwargs)
     self.socket = ssl.wrap_socket(
         self.socket, certfile=certfile, server_side=True)
     # Ancestor class, deamonserver, calls serve_forever() during its __init__.

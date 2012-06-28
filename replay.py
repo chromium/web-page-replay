@@ -92,58 +92,64 @@ def AddDnsForward(server_manager, platform_settings, host):
       [platform_settings.restore_primary_dns])
 
 def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
-  dns_lookup = None
+  dns_filters = []
   if options.dns_private_passthrough:
-    dns_lookup = dnsproxy.PrivateIpDnsLookup(
-        host, real_dns_lookup, http_archive)
-  server_manager.AppendRecordCallback(dns_lookup.InitializeArchiveHosts)
-  server_manager.AppendReplayCallback(dns_lookup.InitializeArchiveHosts)
-  server_manager.Append(dnsproxy.DnsProxyServer, dns_lookup, host)
+    private_filter = dnsproxy.PrivateIpFilter(real_dns_lookup, http_archive)
+    dns_filters.append(private_filter)
+    server_manager.AppendRecordCallback(private_filter.InitializeArchiveHosts)
+    server_manager.AppendReplayCallback(private_filter.InitializeArchiveHosts)
+  if options.shaping_dns:
+    delay_filter = dnsproxy.DelayFilter(options.record, **options.shaping_dns)
+    dns_filters.append(delay_filter)
+    server_manager.AppendRecordCallback(delay_filter.SetRecordMode)
+    server_manager.AppendReplayCallback(delay_filter.SetReplayMode)
+  server_manager.Append(dnsproxy.DnsProxyServer, host,
+                        dns_lookup=dnsproxy.ReplayDnsLookup(host, dns_filters))
 
 
 def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
                 cache_misses):
   inject_script = httpclient.GetInjectScript(options.inject_scripts.split(','))
-  http_custom_handlers = customhandlers.CustomHandlers(options.screenshot_dir)
+  custom_handlers = customhandlers.CustomHandlers(options.screenshot_dir)
   if options.spdy:
     assert not options.record, 'spdy cannot be used with --record.'
-    http_archive_fetch = httpclient.ReplayHttpArchiveFetch(
+    archive_fetch = httpclient.ReplayHttpArchiveFetch(
         http_archive,
         inject_script,
         options.diff_unknown_requests,
         cache_misses=cache_misses,
         use_closest_match=options.use_closest_match)
     server_manager.Append(
-        replayspdyserver.ReplaySpdyServer, http_archive_fetch,
-        http_custom_handlers, host=host, port=options.port,
+        replayspdyserver.ReplaySpdyServer, archive_fetch,
+        custom_handlers, host=host, port=options.port,
         certfile=options.certfile)
   else:
-    http_custom_handlers.add_server_manager_handler(server_manager)
-    http_archive_fetch = httpclient.ControllableHttpArchiveFetch(
+    custom_handlers.add_server_manager_handler(server_manager)
+    archive_fetch = httpclient.ControllableHttpArchiveFetch(
         http_archive, real_dns_lookup,
         inject_script,
         options.diff_unknown_requests, options.record,
         cache_misses=cache_misses, use_closest_match=options.use_closest_match)
-    server_manager.AppendRecordCallback(http_archive_fetch.SetRecordMode)
-    server_manager.AppendReplayCallback(http_archive_fetch.SetReplayMode)
+    server_manager.AppendRecordCallback(archive_fetch.SetRecordMode)
+    server_manager.AppendReplayCallback(archive_fetch.SetReplayMode)
     server_manager.Append(
-        httpproxy.HttpProxyServer, http_archive_fetch, http_custom_handlers,
-        host=host, port=options.port, use_delays=options.use_server_delay)
+        httpproxy.HttpProxyServer,
+        archive_fetch, custom_handlers,
+        host=host, port=options.port, **options.shaping_http)
     if options.ssl:
       server_manager.Append(
-          httpproxy.HttpsProxyServer, http_archive_fetch,
-          http_custom_handlers, options.certfile,
-          host=host, port=options.ssl_port, use_delays=options.use_server_delay)
+          httpproxy.HttpsProxyServer,
+          archive_fetch, custom_handlers, options.certfile,
+          host=host, port=options.ssl_port, **options.shaping_http)
 
 
 def AddTrafficShaper(server_manager, options, host):
-  if options.HasTrafficShaping():
+  if options.shaping_dummynet:
+    ssl_port = options.ssl_shaping_port if options.ssl else None
     server_manager.Append(
-        trafficshaper.TrafficShaper, host=host, port=options.shaping_port,
-        ssl_port=(options.ssl_shaping_port if options.ssl else None),
-        up_bandwidth=options.up, down_bandwidth=options.down,
-        delay_ms=options.delay_ms, packet_loss_rate=options.packet_loss_rate,
-        init_cwnd=options.init_cwnd, use_loopback=not options.server_mode)
+        trafficshaper.TrafficShaper,
+        host=host, port=options.shaping_port, ssl_port=ssl_port,
+        use_loopback=not options.server_mode, **options.shaping_dummynet)
 
 
 class OptionsWrapper(object):
@@ -191,29 +197,61 @@ class OptionsWrapper(object):
             self._parser.error('Option --%s cannot be used with --%s.' %
                                 (bad_option, option))
 
+  def _ShapingKeywordArgs(self, shaping_key):
+    """Return the shaping keyword args for |shaping_key|.
+
+    Args:
+      shaping_key: one of 'dummynet', 'dns', 'http'.
+    Returns:
+      {}  # if shaping_key does not apply, or options have default values.
+      {k: v, ...}
+    """
+    kwargs = {}
+    def AddItemIfSet(d, kw_key, opt_key=None):
+      opt_key = opt_key or kw_key
+      if opt_key in self._nondefaults:
+        d[kw_key] = getattr(self, opt_key)
+    if ((self.shaping_type == 'proxy' and shaping_key in ('dns', 'http')) or
+        self.shaping_type == shaping_key):
+      AddItemIfSet(kwargs, 'delay_ms')
+      if shaping_key in ('dummynet', 'http'):
+        AddItemIfSet(kwargs, 'down_bandwidth', opt_key='down')
+        AddItemIfSet(kwargs, 'up_bandwidth', opt_key='up')
+        if shaping_key == 'dummynet':
+          AddItemIfSet(kwargs, 'packet_loss_rate')
+          AddItemIfSet(kwargs, 'init_cwnd')
+        elif self.shaping_type != 'none':
+          if 'packet_loss_rate' in self._nondefaults:
+            logging.warn('Shaping type, %s, ignores --packet_loss_rate=%s',
+                         self.shaping_type, self.packet_loss_rate)
+          if 'init_cwnd' in self._nondefaults:
+            logging.warn('Shaping type, %s, ignores --init_cwnd=%s',
+                         self.shaping_type, self.init_cwnd)
+    return kwargs
+
   def _MassageValues(self):
     """Set options that depend on the values of other options."""
     for net_choice, values in self._NET_CONFIGS:
       if net_choice == self.net:
         self._options.down, self._options.up, self._options.delay_ms = values
+        self._nondefaults.update(['down', 'up', 'delay_ms'])
     if not self.shaping_port:
       self._options.shaping_port = self.port
     if not self.ssl_shaping_port:
       self._options.ssl_shaping_port = self.ssl_port
     if not self.ssl:
       self._options.certfile = None
+    self.shaping_dns = self._ShapingKeywordArgs('dns')
+    self.shaping_http = self._ShapingKeywordArgs('http')
+    self.shaping_dummynet = self._ShapingKeywordArgs('dummynet')
 
   def __getattr__(self, name):
     """Make the original option values available."""
     return getattr(self._options, name)
 
-  def HasTrafficShaping(self):
-    """Returns True iff the options require traffic shaping."""
-    return bool(self._TRAFFICSHAPING_OPTIONS & self._nondefaults)
-
   def IsRootRequired(self):
     """Returns True iff the options require root access."""
-    return (self.HasTrafficShaping() or
+    return (self.shaping_dummynet or
             self.dns_forwarding or
             self.port < 1024 or
             self.ssl_port < 1024)
@@ -292,7 +330,7 @@ def replay(options, replay_filename):
   return exit_status
 
 
-def main():
+def GetOptionParser():
   class PlainHelpFormatter(optparse.IndentedHelpFormatter):
     def format_description(self, description):
       if description:
@@ -356,6 +394,11 @@ def main():
       choices=OptionsWrapper.NET_CHOICES,
       help='Select a set of network options: %s.' % ', '.join(
           OptionsWrapper.NET_CHOICES))
+  network_group.add_option('--shaping_type', default='dummynet',
+      action='store',
+      choices=('dummynet', 'proxy'),
+      help='When shaping is configured (i.e. --up, --down, etc.) decides '
+           'whether to use |dummynet| (default), or |proxy| servers.')
   option_parser.add_option_group(network_group)
 
   harness_group = optparse.OptionGroup(option_parser,
@@ -437,7 +480,11 @@ def main():
       dest='ssl',
       help='Do not setup an SSL proxy.')
   option_parser.add_option_group(harness_group)
+  return option_parser
 
+
+def main():
+  option_parser = GetOptionParser()
   options, args = option_parser.parse_args()
   options = OptionsWrapper(options, option_parser)
 

@@ -19,6 +19,7 @@ import logging
 import socket
 import SocketServer
 import threading
+import time
 
 import third_party
 import dns.flags
@@ -79,7 +80,20 @@ class RealDnsLookup(object):
     self.dns_cache_lock.release()
 
 
-class PrivateIpDnsLookup(object):
+class ReplayDnsLookup(object):
+  """Resolve DNS requests to replay host."""
+  def __init__(self, replay_ip, filters=None):
+    self.replay_ip = replay_ip
+    self.filters = filters or []
+
+  def __call__(self, hostname):
+    ip = self.replay_ip
+    for f in self.filters:
+      ip = f(hostname, default_ip=ip)
+    return ip
+
+
+class PrivateIpFilter(object):
   """Resolve private hosts to their real IPs and others to the Web proxy IP.
 
   Hosts in the given http_archive will resolve to the Web proxy IP without
@@ -87,21 +101,19 @@ class PrivateIpDnsLookup(object):
 
   This only supports IPv4 lookups.
   """
-  def __init__(self, web_proxy_ip, real_dns_lookup, http_archive):
+  def __init__(self, real_dns_lookup, http_archive):
     """Initialize PrivateIpDnsLookup.
 
     Args:
-      web_proxy_ip: the IP address returned by __call__ for non-private hosts.
       real_dns_lookup: a function that resolves a host to an IP.
       http_archive: an instance of a HttpArchive
         Hosts is in the archive will always resolve to the web_proxy_ip
     """
-    self.web_proxy_ip = web_proxy_ip
     self.real_dns_lookup = real_dns_lookup
     self.http_archive = http_archive
     self.InitializeArchiveHosts()
 
-  def __call__(self, host):
+  def __call__(self, host, default_ip):
     """Return real IPv4 for private hosts and Web proxy IP otherwise.
 
     Args:
@@ -109,7 +121,7 @@ class PrivateIpDnsLookup(object):
     Returns:
       IP address as a string or None (if lookup fails)
     """
-    ip = self.web_proxy_ip
+    ip = default_ip
     if host not in self.archive_hosts:
       real_ip = self.real_dns_lookup(host)
       if real_ip:
@@ -122,6 +134,25 @@ class PrivateIpDnsLookup(object):
   def InitializeArchiveHosts(self):
     """Recompute the archive_hosts from the http_archive."""
     self.archive_hosts = set('%s.' % req.host for req in self.http_archive)
+
+
+class DelayFilter(object):
+  """Add a delay to replayed lookups."""
+
+  def __init__(self, is_record_mode, delay_ms):
+    self.is_record_mode = is_record_mode
+    self.delay_ms = int(delay_ms)
+
+  def __call__(self, host, default_ip):
+    if not self.is_record_mode:
+      time.sleep(self.delay_ms * 1000.0)
+    return default_ip
+
+  def SetRecordMode(self):
+    self.is_record_mode = True
+
+  def SetReplayMode(self):
+    self.is_record_mode = False
 
 
 class UdpDnsHandler(SocketServer.DatagramRequestHandler):
@@ -201,16 +232,17 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
     response_message.set_rcode(dns.rcode.NXDOMAIN)
     return response_message.to_wire()
 
+
 class DnsProxyServer(SocketServer.ThreadingUDPServer,
                      daemonserver.DaemonServer):
-  def __init__(self, dns_lookup=None, host='', port=53):
+  def __init__(self, host='', port=53, dns_lookup=None):
     """Initialize DnsProxyServer.
 
     Args:
-      dns_lookup: a function that resolves a host to an IP address.
       host: a host string (name or IP) to bind the dns proxy and to which
         DNS requests will be resolved.
       port: an integer port on which to bind the proxy.
+      dns_lookup: a list of filters to apply to lookup.
     """
     try:
       SocketServer.ThreadingUDPServer.__init__(
