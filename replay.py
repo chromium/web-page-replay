@@ -61,7 +61,7 @@ if sys.version < '2.6':
   sys.exit(1)
 
 
-def configure_logging(platform_settings, log_level_name, log_file_name=None):
+def configure_logging(log_level_name, log_file_name=None):
   """Configure logging level and format.
 
   Args:
@@ -80,16 +80,15 @@ def configure_logging(platform_settings, log_level_name, log_file_name=None):
     fh.setLevel(log_level)
     fh.setFormatter(logging.Formatter(log_format))
     logger.addHandler(fh)
-  system_handler = platform_settings.get_system_logging_handler()
+  system_handler = platformsettings.get_system_logging_handler()
   if system_handler:
     logger.addHandler(system_handler)
 
 
-def AddDnsForward(server_manager, platform_settings, host):
+def AddDnsForward(server_manager, host):
   """Forward DNS traffic."""
-  server_manager.AppendStartStopFunctions(
-      [platform_settings.set_primary_dns, host],
-      [platform_settings.restore_primary_dns])
+  server_manager.Append(platformsettings.set_temporary_primary_nameserver, host)
+
 
 def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
   dns_filters = []
@@ -258,10 +257,9 @@ class OptionsWrapper(object):
 
 
 def replay(options, replay_filename):
-  platform_settings = platformsettings.get_platform_settings()
   if options.IsRootRequired():
-    platform_settings.rerun_as_administrator()
-  configure_logging(platform_settings, options.log_level, options.log_file)
+    platformsettings.rerun_as_administrator()
+  configure_logging(options.log_level, options.log_file)
   server_manager = servermanager.ServerManager(options.record)
   cache_misses = None
   if options.cache_miss_file:
@@ -275,11 +273,11 @@ def replay(options, replay_filename):
       cache_misses = cachemissarchive.CacheMissArchive(
           options.cache_miss_file)
   if options.server:
-    AddDnsForward(server_manager, platform_settings, options.server)
+    AddDnsForward(server_manager, options.server)
   else:
-    host = platform_settings.get_server_ip_address(options.server_mode)
+    host = platformsettings.get_server_ip_address(options.server_mode)
     real_dns_lookup = dnsproxy.RealDnsLookup(
-        name_servers=[platform_settings.get_original_primary_dns()])
+        name_servers=[platformsettings.get_original_primary_nameserver()])
     if options.record:
       http_archive = httparchive.HttpArchive()
       http_archive.AssertWritable(replay_filename)
@@ -292,13 +290,10 @@ def replay(options, replay_filename):
 
     if options.dns_forwarding:
       if not options.server_mode:
-        AddDnsForward(server_manager, platform_settings, host)
+        AddDnsForward(server_manager, host)
       AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive)
     if options.ssl and options.certfile is None:
-      options.certfile = platform_settings.get_certfile_name()
-      server_manager.AppendStartStopFunctions(
-          [platform_settings.create_certfile, options.certfile],
-          [os.unlink, options.certfile])
+      options.certfile = platformsettings.create_temporary_certfile()
     AddWebProxy(server_manager, options, host, real_dns_lookup,
                 http_archive, cache_misses)
     AddTrafficShaper(server_manager, options, host)

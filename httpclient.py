@@ -27,7 +27,7 @@ import util
 
 HTML_RE = re.compile(r'^.{,256}?<html.*?>', re.IGNORECASE | re.DOTALL)
 HEAD_RE = re.compile(r'^.{,256}?<head.*?>', re.IGNORECASE | re.DOTALL)
-TIMER = platformsettings.get_platform_settings().timer
+TIMER = platformsettings.timer
 
 
 class HttpClientException(Exception):

@@ -77,7 +77,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     """
     if server not in self.server_rtt:
       platform_settings = platformsettings.get_platform_settings()
-      self.server_rtt[server] = platform_settings.ping(server)
+      self.server_rtt[server] = platform_settings.ping_rtt(server)
     return self.server_rtt[server]
 
   def get(self, request, default=None):

@@ -135,14 +135,14 @@ OSX_DNS_STATE_SNOW_LEOPARD = """
 """
 
 
-class Win7Settings(platformsettings.WindowsPlatformSettings):
+class Win7Settings(platformsettings._WindowsPlatformSettings):
   @classmethod
   def _ipconfig(cls, *args):
     if args == ('/all',):
       return WINDOWS_7_IPCONFIG
     raise RuntimeError
 
-class WinXpSettings(platformsettings.WindowsPlatformSettings):
+class WinXpSettings(platformsettings._WindowsPlatformSettings):
   @classmethod
   def _ipconfig(cls, *args):
     if args == ('/all',):
@@ -153,14 +153,14 @@ class WinXpSettings(platformsettings.WindowsPlatformSettings):
 class WindowsPlatformSettingsTest(unittest.TestCase):
   def test_get_mac_address_xp(self):
     self.assertEqual(WINDOWS_XP_MAC,
-                     WinXpSettings().get_mac_address(WINDOWS_XP_IP))
+                     WinXpSettings()._get_mac_address(WINDOWS_XP_IP))
 
   def test_get_mac_address_7(self):
     self.assertEqual(WINDOWS_7_MAC,
-                     Win7Settings().get_mac_address(WINDOWS_7_IP))
+                     Win7Settings()._get_mac_address(WINDOWS_7_IP))
 
 
-class OsxSettings(platformsettings.OsxPlatformSettings):
+class OsxSettings(platformsettings._OsxPlatformSettings):
   def __init__(self):
     super(OsxSettings, self).__init__()
     self.ipv4_state = OSX_IPV4_STATE
@@ -178,24 +178,24 @@ class OsxPlatformSettingsTest(unittest.TestCase):
   def setUp(self):
     self.settings = OsxSettings()
 
-  def test_get_primary_dns_lion(self):
+  def test_get_primary_nameserver_lion(self):
     self.settings.dns_state = OSX_DNS_STATE_LION
-    self.assertEqual('172.72.255.1', self.settings.get_primary_dns())
+    self.assertEqual('172.72.255.1', self.settings._get_primary_nameserver())
 
-  def test_get_primary_dns_snow_leopard(self):
+  def test_get_primary_nameserver_snow_leopard(self):
     self.settings.dns_state = OSX_DNS_STATE_SNOW_LEOPARD
-    self.assertEqual('172.27.1.1', self.settings.get_primary_dns())
+    self.assertEqual('172.27.1.1', self.settings._get_primary_nameserver())
 
-  def test_get_primary_dns_unexpected_ipv4_state_raises(self):
+  def test_get_primary_nameserver_unexpected_ipv4_state_raises(self):
     self.settings.ipv4_state = 'Some error'
     self.settings.dns_state = OSX_DNS_STATE_SNOW_LEOPARD
     self.assertRaises(platformsettings.DnsReadError,
-                      self.settings.get_primary_dns)
+                      self.settings._get_primary_nameserver)
 
-  def test_get_primary_dns_unexpected_dns_state_raises(self):
+  def test_get_primary_nameserver_unexpected_dns_state_raises(self):
     self.settings.dns_state = 'Some other error'
     self.assertRaises(platformsettings.DnsReadError,
-                      self.settings.get_primary_dns)
+                      self.settings._get_primary_nameserver)
 
 
 PING_OUTPUT = '''PING www.a.shifen.com (119.75.218.77) 56(84) bytes of data.
@@ -206,7 +206,7 @@ rtt min/avg/max/mdev = 191.206/191.649/191.980/0.325 ms
 '''
 PING_AVG = 191.649
 
-class PingSettings(platformsettings.PosixPlatformSettings):
+class PingSettings(platformsettings._PosixPlatformSettings):
   def __init__(self):
     super(PingSettings, self).__init__()
     self.working_cmd = None
@@ -222,24 +222,24 @@ class PingTest(unittest.TestCase):
     self.settings = PingSettings()
 
   def testNoWorkingPingReturnsZero(self):
-    self.assertEqual(0, self.settings.ping('www.noworking.com'))
+    self.assertEqual(0, self.settings.ping_rtt('www.noworking.com'))
 
   def testRegularPingCmdReturnsValue(self):
     self.settings.working_cmd = self.settings.PING_CMD
     self.settings.working_output = PING_OUTPUT
-    self.assertEqual(PING_AVG, self.settings.ping('www.regular.com'))
+    self.assertEqual(PING_AVG, self.settings.ping_rtt('www.regular.com'))
 
   def testRestrictedPingCmdReturnsValue(self):
     self.settings.working_cmd = self.settings.PING_RESTRICTED_CMD
     self.settings.working_output = PING_OUTPUT
-    self.assertEqual(PING_AVG, self.settings.ping('www.restricted.com'))
+    self.assertEqual(PING_AVG, self.settings.ping_rtt('www.restricted.com'))
 
   def testNoWorkingPingConfiguresOnce(self):
-    self.settings.ping('www.first.com')
+    self.settings.ping_rtt('www.first.com')
     def AssertNotCalled(*args):
       self.fail('Unexpected _check_output call.')
     self.settings._check_output = AssertNotCalled
-    self.settings.ping('www.second.com')
+    self.settings.ping_rtt('www.second.com')
 
 if __name__ == '__main__':
   unittest.main()

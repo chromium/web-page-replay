@@ -24,7 +24,7 @@ import re
 import time
 
 
-TIMER = platformsettings.get_platform_settings().timer
+TIMER = platformsettings.timer
 
 
 class ProxyShaperError(Exception):

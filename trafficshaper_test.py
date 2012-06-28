@@ -32,7 +32,7 @@ import unittest
 RESPONSE_SIZE_KEY = 'response-size:'
 TEST_DNS_PORT = 5555
 TEST_HTTP_PORT = 8888
-TIMER = platformsettings.get_platform_settings().timer
+TIMER = platformsettings.timer
 
 
 def GetElapsedMs(start_time, end_time):
@@ -148,8 +148,7 @@ class TimedTestCase(unittest.TestCase):
 class TcpTrafficShaperTest(TimedTestCase):
 
   def setUp(self):
-    platform_settings = platformsettings.get_platform_settings()
-    self.host = platform_settings.get_server_ip_address()
+    self.host = platformsettings.get_server_ip_address()
     self.port = TEST_HTTP_PORT
     self.tcp_socket_creator = TcpTestSocketCreator(self.host, self.port)
     self.timer = TIMER
@@ -223,8 +222,7 @@ class TcpTrafficShaperTest(TimedTestCase):
 class UdpTrafficShaperTest(TimedTestCase):
 
   def setUp(self):
-    platform_settings = platformsettings.get_platform_settings()
-    self.host = platform_settings.get_server_ip_address()
+    self.host = platformsettings.get_server_ip_address()
     self.dns_port = TEST_DNS_PORT
     self.timer = TIMER
 
