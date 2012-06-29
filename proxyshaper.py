@@ -67,15 +67,15 @@ class RateLimitedFile(object):
     num_bytes = len(data)
     num_sent_bytes = 0
     while num_sent_bytes < num_bytes:
-      if num_sent_bytes:
-        num_requests = self.request_counter()
-        wait = self.transfer_seconds(self.BYTES_PER_WRITE) * num_requests
-        logging.debug('write sleep: %0.4fs (%d requests)', wait, num_requests)
-        time.sleep(wait)
-      end_index = min(num_bytes, num_sent_bytes + self.BYTES_PER_WRITE)
-      data_portion = data[num_sent_bytes:end_index]
-      self.original_file.write(data_portion)
-      num_sent_bytes = end_index
+      num_write_bytes = min(self.BYTES_PER_WRITE, num_bytes - num_sent_bytes)
+      num_requests = self.request_counter()
+      wait = self.transfer_seconds(num_write_bytes) * num_requests
+      logging.debug('write sleep: %0.4fs (%d requests)', wait, num_requests)
+      time.sleep(wait)
+
+      self.original_file.write(
+          data[num_sent_bytes:num_sent_bytes + num_write_bytes])
+      num_sent_bytes += num_write_bytes
 
   def _read(self, read_func, size):
     start = TIMER()

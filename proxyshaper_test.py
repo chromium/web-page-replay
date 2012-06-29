@@ -20,6 +20,7 @@ $ ./proxyshaper_test.py
 """
 
 import proxyshaper
+import StringIO
 import unittest
 
 
@@ -40,6 +41,85 @@ ERROR_RATES = (
     '1Mbyte/s',    # Require capital 'B' for bytes.
     '5bps',
     )
+
+
+class TimedTestCase(unittest.TestCase):
+  def assertAlmostEqual(self, expected, actual, tolerance=0.05):
+    """Like the following with nicer default message:
+           assertTrue(expected <= actual + tolerance &&
+                      expected >= actual - tolerance)
+    """
+    delta = tolerance * expected
+    if actual > expected + delta or actual < expected - delta:
+      self.fail('%s is not equal to expected %s +/- %s%%' % (
+              actual, expected, 100 * tolerance))
+
+
+class RateLimitedFileTest(TimedTestCase):
+  def testReadLimitedBasic(self):
+    num_bytes = 1024
+    bps = 384000
+    request_counter = lambda: 1
+    f = StringIO.StringIO(' ' * num_bytes)
+    limited_f = proxyshaper.RateLimitedFile(request_counter, f, bps)
+    start = proxyshaper.TIMER()
+    self.assertEqual(num_bytes, len(limited_f.read()))
+    expected_ms = 8.0 * num_bytes / bps * 1000.0
+    actual_ms = (proxyshaper.TIMER() - start) * 1000.0
+    self.assertAlmostEqual(expected_ms, actual_ms)
+
+  def testReadlineLimitedBasic(self):
+    num_bytes = 1024 * 8 + 512
+    bps = 384000
+    request_counter = lambda: 1
+    f = StringIO.StringIO(' ' * num_bytes)
+    limited_f = proxyshaper.RateLimitedFile(request_counter, f, bps)
+    start = proxyshaper.TIMER()
+    self.assertEqual(num_bytes, len(limited_f.readline()))
+    expected_ms = 8.0 * num_bytes / bps * 1000.0
+    actual_ms = (proxyshaper.TIMER() - start) * 1000.0
+    self.assertAlmostEqual(expected_ms, actual_ms)
+
+  def testReadLimitedSlowedByMultipleRequests(self):
+    num_bytes = 1024
+    bps = 384000
+    request_count = 2
+    request_counter = lambda: request_count
+    f = StringIO.StringIO(' ' * num_bytes)
+    limited_f = proxyshaper.RateLimitedFile(request_counter, f, bps)
+    start = proxyshaper.TIMER()
+    num_read_bytes = limited_f.read()
+    self.assertEqual(num_bytes, len(num_read_bytes))
+    expected_ms = 8.0 * num_bytes / (bps / float(request_count)) * 1000.0
+    actual_ms = (proxyshaper.TIMER() - start) * 1000.0
+    self.assertAlmostEqual(expected_ms, actual_ms)
+
+  def testWriteLimitedBasic(self):
+    num_bytes = 1024 * 10 + 350
+    bps = 384000
+    request_counter = lambda: 1
+    f = StringIO.StringIO()
+    limited_f = proxyshaper.RateLimitedFile(request_counter, f, bps)
+    start = proxyshaper.TIMER()
+    limited_f.write(' ' * num_bytes)
+    self.assertEqual(num_bytes, len(limited_f.getvalue()))
+    expected_ms = 8.0 * num_bytes / bps * 1000.0
+    actual_ms = (proxyshaper.TIMER() - start) * 1000.0
+    self.assertAlmostEqual(expected_ms, actual_ms)
+
+  def testWriteLimitedSlowedByMultipleRequests(self):
+    num_bytes = 1024 * 10
+    bps = 384000
+    request_count = 2
+    request_counter = lambda: request_count
+    f = StringIO.StringIO(' ' * num_bytes)
+    limited_f = proxyshaper.RateLimitedFile(request_counter, f, bps)
+    start = proxyshaper.TIMER()
+    limited_f.write(' ' * num_bytes)
+    self.assertEqual(num_bytes, len(limited_f.getvalue()))
+    expected_ms = 8.0 * num_bytes / (bps / float(request_count)) * 1000.0
+    actual_ms = (proxyshaper.TIMER() - start) * 1000.0
+    self.assertAlmostEqual(expected_ms, actual_ms)
 
 
 class GetBitsPerSecondTest(unittest.TestCase):
