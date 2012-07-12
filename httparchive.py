@@ -77,7 +77,9 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     """
     if server not in self.server_rtt:
       platform_settings = platformsettings.get_platform_settings()
-      self.server_rtt[server] = platform_settings.ping_rtt(server)
+      # TODO(tonyg): Pinging inline with the request causes timeouts. Need to
+      # find a way to restore this functionality.
+      self.server_rtt[server] = 0  # platform_settings.ping_rtt(server)
     return self.server_rtt[server]
 
   def get(self, request, default=None):
