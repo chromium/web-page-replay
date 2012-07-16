@@ -76,7 +76,6 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       round trip time to the server in seconds, or 0 if unavailable
     """
     if server not in self.server_rtt:
-      platform_settings = platformsettings.get_platform_settings()
       # TODO(tonyg): Pinging inline with the request causes timeouts. Need to
       # find a way to restore this functionality.
       self.server_rtt[server] = 0  # platform_settings.ping_rtt(server)

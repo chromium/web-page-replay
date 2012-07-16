@@ -200,7 +200,7 @@ class _BasePlatformSettings(object):
     orig_nameserver = self.get_original_primary_nameserver()
     self._set_primary_nameserver(nameserver)
     if self._get_primary_nameserver() == nameserver:
-      logging.info('Changed system DNS to %s', dns)
+      logging.info('Changed temporary primary nameserver to %s', nameserver)
       atexit.register(self._set_primary_nameserver, orig_nameserver)
     else:
       raise self._get_dns_update_error()
