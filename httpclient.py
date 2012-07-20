@@ -39,12 +39,14 @@ def GetInjectScript(scripts):
   """Loads |scripts| from disk and returns a string of their content."""
   lines = []
   for script in scripts:
-    if os.path.exists(script):
-      lines += open(script).read()
-    elif util.resource_exists(script):
-      lines += util.resource_string(script)
-    else:
-      raise HttpClientException('Script does not exist: %s', script)
+    if scripts:
+      for script in scripts.split(','):
+      if os.path.exists(script):
+        lines += open(script).read()
+      elif util.resource_exists(script):
+        lines += util.resource_string(script)
+      else:
+        raise HttpClientException('Script does not exist: %s', script)
   return ''.join(lines)
 
 

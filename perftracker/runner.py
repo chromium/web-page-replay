@@ -325,7 +325,7 @@ setTimeout(function() {
     if self.use_server_delay:
       cmdline += ['--use_server_delay']
     if not self.use_deterministic_script:
-      cmdline += ['--inject_scripts=""']
+      cmdline += ['--inject_scripts=']
     if self.log_file:
       cmdline += ['--log_file', self.log_file]
     if self.network['bandwidth_kbps']['down']:
@@ -346,6 +346,8 @@ setTimeout(function() {
 
     logging.info('Starting Web-Page-Replay: %s', ' '.join(cmdline))
     self.proxy_process = subprocess.Popen(cmdline)
+    time.sleep(1)
+    assert self.proxy_process.poll() == None
 
   def StopProxy(self):
     if self.proxy_process:
@@ -645,7 +647,7 @@ if __name__ == '__main__':
     options.login_url = ''
 
   # run the recording round, if specified
-  if options.do_record and options.cache_miss_file:
+  if options.do_record:
     logging.debug("Running on record mode")
     options.record = runner_cfg.replay_data_archive
     main(options, options.cache_miss_file)

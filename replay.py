@@ -108,7 +108,7 @@ def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
 
 def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
                 cache_misses):
-  inject_script = httpclient.GetInjectScript(options.inject_scripts.split(','))
+  inject_script = httpclient.GetInjectScript(options.inject_script)
   custom_handlers = customhandlers.CustomHandlers(options.screenshot_dir)
   if options.spdy:
     assert not options.record, 'spdy cannot be used with --record.'
