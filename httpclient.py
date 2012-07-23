@@ -38,9 +38,8 @@ class HttpClientException(Exception):
 def GetInjectScript(scripts):
   """Loads |scripts| from disk and returns a string of their content."""
   lines = []
-  for script in scripts:
-    if scripts:
-      for script in scripts.split(','):
+  if scripts:
+    for script in scripts.split(','):
       if os.path.exists(script):
         lines += open(script).read()
       elif util.resource_exists(script):

@@ -51,11 +51,6 @@ function CHECK(expr, comment) {
   }
 }
 
-function GetBenchmarkingCounter(counter) {
-  // This is broken in some versions of Chrome, so we return 0 instead.
-  return chrome.benchmarking.counter(counter) || 0;
-}
-
 // Returns the max value in the array.
 Array.max = function(array) {
   return Math.max.apply(Math, array);
@@ -216,11 +211,11 @@ function BenchmarkLoad(url, loadType, setId) {
 
     callbackWhenFinished_ = callbackWhenFinished;
 
-    initialReadBytes_ = GetBenchmarkingCounter(kTCPReadBytes);
-    initialWriteBytes_ = GetBenchmarkingCounter(kTCPWriteBytes);
-    initialRequestCount_ = GetBenchmarkingCounter(kRequestCount);
-    initialConnectCount_ = GetBenchmarkingCounter(kConnectCount);
-    initialSpdySessionCount_ = GetBenchmarkingCounter(kSpdySessionCount);
+    initialReadBytes_ = chrome.benchmarking.counter(kTCPReadBytes);
+    initialWriteBytes_ = chrome.benchmarking.counter(kTCPWriteBytes);
+    initialRequestCount_ = chrome.benchmarking.counter(kRequestCount);
+    initialConnectCount_ = chrome.benchmarking.counter(kConnectCount);
+    initialSpdySessionCount_ = chrome.benchmarking.counter(kSpdySessionCount);
     startTime_ = new Date();
 
     var navigationProperties = {
@@ -325,17 +320,17 @@ function BenchmarkLoad(url, loadType, setId) {
     result.url = url_;
     result.load_type = LoadTypeNames[loadType_];
     result.using_spdy = load_times.wasFetchedViaSpdy;
-    var bytesRead = GetBenchmarkingCounter(kTCPReadBytes) -
+    var bytesRead = chrome.benchmarking.counter(kTCPReadBytes) -
         initialReadBytes_;
-    var bytesWrite = GetBenchmarkingCounter(kTCPWriteBytes) -
+    var bytesWrite = chrome.benchmarking.counter(kTCPWriteBytes) -
         initialWriteBytes_;
     result.read_bytes_kb = bytesRead / 1024;
     result.write_bytes_kb = bytesWrite / 1024;
-    result.num_requests = GetBenchmarkingCounter(kRequestCount) -
+    result.num_requests = chrome.benchmarking.counter(kRequestCount) -
         initialRequestCount_;
-    result.num_connects = GetBenchmarkingCounter(kConnectCount) -
+    result.num_connects = chrome.benchmarking.counter(kConnectCount) -
         initialConnectCount_;
-    result.num_sessions = GetBenchmarkingCounter(kSpdySessionCount) -
+    result.num_sessions = chrome.benchmarking.counter(kSpdySessionCount) -
         initialSpdySessionCount_;
 
     result_ = result;

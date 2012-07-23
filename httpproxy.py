@@ -189,11 +189,11 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     else:
       self.send_error(404)
 
-  def send_error(self, status):
+  def send_error(self, status, body=None):
     """Override the default send error with a version that doesn't unnecessarily
     close the connection.
     """
-    response = httparchive.create_response(status)
+    response = httparchive.create_response(status, body=body)
     self.send_archived_http_response(response)
 
 

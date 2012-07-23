@@ -433,18 +433,15 @@ class _LinuxPlatformSettings(_PosixPlatformSettings):
   Update this as needed to make it more robust on more systems.
   """
   RESOLV_CONF = '/etc/resolv.conf'
-  TCP_INIT_CWND = 'net.ipv4.tcp_init_cwnd'
   TCP_BASE_MSS = 'net.ipv4.tcp_base_mss'
   TCP_MTU_PROBING = 'net.ipv4.tcp_mtu_probing'
 
-  def _get_cwnd(self):
-    if self.has_sysctl(self.TCP_INIT_CWND):
-      return self.get_sysctl(self.TCP_INIT_CWND)
-    return None
+  def _set_cwnd(self, cwnd):
+    os.system(
+        'ip route change $(ip route show | grep default) initcwnd %s' % cwnd)
 
-  def _set_cwnd(self, args):
-    if self.has_sysctl(self.TCP_INIT_CWND):
-      self.set_sysctl(self.TCP_INIT_CWND, str(args))
+  def _get_cwnd(self):
+    return 0
 
   def setup_temporary_loopback_config(self):
     """Setup Linux to temporarily use reasonably sized frames.

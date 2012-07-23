@@ -433,8 +433,9 @@ setTimeout(function() {
           '--disable-translate',
 
           '--enable-benchmarking',
-          '--enable-logging',
           '--enable-experimental-extension-apis',
+          '--enable-logging',
+          '--enable-stats-table',
           '--host-resolver-rules=MAP * %s,EXCLUDE %s' % (
               server_host_port_pair, runner_cfg.appengine_host),
           '--ignore-certificate-errors',
