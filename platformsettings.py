@@ -439,8 +439,7 @@ class _LinuxPlatformSettings(_PosixPlatformSettings):
   TCP_MTU_PROBING = 'net.ipv4.tcp_mtu_probing'
 
   def _get_default_route_line(self):
-    p = subprocess.Popen(['ip', 'route'], stdout=subprocess.PIPE)
-    stdout = p.communicate()[0]
+    stdout = self._check_output('ip', 'route')
     for line in stdout.split('\n'):
       if line.startswith('default'):
         return line
@@ -448,8 +447,8 @@ class _LinuxPlatformSettings(_PosixPlatformSettings):
 
   def _set_cwnd(self, cwnd):
     default_line = self._get_default_route_line()
-    p = subprocess.Popen(
-        ['ip', 'route', 'change', default_line, 'initcwnd', str(cwnd)])
+    self._check_output(
+        'ip', 'route', 'change', default_line, 'initcwnd', str(cwnd))
 
   def _get_cwnd(self):
     default_line = self._get_default_route_line()
