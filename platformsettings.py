@@ -434,21 +434,28 @@ class _LinuxPlatformSettings(_PosixPlatformSettings):
   Update this as needed to make it more robust on more systems.
   """
   RESOLV_CONF = '/etc/resolv.conf'
-  ROUTE_RE = re.compile('^default.+initcwnd (\d+)')
+  ROUTE_RE = re.compile('initcwnd (\d+)')
   TCP_BASE_MSS = 'net.ipv4.tcp_base_mss'
   TCP_MTU_PROBING = 'net.ipv4.tcp_mtu_probing'
 
-  def _set_cwnd(self, cwnd):
-    os.system(
-        'ip route change $(ip route show | grep default) initcwnd %s' % cwnd)
-
-  def _get_cwnd(self):
+  def _get_default_route_line(self):
     p = subprocess.Popen(['ip', 'route'], stdout=subprocess.PIPE)
     stdout = p.communicate()[0]
     for line in stdout.split('\n'):
-      m = self.ROUTE_RE.match(line)
-      if m:
-        return int(m.group(1))
+      if line.startswith('default'):
+        return line
+    return None
+
+  def _set_cwnd(self, cwnd):
+    default_line = self._get_default_route_line()
+    p = subprocess.Popen(
+        ['ip', 'route', 'change', default_line, 'initcwnd', str(cwnd)])
+
+  def _get_cwnd(self):
+    default_line = self._get_default_route_line()
+    m = self.ROUTE_RE.search(default_line)
+    if m:
+      return int(m.group(1))
     # If 'initcwnd' wasn't found, then 0 means it's the system default.
     return 0
 
