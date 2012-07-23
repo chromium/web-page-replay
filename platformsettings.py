@@ -162,6 +162,7 @@ class _BasePlatformSettings(object):
     pass
 
   def set_temporary_tcp_init_cwnd(self, cwnd):
+    cwnd = int(cwnd)
     original_cwnd = self._get_cwnd()
     if original_cwnd is None:
       raise PlatformSettingsError('Unable to get current tcp init_cwnd.')
@@ -433,6 +434,7 @@ class _LinuxPlatformSettings(_PosixPlatformSettings):
   Update this as needed to make it more robust on more systems.
   """
   RESOLV_CONF = '/etc/resolv.conf'
+  ROUTE_RE = re.compile('^default.+initcwnd (\d+)')
   TCP_BASE_MSS = 'net.ipv4.tcp_base_mss'
   TCP_MTU_PROBING = 'net.ipv4.tcp_mtu_probing'
 
@@ -441,6 +443,12 @@ class _LinuxPlatformSettings(_PosixPlatformSettings):
         'ip route change $(ip route show | grep default) initcwnd %s' % cwnd)
 
   def _get_cwnd(self):
+    p = subprocess.Popen(['ip', 'route'], stdout=subprocess.PIPE)
+    stdout = p.communicate()[0]
+    for line in stdout.split('\n'):
+      m = self.ROUTE_RE.match(line)
+      if m:
+        return int(m.group(1))
     return 0
 
   def setup_temporary_loopback_config(self):
