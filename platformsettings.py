@@ -449,6 +449,7 @@ class _LinuxPlatformSettings(_PosixPlatformSettings):
       m = self.ROUTE_RE.match(line)
       if m:
         return int(m.group(1))
+    # If 'initcwnd' wasn't found, then 0 means it's the system default.
     return 0
 
   def setup_temporary_loopback_config(self):
