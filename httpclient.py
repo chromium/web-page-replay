@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2011 Google Inc. All Rights Reserved.
+# Copyright 2012 Google Inc. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -173,6 +173,66 @@ class RealHttpFetch(object):
     self._real_dns_lookup = real_dns_lookup
     self._get_server_rtt = get_server_rtt
 
+  @staticmethod
+  def _GetHeaderNameValue(header):
+    """Parse the header line and return a name/value tuple.
+
+    Args:
+      header: a string for a header such as "Content-Length: 314".
+    Returns:
+      A tuple (header_name, header_value) on success or None if the header
+      is not in expected format. header_name is in lowercase.
+    """
+    i = header.find(':')
+    if i > 0:
+      return (header[:i].lower(), header[i+1:].strip())
+    return None
+
+  @staticmethod
+  def _ToTuples(headers):
+    """Parse headers and save them to a list of tuples.
+
+    This method takes HttpResponse.msg.headers as input and convert it
+    to a list of (header_name, header_value) tuples.
+    HttpResponse.msg.headers is a list of strings where each string
+    represents either a header or a continuation line of a header.
+    1. a normal header consists of two parts which are separated by colon :
+       "header_name:header_value..."
+    2. a continuation line is a string starting with whitespace
+       "[whitespace]continued_header_value..."
+    If a header is not in good shape or an unexpected continuation line is
+    seen, it will be ignored.
+
+    Should avoid using response.getheaders() directly
+    because response.getheaders() can't handle multiple headers
+    with the same name properly. Instead, parse the
+    response.msg.headers using this method to get all headers.
+
+    Args:
+      headers: an instance of HttpResponse.msg.headers.
+    Returns:
+      A list of tuples which looks like:
+      [(header_name, header_value), (header_name2, header_value2)...]
+    """
+    all_headers = []
+    for line in headers:
+      if line[0] in '\t ':
+        if not all_headers:
+          logging.warning(
+              'Unexpected response header continuation line [%s]', line)
+          continue
+        name, value = all_headers.pop()
+        value += '\n ' + line.strip()
+      else:
+        name_value = RealHttpFetch._GetHeaderNameValue(line)
+        if not name_value:
+          logging.warning(
+              'Response header in wrong format [%s]', line)
+          continue
+        name, value = name_value
+      all_headers.append((name, value))
+    return all_headers
+
   def __call__(self, request):
     """Fetch an HTTP request.
 
@@ -212,7 +272,7 @@ class RealHttpFetch(object):
             response.version,
             response.status,
             response.reason,
-            response.getheaders(),
+            RealHttpFetch._ToTuples(response.msg.headers),
             chunks,
             delays)
         return archived_http_response
