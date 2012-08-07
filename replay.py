@@ -165,6 +165,8 @@ class OptionsWrapper(object):
   _CONFLICTING_OPTIONS = (
       ('record', ('down', 'up', 'delay_ms', 'packet_loss_rate', 'net',
                   'spdy', 'use_server_delay')),
+      ('append', ('down', 'up', 'delay_ms', 'packet_loss_rate', 'net',
+                  'spdy', 'use_server_delay')),  # same as --record
       ('net', ('down', 'up', 'delay_ms')),
       ('server', ('server_mode',)),
   )
@@ -230,6 +232,8 @@ class OptionsWrapper(object):
 
   def _MassageValues(self):
     """Set options that depend on the values of other options."""
+    if self.append and not self.record:
+      self._options.record = True
     for net_choice, values in self._NET_CONFIGS:
       if net_choice == self.net:
         self._options.down, self._options.up, self._options.delay_ms = values
@@ -279,8 +283,13 @@ def replay(options, replay_filename):
     real_dns_lookup = dnsproxy.RealDnsLookup(
         name_servers=[platformsettings.get_original_primary_nameserver()])
     if options.record:
-      http_archive = httparchive.HttpArchive()
-      http_archive.AssertWritable(replay_filename)
+      httparchive.HttpArchive.AssertWritable(replay_filename)
+      if options.append and os.path.exists(replay_filename):
+        http_archive = httparchive.HttpArchive.Load(replay_filename)
+        logging.info('Appending to %s (loaded %d existing responses)',
+                     replay_filename, len(http_archive))
+      else:
+        http_archive = httparchive.HttpArchive()
     else:
       http_archive = httparchive.HttpArchive.Load(replay_filename)
       logging.info('Loaded %d responses from %s',
@@ -344,6 +353,9 @@ def GetOptionParser():
   option_parser.add_option('-r', '--record', default=False,
       action='store_true',
       help='Download real responses and record them to replay_file')
+  option_parser.add_option('--append', default=False,
+      action='store_true',
+      help='Append responses to replay_file.')
   option_parser.add_option('-l', '--log_level', default='debug',
       action='store',
       type='choice',

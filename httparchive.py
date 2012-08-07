@@ -57,7 +57,10 @@ class HttpArchiveException(Exception):
 class HttpArchive(dict, persistentmixin.PersistentMixin):
   """Dict with ArchivedHttpRequest keys and ArchivedHttpResponse values.
 
-  PersistentMixin adds CreateNew(filename), Load(filename), and Persist().
+  PersistentMixin adds the following methods:
+    AssertWritable(filename)
+    Load(filename)
+    Persist(filename)
 
   Attributes:
     server_rtt: dict of {hostname, server rtt in milliseconds}
