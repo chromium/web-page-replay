@@ -56,11 +56,12 @@ BENCHMARK_APPLICATION_NAME = 'perftracker'
 PERFTRACKER_EXTENSION_PATH = './extension'
 
 # The server_port is the port which runs the webserver to test against.
-SERVER_PORT = 8000
+SERVER_PORT = 7171
+SERVER_PORT_SSL = 7172
 
 # For SPDY testing, where we have both a frontend and backend server,
 # this is the port to run the backend server.
-BACKEND_SERVER_PORT = 8001
+BACKEND_SERVER_PORT = 7173
 
 
 def DoAppEngineLogin(username, password):
@@ -314,9 +315,11 @@ setTimeout(function() {
         REPLAY_PATH,
         '--no-dns_forwarding',
         '--port', str(port),
+        '--ssl_port', str(SERVER_PORT_SSL),
         '--shaping_port', str(SERVER_PORT),
         '--log_level', self.log_level,
         '--init_cwnd', str(init_cwnd),
+        '--use_closest_match',
         ]
     if self.cache_miss_file:
       cmdline += ['-e', self.cache_miss_file]
@@ -423,7 +426,6 @@ setTimeout(function() {
       if use_virtualx:
         StartVirtualX(platform.node(), '/tmp')
 
-      server_host_port_pair = '127.0.0.1:%s' % SERVER_PORT
       cmdline = [
           runner_cfg.chrome_path,
           '--activate-on-launch',
@@ -436,14 +438,16 @@ setTimeout(function() {
           '--enable-experimental-extension-apis',
           '--enable-logging',
           '--enable-stats-table',
-          '--host-resolver-rules=MAP * %s,EXCLUDE %s' % (
-              server_host_port_pair, runner_cfg.appengine_host),
+          '--host-resolver-rules=MAP * 127.0.0.1,EXCLUDE %s' % (
+              runner_cfg.appengine_host),
           '--ignore-certificate-errors',
           '--load-extension=' + PERFTRACKER_EXTENSION_PATH,
           '--log-level=0',
           '--no-first-run',
           '--no-proxy-server',
           '--start-maximized',
+          '--testing-fixed-http-port=' + str(SERVER_PORT),
+          '--testing-fixed-https-port=' + str(SERVER_PORT_SSL),
           '--user-data-dir=' + profile_dir,
           ]
       if self.use_chrome_deterministic_js:
