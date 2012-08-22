@@ -137,12 +137,12 @@ class _BasePlatformSettings(object):
       return socket.gethostbyname(socket.gethostname())
     return '127.0.0.1'
 
-  def _ipfw_bin(self):
+  def _ipfw_cmd(self):
     raise NotImplementedError
 
   def ipfw(self, *args):
-    ipfw_args = [self._ipfw_bin()] + [str(a) for a in args]
-    return _check_output(*ipfw_args)
+    ipfw_cmd = self._ipfw_cmd() + args
+    return _check_output(*ipfw_cmd)
 
   def ping_rtt(self, hostname):
     """Pings the hostname by calling the OS system ping command.
@@ -212,6 +212,7 @@ class _PosixPlatformSettings(_BasePlatformSettings):
   PING_CMD = ('ping', '-c', '3', '-i', '0.2', '-W', '1')
   # For OsX Lion non-root:
   PING_RESTRICTED_CMD = ('ping', '-c', '1', '-i', '1', '-W', '1')
+  SUDO_PATH = '/usr/bin/sudo'
 
   def create_temporary_certfile(self):
     """Creates a temporary certfile for serving SSL traffic.
@@ -235,13 +236,14 @@ class _PosixPlatformSettings(_BasePlatformSettings):
     """
     if os.geteuid() != 0:
       logging.warn('Rerunning with sudo: %s', sys.argv)
-      os.execv('/usr/bin/sudo', ['--'] + sys.argv)
+      os.execv(self.SUDO_PATH, ['--'] + sys.argv)
 
-  def _ipfw_bin(self):
-    for ipfw in ['/usr/local/sbin/ipfw', '/sbin/ipfw']:
-      if os.path.exists(ipfw):
-        self._ipfw_bin = lambda: ipfw  # future calls skip the path check
-        return ipfw
+  def _ipfw_cmd(self):
+    for ipfw_path in ['/usr/local/sbin/ipfw', '/sbin/ipfw']:
+      if os.path.exists(ipfw_path):
+        ipfw_cmd = (self.SUDO_PATH, ipfw_path)
+        self._ipfw_cmd = lambda: ipfw_cmd  # skip rechecking paths
+        return ipfw_cmd
     raise PlatformSettingsError('ipfw not found.')
 
   def _ping(self, hostname):
@@ -300,13 +302,16 @@ class _PosixPlatformSettings(_BasePlatformSettings):
     return DnsUpdateError('Did you run under sudo?')
 
   @classmethod
-  def _sysctl(cls, *args):
-    sysctl = '/usr/sbin/sysctl'
-    if not os.path.exists(sysctl):
-      sysctl = '/sbin/sysctl'
+  def _sysctl(cls, use_sudo=False, *args):
+    sysctl_args = []
+    if use_sudo:
+      sysctl_args.append(cls.SUDO_PATH)
+    sysctl_args.append('/usr/sbin/sysctl')
+    if not os.path.exists(sysctl_args[-1]):
+      sysctl_args[-1] = '/sbin/sysctl'
+    sysctl_args.extend(str(a) for a in args)
     sysctl = subprocess.Popen(
-        ['sysctl'] + [str(a) for a in args],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        sysctl_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     stdout = sysctl.communicate()[0]
     return sysctl.returncode, stdout
 
@@ -318,7 +323,7 @@ class _PosixPlatformSettings(_BasePlatformSettings):
     return self.has_sysctl_cache[name]
 
   def set_sysctl(self, name, value):
-    rv = self._sysctl('%s=%s' % (name, value))[0]
+    rv = self._sysctl('%s=%s' % (name, value), use_sudo=True)[0]
     if rv != 0:
       logging.error('Unable to set sysctl %s: %s', name, rv)
 
@@ -344,10 +349,10 @@ class _OsxPlatformSettings(_PosixPlatformSettings):
     return scutil.communicate(cmd)[0]
 
   def _ifconfig(self, *args):
-    return _check_output('/sbin/ifconfig', *args)
+    return _check_output(self.SUDO_PATH, '/sbin/ifconfig', *args)
 
   def set_sysctl(self, name, value):
-    rv = self._sysctl('-w', '%s=%s' % (name, value))[0]
+    rv = self._sysctl('-w', '%s=%s' % (name, value), use_sudo=True)[0]
     if rv != 0:
       logging.error('Unable to set sysctl %s: %s', name, rv)
 
@@ -378,11 +383,11 @@ class _OsxPlatformSettings(_PosixPlatformSettings):
       self._ifconfig('lo0', 'mtu', TARGET_LOOPBACK_MTU)
       if self._get_loopback_mtu() == TARGET_LOOPBACK_MTU:
         logging.debug('Set loopback MTU to %d (was %d)',
-                      TARGET_LOOPBACK_MTU, self.original_mtu)
+                      TARGET_LOOPBACK_MTU, original_mtu)
         atexit.register(self._ifconfig, 'lo0', 'mtu', original_mtu)
       else:
         logging.error('Unable to change loopback MTU from %d to %d',
-                      self.original_mtu, TARGET_LOOPBACK_MTU)
+                      original_mtu, TARGET_LOOPBACK_MTU)
 
   def _get_dns_service_key(self):
     output = self._scutil('show State:/Network/Global/IPv4')
@@ -428,7 +433,7 @@ class _LinuxPlatformSettings(_PosixPlatformSettings):
              netbios-name-servers, netbios-scope;
          #require subnet-mask, domain-name-servers;
 
-         sudo/etc/init.d/networking restart
+         sudo /etc/init.d/networking restart
 
   The code below does not try to change dchp and does not restart networking.
   Update this as needed to make it more robust on more systems.
@@ -643,8 +648,8 @@ Next
 
 
 class _WindowsXpPlatformSettings(_WindowsPlatformSettings):
-  def _ipfw_bin(self):
-    return r'third_party\ipfw_win32\ipfw.exe'
+  def _ipfw_cmd(self):
+    return (r'third_party\ipfw_win32\ipfw.exe',)
 
 
 def _new_platform_settings(system, release):

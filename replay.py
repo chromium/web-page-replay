@@ -257,7 +257,7 @@ class OptionsWrapper(object):
     return (self.shaping_dummynet or
             self.dns_forwarding or
             self.port < 1024 or
-            self.ssl_port < 1024)
+            self.ssl_port < 1024) and self.admin_check
 
 
 def replay(options, replay_filename):
@@ -487,6 +487,10 @@ def GetOptionParser():
       dest='ssl',
       help='Do not setup an SSL proxy.')
   option_parser.add_option_group(harness_group)
+  harness_group.add_option('--no-admin-check', default=True,
+      action='store_false',
+      dest='admin_check',
+      help='Do not check if administrator access is needed.')
   return option_parser
 
 
