@@ -145,10 +145,12 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
 def AddTrafficShaper(server_manager, options, host):
   if options.shaping_dummynet:
     ssl_port = options.ssl_shaping_port if options.ssl else None
-    server_manager.Append(
-        trafficshaper.TrafficShaper,
+    kwargs = dict(
         host=host, port=options.shaping_port, ssl_port=ssl_port,
         use_loopback=not options.server_mode, **options.shaping_dummynet)
+    if not options.dns_forwarding:
+      kwargs['dns_port'] = None
+    server_manager.Append(trafficshaper.TrafficShaper, **kwargs)
 
 
 class OptionsWrapper(object):
