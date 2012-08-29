@@ -302,9 +302,9 @@ class _PosixPlatformSettings(_BasePlatformSettings):
     return DnsUpdateError('Did you run under sudo?')
 
   @classmethod
-  def _sysctl(cls, use_sudo=False, *args):
+  def _sysctl(cls, *args, **kwargs):
     sysctl_args = []
-    if use_sudo:
+    if kwargs.get('use_sudo'):
       sysctl_args.append(cls.SUDO_PATH)
     sysctl_args.append('/usr/sbin/sysctl')
     if not os.path.exists(sysctl_args[-1]):
