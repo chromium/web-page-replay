@@ -29,6 +29,9 @@ To view the content of all URLs:
 
 To edit a particular URL:
   $ ./httparchive.py edit --host www.example.com --path /foo archive.wpr
+
+To merge multiple archives
+  $ ./httparchive.py merge --merged_file new.wpr archive1.wpr archive2.wpr ...
 """
 
 import difflib
@@ -217,6 +220,31 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
         print >>out, '[binary data]'
       print >>out, '=' * 70
     return out.getvalue()
+
+  def merge(self, merged_archive=None, other_archives=None):
+    """Merge multiple archives into merged_archive by 'chaining' resources, 
+    only resources that are not part of the accumlated archive are added"""
+    if not other_archives:
+      print 'No archives passed to merge'
+      return
+    
+    # Note we already loaded 'replay_file'. 
+    print 'Loaded %d responses' % len(self)
+
+    for archive in other_archives:
+      if not os.path.exists(archive):
+        print 'Error: Replay file "%s" does not exist' % archive
+        return
+      
+      http_archive_other = HttpArchive.Load(archive)
+      print 'Loaded %d responses from %s' % (len(http_archive_other), archive)
+      for r in http_archive_other:
+        # Only resources that are not already part of the current archive 
+        # get added.
+        if r not in self:
+          print '\t %s ' % r
+          self[r] = http_archive_other[r]
+    self.Persist('%s' % merged_archive)
 
   def edit(self, command=None, host=None, path=None):
     """Edits the single request which matches given params."""
@@ -696,7 +724,7 @@ def main():
         return ''
 
   option_parser = optparse.OptionParser(
-      usage='%prog [ls|cat|edit] [options] replay_file',
+      usage='%prog [ls|cat|edit|merge] [options] replay_file(s)',
       formatter=PlainHelpFormatter(),
       description=__doc__,
       epilog='http://code.google.com/p/web-page-replay/')
@@ -713,10 +741,15 @@ def main():
       action='store',
       type='string',
       help='Only show URLs matching this path.')
+  option_parser.add_option('-f', '--merged_file', default=None,
+        action='store',
+        type='string',
+        help='The output file to use when using the merge command.')
 
   options, args = option_parser.parse_args()
 
-  if len(args) != 2:
+  # Merge command expects an umlimited number of archives.
+  if len(args) < 2:
     print 'args: %s' % args
     option_parser.error('Must specify a command and replay_file')
 
@@ -731,6 +764,11 @@ def main():
     print http_archive.ls(options.command, options.host, options.path)
   elif command == 'cat':
     print http_archive.cat(options.command, options.host, options.path)
+  elif command == 'merge':
+    if not options.merged_file:
+      print 'Error: Must specify a merged file name (use --merged_file)'
+      return
+    http_archive.merge(options.merged_file, args[2:])
   elif command == 'edit':
     http_archive.edit(options.command, options.host, options.path)
     http_archive.Persist(replay_file)
