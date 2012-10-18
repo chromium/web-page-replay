@@ -35,6 +35,7 @@
     return new Date().toString();
   };
   Date.__proto__ = orig_date;
+  Date.prototype = orig_date.prototype;
   Date.prototype.constructor = Date;
   orig_date.now = function() {
     return new Date().getTime();
