@@ -46,7 +46,21 @@ def GetInjectScript(scripts):
         lines += util.resource_string(script)
       else:
         raise HttpClientException('Script does not exist: %s', script)
-  return ''.join(lines)
+  
+  def MinifyScript(script):
+    """Remove C-style comments and line breaks from script.
+    Note: statements must be ';' terminated, and not depending on newline"""
+    # Regex adapted from http://ostermiller.org/findcomment.html.
+    MULTILINE_COMMENT_RE = re.compile(r'/\*.*?\*/', re.DOTALL | re.MULTILINE)
+    SINGLELINE_COMMENT_RE = re.compile(r'//.*', re.MULTILINE)
+    # Remove C-style comments from JS.
+    script = re.sub(MULTILINE_COMMENT_RE, '', script)
+    script = re.sub(SINGLELINE_COMMENT_RE, '', script)
+    # Remove line breaks.
+    script = script.translate(None, '\r\n')
+    return script
+
+  return MinifyScript(''.join(lines))
 
 
 def _InjectScripts(response, inject_script):
