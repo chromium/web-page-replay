@@ -30,6 +30,12 @@ To view the content of all URLs:
 To edit a particular URL:
   $ ./httparchive.py edit --host www.example.com --path /foo archive.wpr
 
+To print statistics of an archive:
+  $ ./httparchive.py stats archive.wpr
+
+To print statistics of a set of URLs:
+  $ ./httparchive.py stats --host www.example.com archive.wpr
+
 To merge multiple archives
   $ ./httparchive.py merge --merged_file new.wpr archive1.wpr archive2.wpr ...
 """
@@ -48,6 +54,7 @@ import subprocess
 import sys
 import tempfile
 import urlparse
+from collections import defaultdict
 
 import platformsettings
 
@@ -219,6 +226,38 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       else:
         print >>out, '[binary data]'
       print >>out, '=' * 70
+    return out.getvalue()
+
+  def stats(self, command=None, host=None, path=None):
+    """Print stats about the archive for all URLs that match given params."""
+    matching_requests = self.get_requests(command, host, path)
+    if not matching_requests:
+      print 'Failed to find any requests matching given command, host, path.'
+      return
+
+    out = StringIO.StringIO()
+    stats = {}
+    stats['Total'] = len(matching_requests)
+    stats['Domains'] = defaultdict(int)
+    stats['HTTP_response_code'] = defaultdict(int)
+    stats['content_type'] = defaultdict(int)
+    stats['Documents'] = defaultdict(int)
+    
+    for request in matching_requests:
+      stats['Domains'][request.host] += 1
+      stats['HTTP_response_code'][self[request].status] += 1
+      
+      content_type = self[request].get_header('content-type')
+      # Remove content type options for readability and higher level groupings.
+      str_content_type = str(content_type.split(';')[0] 
+                            if content_type else None)
+      stats['content_type'][str_content_type] += 1
+
+      #  Documents are the main URL requested and not a referenced resource.
+      if str_content_type == 'text/html' and not 'referer' in request.headers:
+        stats['Documents'][request.host] += 1
+    
+    print >>out, json.dumps(stats, indent=4)
     return out.getvalue()
 
   def merge(self, merged_archive=None, other_archives=None):
@@ -724,7 +763,7 @@ def main():
         return ''
 
   option_parser = optparse.OptionParser(
-      usage='%prog [ls|cat|edit|merge] [options] replay_file(s)',
+      usage='%prog [ls|cat|edit|stats|merge] [options] replay_file(s)',
       formatter=PlainHelpFormatter(),
       description=__doc__,
       epilog='http://code.google.com/p/web-page-replay/')
@@ -764,6 +803,8 @@ def main():
     print http_archive.ls(options.command, options.host, options.path)
   elif command == 'cat':
     print http_archive.cat(options.command, options.host, options.path)
+  elif command == 'stats':
+    print http_archive.stats(options.command, options.host, options.path)
   elif command == 'merge':
     if not options.merged_file:
       print 'Error: Must specify a merged file name (use --merged_file)'
