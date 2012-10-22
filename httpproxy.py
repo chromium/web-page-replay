@@ -77,9 +77,10 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       return None
 
     parsed = urlparse.urlparse(self.path)
+    params = ';%s' % parsed.params if parsed.params else ''
     query = '?%s' % parsed.query if parsed.query else ''
     fragment = '#%s' % parsed.fragment if parsed.fragment else ''
-    full_path = '%s%s%s' % (parsed.path, query, fragment)
+    full_path = '%s%s%s%s' % (parsed.path, params, query, fragment)
 
     return httparchive.ArchivedHttpRequest(
         self.command,
