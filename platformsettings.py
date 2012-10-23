@@ -15,11 +15,9 @@
 
 """Provides cross-platform utility fuctions.
 
-Examples:
+Example:
   import platformsettings
   ip = platformsettings.get_server_ip_address()
-
-  certfile = platformsettings.create_temporary_certfile()
 
 Functions with "_temporary_" in their name automatically clean-up upon
 termination (via the atexit module).
@@ -97,24 +95,6 @@ def _check_output(*args):
 
 
 class _BasePlatformSettings(object):
-  _CERT_FILE = 'wpr_cert.pem'
-
-  # Some platforms do not shape traffic with the loopback address.
-  _USE_REAL_IP_FOR_TRAFFIC_SHAPING = False
-
-  def _get_temporary_certfile_name(self):
-    """Get the file name for a temporary self-signed certificate."""
-    return os.path.join(tempfile.gettempdir(), self._CERT_FILE)
-
-  def create_temporary_certfile(self, certfile):
-    """Creates a temporary certfile for serving SSL traffic.
-
-    The certfile is removed at program termination.
-
-    Returns:
-      the path to the certfile
-    """
-    raise NotImplementedError
 
   def get_system_logging_handler(self):
     """Return a handler for the logging module (optional)."""
@@ -133,7 +113,7 @@ class _BasePlatformSettings(object):
 
   def get_server_ip_address(self, is_server_mode=False):
     """Returns the IP address to use for dnsproxy, httpproxy, and ipfw."""
-    if is_server_mode or self._USE_REAL_IP_FOR_TRAFFIC_SHAPING:
+    if is_server_mode:
       return socket.gethostbyname(socket.gethostname())
     return '127.0.0.1'
 
@@ -213,21 +193,6 @@ class _PosixPlatformSettings(_BasePlatformSettings):
   # For OsX Lion non-root:
   PING_RESTRICTED_CMD = ('ping', '-c', '1', '-i', '1', '-W', '1')
   SUDO_PATH = '/usr/bin/sudo'
-
-  def create_temporary_certfile(self):
-    """Creates a temporary certfile for serving SSL traffic.
-
-    The certfile is removed at program termination.
-
-    Returns:
-      the path to the certfile
-    """
-    certfile = self._get_temporary_certfile_name()
-    _check_output(
-        '/usr/bin/openssl', 'req', '-batch', '-new', '-x509', '-days', '365',
-        '-nodes', '-out', certfile, '-keyout', certfile)
-    atexit.register(os.unlink, certfile)
-    return certfile
 
   def rerun_as_administrator(self):
     """If needed, rerun the program with administrative privileges.
@@ -518,19 +483,6 @@ class _LinuxPlatformSettings(_PosixPlatformSettings):
 
 
 class _WindowsPlatformSettings(_BasePlatformSettings):
-  _USE_REAL_IP_FOR_TRAFFIC_SHAPING = True
-
-  def create_temporary_certfile(self):
-    """Creates a temporary certfile for serving SSL traffic.
-
-    The certfile is removed at program termination.
-
-    TODO: Check for Windows SDK makecert.exe tool.
-
-    Returns:
-      the path to the certfile
-    """
-    raise PlatformSettingsError('Certificate file does not exist.')
 
   def get_system_logging_handler(self):
     """Return a handler for the logging module (optional).
@@ -669,7 +621,6 @@ def _new_platform_settings(system, release):
 # make the functions available at the module-level.
 _inst = _new_platform_settings(platform.system(), platform.release())
 
-create_temporary_certfile = _inst.create_temporary_certfile
 get_system_logging_handler = _inst.get_system_logging_handler
 rerun_as_administrator = _inst.rerun_as_administrator
 timer = _inst.timer

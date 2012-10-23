@@ -304,7 +304,7 @@ def replay(options, replay_filename):
         AddDnsForward(server_manager, host)
       AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive)
     if options.ssl and options.certfile is None:
-      options.certfile = platformsettings.create_temporary_certfile()
+      options.certfile = os.path.join(os.path.dirname(__file__), 'wpr_cert.pem')
     AddWebProxy(server_manager, options, host, real_dns_lookup,
                 http_archive, cache_misses)
     AddTrafficShaper(server_manager, options, host)
