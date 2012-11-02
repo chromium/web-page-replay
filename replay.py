@@ -39,6 +39,7 @@ Network simulation examples:
   $ sudo ./replay.py --packet_loss_rate=0.01 archive.wpr
 """
 
+import json
 import logging
 import optparse
 import os
@@ -109,7 +110,7 @@ def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
 def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
                 cache_misses):
   inject_script = httpclient.GetInjectScript(options.inject_scripts)
-  custom_handlers = customhandlers.CustomHandlers(options.screenshot_dir)
+  custom_handlers = customhandlers.CustomHandlers(options, http_archive)
   if options.spdy:
     assert not options.record, 'spdy cannot be used with --record.'
     archive_fetch = httpclient.ReplayHttpArchiveFetch(
@@ -253,6 +254,10 @@ class OptionsWrapper(object):
   def __getattr__(self, name):
     """Make the original option values available."""
     return getattr(self._options, name)
+
+  def __repr__(self):
+    """Return a json representation of the original options dictionary."""
+    return json.dumps(self._options.__dict__)
 
   def IsRootRequired(self):
     """Returns True iff the options require root access."""

@@ -56,23 +56,28 @@ def JsonResponse(data):
 
 class CustomHandlers(object):
 
-  def __init__(self, screenshot_dir=None):
+  def __init__(self, options, http_archive):
     """Initialize CustomHandlers.
 
     Args:
-      screenshot_dir: a path to which screenshots are saved.
+      options: original options passed to the server.
+      http_archive: reference to the HttpArchive object.
     """
+    self.options = options
+    self.http_archive = http_archive
     self.handlers = [
         (GENERATOR_URL_PREFIX, self.get_generator_url_response_code)]
-    if screenshot_dir:
-      if not os.path.exists(screenshot_dir):
+    # screenshot_dir is a path to which screenshots are saved.
+    if options.screenshot_dir:
+      if not os.path.exists(options.screenshot_dir):
         try:
-          os.makedirs(screenshot_dir)
+          os.makedirs(options.screenshot_dir)
         except IOError:
-          logging.error('Unable to create screenshot dir: %s', screenshot_dir)
-          screenshot_dir = None
-      if screenshot_dir:
-        self.screenshot_dir = screenshot_dir
+          logging.error('Unable to create screenshot dir: %s', 
+                         options.screenshot_dir)
+          options.screenshot_dir = None
+      if options.screenshot_dir:
+        self.screenshot_dir = options.screenshot_dir
         self.handlers.append(
             (POST_IMAGE_URL_PREFIX, self.handle_possible_post_image))
 
@@ -178,6 +183,10 @@ class CustomHandlers(object):
       self.server_manager.SetReplayMode()
       return SimpleResponse(200)
     elif command == 'status':
+      status = {}
       is_record_mode = self.server_manager.IsRecordMode()
-      return JsonResponse({'is_record_mode': is_record_mode})
+      status['is_record_mode'] = is_record_mode
+      status['options'] = json.loads(str(self.options)) 
+      status['archive_stats'] = json.loads(self.http_archive.stats())
+      return JsonResponse(status)
     return None
