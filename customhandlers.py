@@ -186,7 +186,9 @@ class CustomHandlers(object):
       status = {}
       is_record_mode = self.server_manager.IsRecordMode()
       status['is_record_mode'] = is_record_mode
-      status['options'] = json.loads(str(self.options)) 
-      status['archive_stats'] = json.loads(self.http_archive.stats())
+      status['options'] = json.loads(str(self.options))
+      archive_stats = self.http_archive.stats()
+      if archive_stats:
+        status['archive_stats'] = json.loads(archive_stats)
       return JsonResponse(status)
     return None
