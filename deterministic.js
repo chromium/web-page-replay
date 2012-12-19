@@ -40,4 +40,11 @@
   orig_date.now = function() {
     return new Date().getTime();
   };
+  orig_date.prototype.getTimezoneOffset = function() {
+    var dst2010Start = 1268560800000;
+    var dst2010End = 1289120400000;
+    if (this.getTime() >= dst2010Start && this.getTime() < dst2010End)
+      return 420;
+    return 480;
+  };
 })();
