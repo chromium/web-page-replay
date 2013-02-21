@@ -310,7 +310,9 @@ def replay(options, replay_filename):
       AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive)
     if options.ssl and options.certfile is None:
       options.certfile = os.path.join(os.path.dirname(__file__), 'wpr_cert.pem')
-    AddWebProxy(server_manager, options, host, real_dns_lookup,
+    http_proxy_address = platformsettings.get_httpproxy_ip_address(
+        options.server_mode)
+    AddWebProxy(server_manager, options, http_proxy_address, real_dns_lookup,
                 http_archive, cache_misses)
     AddTrafficShaper(server_manager, options, host)
 

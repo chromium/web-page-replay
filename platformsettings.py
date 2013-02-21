@@ -112,9 +112,15 @@ class _BasePlatformSettings(object):
     return time.time()
 
   def get_server_ip_address(self, is_server_mode=False):
-    """Returns the IP address to use for dnsproxy, httpproxy, and ipfw."""
+    """Returns the IP address to use for dnsproxy and ipfw."""
     if is_server_mode:
       return socket.gethostbyname(socket.gethostname())
+    return '127.0.0.1'
+
+  def get_httpproxy_ip_address(self, is_server_mode=False):
+    """Returns the IP address to use for httpproxy."""
+    if is_server_mode:
+      return '0.0.0.0'
     return '127.0.0.1'
 
   def _ipfw_cmd(self):
@@ -626,6 +632,7 @@ rerun_as_administrator = _inst.rerun_as_administrator
 timer = _inst.timer
 
 get_server_ip_address = _inst.get_server_ip_address
+get_httpproxy_ip_address = _inst.get_httpproxy_ip_address
 ipfw = _inst.ipfw
 ping_rtt = _inst.ping_rtt
 set_temporary_tcp_init_cwnd = _inst.set_temporary_tcp_init_cwnd
