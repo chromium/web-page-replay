@@ -256,17 +256,30 @@ class RealHttpFetch(object):
       an ArchivedHttpResponse
     """
     logging.debug('RealHttpFetch: %s %s', request.host, request.path)
-    host_ip = self._real_dns_lookup(request.host)
+    if ':' in request.host:
+      parts = request.host.split(':')
+      truehost = parts[0]
+      trueport = int(parts[1])
+    else:
+      truehost = request.host
+
+    host_ip = self._real_dns_lookup(truehost)
     if not host_ip:
-      logging.critical('Unable to find host ip for name: %s', request.host)
+      logging.critical('Unable to find host ip for name: %s', truehost)
       return None
     retries = 3
     while True:
       try:
         if request.is_ssl:
-          connection = DetailedHTTPSConnection(host_ip)
+          if trueport:
+            connection = DetailedHTTPSConnection(host_ip, trueport)
+          else:
+            connection = DetailedHTTPSConnection(host_ip)
         else:
-          connection = DetailedHTTPConnection(host_ip)
+          if trueport:
+            connection = DetailedHTTPConnection(host_ip, trueport)
+          else:
+            connection = DetailedHTTPConnection(host_ip)
         start = TIMER()
         connection.request(
             request.command,
