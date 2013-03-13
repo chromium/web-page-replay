@@ -262,6 +262,7 @@ class RealHttpFetch(object):
       trueport = int(parts[1])
     else:
       truehost = request.host
+      trueport = None
 
     host_ip = self._real_dns_lookup(truehost)
     if not host_ip:
