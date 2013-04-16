@@ -16,6 +16,7 @@
 
 import cPickle
 import os
+import sys
 
 class PersistentMixin:
   """Mixin class which provides facilities for persisting and restoring."""
@@ -39,4 +40,12 @@ class PersistentMixin:
 
   def Persist(self, filename):
     """Persist all state to filename."""
-    cPickle.dump(self, open(filename, 'wb'), cPickle.HIGHEST_PROTOCOL)
+    try:
+      original_checkinterval = sys.getcheckinterval()
+      sys.setcheckinterval(2**31-1)  # Lock out other threads so nothing can
+                                     # modify |self| during pickling.
+      pickled_self = cPickle.dumps(self, cPickle.HIGHEST_PROTOCOL)
+    finally:
+      sys.setcheckinterval(original_checkinterval)
+    with open(filename, 'wb') as f:
+      f.write(pickled_self)
