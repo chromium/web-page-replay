@@ -529,7 +529,8 @@ class ArchivedHttpRequest(object):
     undesirable_keys = [
         'accept', 'accept-charset', 'accept-language',
         'connection', 'cookie', 'keep-alive', 'method',
-        'referer', 'scheme', 'url', 'version', 'user-agent', 'proxy-connection']
+        'referer', 'scheme', 'url', 'version', 'user-agent', 'proxy-connection',
+        'x-chrome-variations']
     return sorted([(k, v) for k, v in headers.items()
                    if k.lower() not in undesirable_keys])
 
