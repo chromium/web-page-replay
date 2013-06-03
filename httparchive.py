@@ -309,23 +309,6 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     response.set_response_from_text(''.join(open(tmp_file.name).readlines()))
     os.remove(tmp_file.name)
 
-  def _format_request_lines(self, req):
-    """Format request to make diffs easier to read.
-
-    Args:
-      req: an ArchivedHttpRequest
-    Returns:
-      Example:
-      ['GET www.example.com/path\n', 'Header-Key: header value\n', ...]
-    """
-    parts = ['%s %s%s\n' % (req.command, req.host, req.path)]
-    if req.request_body:
-      parts.append('%s\n' % req.request_body)
-    for k, v in req.trimmed_headers:
-      k = '-'.join(x.capitalize() for x in k.split('-'))
-      parts.append('%s: %s\n' % (k, v))
-    return parts
-
   def find_closest_request(self, request, use_path=False):
     """Find the closest matching request in the archive to the given request.
 
@@ -342,16 +325,20 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       Otherwise, return None.
     """
     best_match = None
-    request_lines = self._format_request_lines(request)
-    matcher = difflib.SequenceMatcher(b=''.join(request_lines))
+    matcher = difflib.SequenceMatcher(b=request.formatted_request)
     path = None
     if use_path:
       path = request.path
-    for candidate in self.get_requests(request.command, request.host, path,
-                                       use_query=not use_path):
-      candidate_lines = self._format_request_lines(candidate)
-      matcher.set_seq1(''.join(candidate_lines))
-      best_match = max(best_match, (matcher.ratio(), candidate))
+    requests = self.get_requests(request.command, request.host, path,
+                                 use_query=not use_path)
+
+    if len(requests) == 1:
+      return requests[0]
+
+    for candidate in requests:
+      matcher.set_seq1(candidate.formatted_request)
+      best_match = max(best_match, (matcher.quick_ratio(), candidate))
+
     if best_match:
       return best_match[1]
     return None
@@ -365,11 +352,11 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       If a close match is found, return a textual diff between the requests.
       Otherwise, return None.
     """
-    request_lines = self._format_request_lines(request)
+    request_lines = request.formatted_request.split('\n')
     closest_request = self.find_closest_request(request)
     if closest_request:
-      closest_request_lines = self._format_request_lines(closest_request)
-      return ''.join(difflib.ndiff(closest_request_lines, request_lines))
+      closest_request_lines = closest_request.formatted_request.split('\n')
+      return '\n'.join(difflib.ndiff(closest_request_lines, request_lines))
     return None
 
 
@@ -405,10 +392,12 @@ class ArchivedHttpRequest(object):
     self.command = command
     self.host = host
     self.path = path
+    self.path_without_query = urlparse.urlparse(path).path
     self.request_body = request_body
     self.headers = headers
     self.is_ssl = is_ssl
     self.trimmed_headers = self._TrimHeaders(headers)
+    self.formatted_request = self._GetFormattedRequest()
 
   def __str__(self):
     scheme = 'https' if self.is_ssl else 'http'
@@ -449,6 +438,8 @@ class ArchivedHttpRequest(object):
     if 'is_ssl' not in state:
       state['is_ssl'] = False
     self.__dict__.update(state)
+    self.path_without_query = urlparse.urlparse(self.path).path
+    self.formatted_request = self._GetFormattedRequest()
 
   def __getstate__(self):
     """Influence how to pickle.
@@ -458,7 +449,24 @@ class ArchivedHttpRequest(object):
     """
     state = self.__dict__.copy()
     del state['trimmed_headers']
+    del state['path_without_query']
+    del state['formatted_request']
     return state
+
+  def _GetFormattedRequest(self):
+    """Format request to make diffs easier to read.
+
+    Returns:
+      A string consisting of the request. Example:
+      'GET www.example.com/path\nHeader-Key: header value\n'
+    """
+    parts = ['%s %s%s\n' % (self.command, self.host, self.path)]
+    if self.request_body:
+      parts.append('%s\n' % self.request_body)
+    for k, v in self.trimmed_headers:
+      k = '-'.join(x.capitalize() for x in k.split('-'))
+      parts.append('%s: %s\n' % (k, v))
+    return ''.join(parts)
 
   def matches(self, command=None, host=None, path_with_query=None,
               use_query=True):
@@ -482,16 +490,16 @@ class ArchivedHttpRequest(object):
     Returns:
       True iff the request matches all parameters
     """
-    path_match = path_with_query == self.path
-    if not use_query:
-      self_path = urlparse.urlparse('http://%s%s' % (
-          self.host or '', self.path or '')).path
-      other_path = urlparse.urlparse('http://%s%s' % (
-          host or '', path_with_query or '')).path
-      path_match = self_path == other_path
-    return ((command is None or command == self.command) and
-            (host is None or host == self.host) and
-            (path_with_query is None or path_match))
+    if command is not None and command != self.command:
+      return False
+    if host is not None and host != self.host:
+      return False
+    if path_with_query is None:
+      return True
+    if use_query:
+      return path_with_query == self.path
+    else:
+      return self.path_without_query == urlparse.urlparse(path_with_query).path
 
   @classmethod
   def _TrimHeaders(cls, headers):
