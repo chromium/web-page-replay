@@ -510,7 +510,7 @@ class _WindowsPlatformSettings(_BasePlatformSettings):
     Raises NotAdministratorError if unable to rerun.
     """
     import ctypes
-    if ctypes.windll.shell32.IsUserAnAdmin():
+    if not ctypes.windll.shell32.IsUserAnAdmin():
       raise NotAdministratorError('Rerun with administrator privileges.')
       #os.execv('runas', sys.argv)  # TODO: replace needed Windows magic
 
