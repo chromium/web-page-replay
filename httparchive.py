@@ -337,7 +337,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
 
     for candidate in requests:
       matcher.set_seq1(candidate.formatted_request)
-      best_match = max(best_match, (matcher.quick_ratio(), candidate))
+      best_match = max(best_match, (matcher.ratio(), candidate))
 
     if best_match:
       return best_match[1]
