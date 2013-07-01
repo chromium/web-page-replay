@@ -324,24 +324,37 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       If a close match is found, return the instance of ArchivedHttpRequest.
       Otherwise, return None.
     """
-    best_match = None
-    matcher = difflib.SequenceMatcher(b=request.formatted_request)
-    path = None
-    if use_path:
-      path = request.path
+    path = request.path if use_path else None
     requests = self.get_requests(request.command, request.host, path,
                                  use_query=not use_path)
+
+    if not requests:
+      return None
 
     if len(requests) == 1:
       return requests[0]
 
+    matcher = difflib.SequenceMatcher(b=request.formatted_request)
+
+    # quick_ratio() is cheap to compute, but ratio() is expensive. So we call
+    # quick_ratio() on all requests, sort them descending, and then loop through
+    # until we find a candidate whose ratio() is >= the next quick_ratio().
+    # This works because quick_ratio() is guaranteed to be an upper bound on
+    # ratio().
+    candidates = []
     for candidate in requests:
       matcher.set_seq1(candidate.formatted_request)
-      best_match = max(best_match, (matcher.ratio(), candidate))
+      candidates.append((matcher.quick_ratio(), candidate))
 
-    if best_match:
-      return best_match[1]
-    return None
+    candidates.sort(reverse=True, key=lambda c: c[0])
+
+    best_match = (0, None)
+    for i in xrange(len(candidates)):
+      matcher.set_seq1(candidates[i][1].formatted_request)
+      best_match = max(best_match, (matcher.ratio(), candidates[i][1]))
+      if i + 1 < len(candidates) and best_match[0] >= candidates[i+1][0]:
+        break
+    return best_match[1]
 
   def diff(self, request):
     """Diff the given request to the closest matching request in the archive.
