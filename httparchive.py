@@ -53,10 +53,23 @@ import StringIO
 import subprocess
 import sys
 import tempfile
+import time
 import urlparse
 from collections import defaultdict
 
 import platformsettings
+
+
+def LogRunTime(fn):
+  """Annotation which logs the run time of the function."""
+  def wrapped(self, *args, **kwargs):
+    start_time = time.time()
+    try:
+      return fn(self, *args, **kwargs)
+    finally:
+      run_time = (time.time() - start_time) * 1000.0;
+      logging.debug('%s: %dms', fn.__name__, run_time)
+  return wrapped
 
 
 class HttpArchiveException(Exception):
@@ -74,10 +87,45 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
 
   Attributes:
     server_rtt: dict of {hostname, server rtt in milliseconds}
+    responses_by_host: dict of {hostname, {request: response}}. This must remain
+        in sync with the underlying dict of self. It is used as an optimization
+        so that get_requests() doesn't have to linearly search all requests in
+        the archive to find potential matches.
   """
 
   def __init__(self):
     self.server_rtt = {}
+    self.responses_by_host = defaultdict(dict)
+
+  def __setstate__(self, state):
+    """Influence how to unpickle.
+
+    Args:
+      state: a dictionary for __dict__
+    """
+    self.__dict__.update(state)
+    self.responses_by_host = defaultdict(dict)
+    for request in self:
+      self.responses_by_host[request.host][request] = self[request]
+
+  def __getstate__(self):
+    """Influence how to pickle.
+
+    Returns:
+      a dict to use for pickling
+    """
+    state = self.__dict__.copy()
+    del state['responses_by_host']
+    return state
+
+  def __setitem__(self, key, value):
+    super(HttpArchive, self).__setitem__(key, value)
+    if hasattr(self, 'responses_by_host'):
+      self.responses_by_host[key.host][key] = value
+
+  def __delitem__(self, key):
+    super(HttpArchive, self).__delitem__(key)
+    del self.responses_by_host[key.host][key]
 
   def get_server_rtt(self, server):
     """Retrieves the round trip time (rtt) to the server
@@ -185,10 +233,15 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
         return True
     return False
 
-  def get_requests(self, command=None, host=None, path=None, use_query=True):
+  def get_requests(self, command=None, host=None, path=None, is_ssl=None,
+                   use_query=True):
     """Return a list of requests that match the given args."""
-    return [r for r in self if r.matches(command, host, path,
-                                         use_query=use_query)]
+    if host:
+      return [r for r in self.responses_by_host[host]
+              if r.matches(command, None, path, is_ssl, use_query=use_query)]
+    else:
+      return [r for r in self
+              if r.matches(command, host, path, is_ssl, use_query=use_query)]
 
   def ls(self, command=None, host=None, path=None):
     """List all URLs that match given params."""
@@ -326,7 +379,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     """
     path = request.path if use_path else None
     requests = self.get_requests(request.command, request.host, path,
-                                 use_query=not use_path)
+                                 is_ssl=request.is_ssl, use_query=not use_path)
 
     if not requests:
       return None
@@ -481,7 +534,7 @@ class ArchivedHttpRequest(object):
       parts.append('%s: %s\n' % (k, v))
     return ''.join(parts)
 
-  def matches(self, command=None, host=None, path_with_query=None,
+  def matches(self, command=None, host=None, path_with_query=None, is_ssl=None,
               use_query=True):
     """Returns true iff the request matches all parameters.
 
@@ -489,6 +542,7 @@ class ArchivedHttpRequest(object):
       command: a string (e.g. 'GET' or 'POST').
       host: a host name (e.g. 'www.google.com').
       path_with_query: a request path with query string (e.g. '/search?q=dogs')
+      is_ssl: whether the request is secure.
       use_query:
         If use_query is True, request matching uses both the hierarchical path
         and query string component.
@@ -504,6 +558,8 @@ class ArchivedHttpRequest(object):
       True iff the request matches all parameters
     """
     if command is not None and command != self.command:
+      return False
+    if is_ssl is not None and is_ssl != self.is_ssl:
       return False
     if host is not None and host != self.host:
       return False

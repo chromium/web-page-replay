@@ -187,6 +187,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.send_archived_http_response(response)
       request_time_ms = (time.time() - start_time) * 1000.0;
       logging.debug('Served: %s (%dms)', request, request_time_ms)
+      self.server.total_request_time += request_time_ms
     else:
       self.send_error(404)
 
@@ -240,15 +241,17 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
     self.traffic_shaping_up_bps = proxyshaper.GetBitsPerSecond(up_bandwidth)
     self.traffic_shaping_delay_ms = int(delay_ms)
     self.num_active_requests = 0
-    protocol = 'HTTPS' if self.is_ssl else 'HTTP'
-    logging.info('Started %s server on %s...', protocol, self.server_address)
+    self.total_request_time = 0
+    self.protocol = 'HTTPS' if self.is_ssl else 'HTTP'
+    logging.info('Started %s server on %s.', self.protocol, self.server_address)
 
   def cleanup(self):
     try:
       self.shutdown()
     except KeyboardInterrupt, e:
       pass
-    logging.info('Stopped HTTP server')
+    logging.info('Stopped %s server. Total time processing requests: %dms',
+                 self.protocol, self.total_request_time)
 
   def get_active_request_count(self):
     return self.num_active_requests
