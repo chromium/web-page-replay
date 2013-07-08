@@ -362,13 +362,14 @@ class RecordHttpArchiveFetch(object):
 class ReplayHttpArchiveFetch(object):
   """Serve responses from the given HttpArchive."""
 
-  def __init__(self, http_archive, inject_script,
+  def __init__(self, http_archive, real_dns_lookup, inject_script,
                use_diff_on_unknown_requests=False, cache_misses=None,
                use_closest_match=False):
     """Initialize ReplayHttpArchiveFetch.
 
     Args:
       http_archive: an instance of a HttpArchive
+      real_dns_lookup: a function that resolves a host to an IP.
       inject_script: script string to inject in all pages
       use_diff_on_unknown_requests: If True, log unknown requests
         with a diff to requests that look similar.
@@ -382,6 +383,8 @@ class ReplayHttpArchiveFetch(object):
     self.use_diff_on_unknown_requests = use_diff_on_unknown_requests
     self.cache_misses = cache_misses
     self.use_closest_match = use_closest_match
+    self.real_http_fetch = RealHttpFetch(real_dns_lookup,
+                                         http_archive.get_server_rtt)
 
   def __call__(self, request):
     """Fetch the request and return the response.
@@ -391,6 +394,9 @@ class ReplayHttpArchiveFetch(object):
     Returns:
       Instance of ArchivedHttpResponse (if found) or None
     """
+    if request.host.startswith('127.0.0.1:'):
+      return self.real_http_fetch(request)
+
     response = self.http_archive.get(request)
 
     if self.use_closest_match and not response:
@@ -443,8 +449,8 @@ class ControllableHttpArchiveFetch(object):
         http_archive, real_dns_lookup, inject_script,
         cache_misses)
     self.replay_fetch = ReplayHttpArchiveFetch(
-        http_archive, inject_script, use_diff_on_unknown_requests, cache_misses,
-        use_closest_match)
+        http_archive, real_dns_lookup, inject_script,
+        use_diff_on_unknown_requests, cache_misses, use_closest_match)
     if use_record_mode:
       self.SetRecordMode()
     else:

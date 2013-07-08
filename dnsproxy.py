@@ -44,6 +44,13 @@ class RealDnsLookup(object):
     self.dns_cache_lock = threading.Lock()
     self.dns_cache = {}
 
+  def _IsIPAddress(self, hostname):
+    try:
+      socket.inet_aton(hostname)
+      return True
+    except socket.error:
+      return False
+
   def __call__(self, hostname, rdtype=dns.rdatatype.A):
     """Return real IP for a host.
 
@@ -53,6 +60,8 @@ class RealDnsLookup(object):
     Returns:
       the IP address as a string (e.g. "192.168.25.2")
     """
+    if self._IsIPAddress(hostname):
+      return hostname
     self.dns_cache_lock.acquire()
     ip = self.dns_cache.get(hostname)
     self.dns_cache_lock.release()
