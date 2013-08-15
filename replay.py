@@ -43,6 +43,7 @@ import json
 import logging
 import optparse
 import os
+import socket
 import sys
 import traceback
 
@@ -148,7 +149,8 @@ def AddTrafficShaper(server_manager, options, host):
     ssl_port = options.ssl_shaping_port if options.ssl else None
     kwargs = dict(
         host=host, port=options.shaping_port, ssl_port=ssl_port,
-        use_loopback=not options.server_mode, **options.shaping_dummynet)
+        use_loopback=not options.server_mode and host == '127.0.0.1',
+        **options.shaping_dummynet)
     if not options.dns_forwarding:
       kwargs['dns_port'] = None
     server_manager.Append(trafficshaper.TrafficShaper, **kwargs)
@@ -190,6 +192,7 @@ class OptionsWrapper(object):
         name for name, value in parser.defaults.items()
         if getattr(options, name) != value])
     self._CheckConflicts()
+    self._CheckValidIp('host')
     self._MassageValues()
 
   def _CheckConflicts(self):
@@ -200,6 +203,15 @@ class OptionsWrapper(object):
           if bad_option in self._nondefaults:
             self._parser.error('Option --%s cannot be used with --%s.' %
                                 (bad_option, option))
+
+  def _CheckValidIp(self, name):
+    """Give an error if option |name| is not a valid IPv4 address."""
+    value = getattr(self._options, name)
+    if value:
+      try:
+        socket.inet_aton(value)
+      except:
+        self._parser.error('Option --%s must be a valid IPv4 address.' % name)
 
   def _ShapingKeywordArgs(self, shaping_key):
     """Return the shaping keyword args for |shaping_key|.
@@ -286,7 +298,9 @@ def replay(options, replay_filename):
   if options.server:
     AddDnsForward(server_manager, options.server)
   else:
-    host = platformsettings.get_server_ip_address(options.server_mode)
+    host = options.host
+    if not host:
+      host = platformsettings.get_server_ip_address(options.server_mode)
     real_dns_lookup = dnsproxy.RealDnsLookup(
         name_servers=[platformsettings.get_original_primary_nameserver()])
     if options.record:
@@ -305,13 +319,15 @@ def replay(options, replay_filename):
     server_manager.AppendRecordCallback(http_archive.clear)
 
     if options.dns_forwarding:
-      if not options.server_mode:
+      if not options.server_mode and host == '127.0.0.1':
         AddDnsForward(server_manager, host)
       AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive)
     if options.ssl and options.certfile is None:
       options.certfile = os.path.join(os.path.dirname(__file__), 'wpr_cert.pem')
-    http_proxy_address = platformsettings.get_httpproxy_ip_address(
-        options.server_mode)
+    http_proxy_address = options.host
+    if not http_proxy_address:
+      http_proxy_address = platformsettings.get_httpproxy_ip_address(
+          options.server_mode)
     AddWebProxy(server_manager, options, http_proxy_address, real_dns_lookup,
                 http_archive, cache_misses)
     AddTrafficShaper(server_manager, options, host)
@@ -469,6 +485,11 @@ def GetOptionParser():
       help='Don\'t forward DNS requests to the local replay server. '
            'CAUTION: With this option an external mechanism must be used to '
            'forward traffic to the replay server.')
+  harness_group.add_option('--host', default=None,
+      action='store',
+      type='str',
+      help='The IP address to bind all servers to. Defaults to 0.0.0.0 or '
+           '127.0.0.1, depending on --server_mode and platform.')
   harness_group.add_option('-o', '--port', default=80,
       action='store',
       type='int',
