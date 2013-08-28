@@ -34,6 +34,7 @@ class ServerManager(object):
     self.record_callbacks = []
     self.replay_callbacks = []
     self.is_record_mode = is_record_mode
+    self.should_exit = False
 
   def Append(self, initializer, *init_args, **init_kwargs):
     """Append a server to the end of the list to run.
@@ -99,6 +100,8 @@ class ServerManager(object):
           server.__enter__()
       while True:
         time.sleep(1)
+        if self.should_exit:
+          break
     except:
       exception_info = sys.exc_info()
     finally:

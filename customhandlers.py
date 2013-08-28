@@ -191,4 +191,7 @@ class CustomHandlers(object):
       if archive_stats:
         status['archive_stats'] = json.loads(archive_stats)
       return JsonResponse(status)
+    elif command == 'exit':
+      self.server_manager.should_exit = True
+      return SimpleResponse(200)
     return None
