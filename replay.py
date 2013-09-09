@@ -55,6 +55,7 @@ import httpclient
 import httpproxy
 import platformsettings
 import replayspdyserver
+import script_injector
 import servermanager
 import trafficshaper
 
@@ -110,7 +111,7 @@ def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
 
 def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
                 cache_misses):
-  inject_script = httpclient.GetInjectScript(options.inject_scripts)
+  inject_script = script_injector.GetInjectScript(options.inject_scripts)
   custom_handlers = customhandlers.CustomHandlers(options, http_archive)
   if options.spdy:
     assert not options.record, 'spdy cannot be used with --record.'

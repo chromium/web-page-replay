@@ -22,45 +22,16 @@ import logging
 import os
 import platformsettings
 import re
+import script_injector
 import util
 
 
-HTML_RE = re.compile(r'^.{,256}?<html.*?>', re.IGNORECASE | re.DOTALL)
-HEAD_RE = re.compile(r'^.{,256}?<head.*?>', re.IGNORECASE | re.DOTALL)
 TIMER = platformsettings.timer
 
 
 class HttpClientException(Exception):
   """Base class for all exceptions in httpclient."""
   pass
-
-
-def GetInjectScript(scripts):
-  """Loads |scripts| from disk and returns a string of their content."""
-  lines = []
-  if scripts:
-    for script in scripts.split(','):
-      if os.path.exists(script):
-        lines += open(script).read()
-      elif util.resource_exists(script):
-        lines += util.resource_string(script)
-      else:
-        raise HttpClientException('Script does not exist: %s', script)
-  
-  def MinifyScript(script):
-    """Remove C-style comments and line breaks from script.
-    Note: statements must be ';' terminated, and not depending on newline"""
-    # Regex adapted from http://ostermiller.org/findcomment.html.
-    MULTILINE_COMMENT_RE = re.compile(r'/\*.*?\*/', re.DOTALL | re.MULTILINE)
-    SINGLELINE_COMMENT_RE = re.compile(r'//.*', re.MULTILINE)
-    # Remove C-style comments from JS.
-    script = re.sub(MULTILINE_COMMENT_RE, '', script)
-    script = re.sub(SINGLELINE_COMMENT_RE, '', script)
-    # Remove line breaks.
-    script = script.translate(None, '\r\n')
-    return script
-
-  return MinifyScript(''.join(lines))
 
 
 def _InjectScripts(response, inject_script):
@@ -79,20 +50,13 @@ def _InjectScripts(response, inject_script):
   content_type = response.get_header('content-type')
   if content_type and content_type.startswith('text/html'):
     text = response.get_data_as_text()
-
-    def InsertScriptAfter(matchobj):
-      return '%s<script>%s</script>' % (matchobj.group(0), inject_script)
-
-    if text and not inject_script in text:
-      text, is_injected = HEAD_RE.subn(InsertScriptAfter, text, 1)
-      if not is_injected:
-        text, is_injected = HTML_RE.subn(InsertScriptAfter, text, 1)
-      if not is_injected:
-        logging.warning('Failed to inject scripts.')
-        logging.debug('Response content: %s', text)
-      else:
-        response = copy.deepcopy(response)
-        response.set_data(text)
+    text, is_injected = script_injector.InjectScript(text, 'text/html',
+                                                     inject_script)
+    if not is_injected:
+      logging.debug('Response content: %s', text)
+    else:
+      response = copy.deepcopy(response)
+      response.set_data(text)
   return response
 
 
