@@ -50,11 +50,9 @@ def _InjectScripts(response, inject_script):
   content_type = response.get_header('content-type')
   if content_type and content_type.startswith('text/html'):
     text = response.get_data_as_text()
-    text, is_injected = script_injector.InjectScript(text, 'text/html',
-                                                     inject_script)
-    if not is_injected:
-      logging.debug('Response content: %s', text)
-    else:
+    text, already_injected = script_injector.InjectScript(
+        text, 'text/html', inject_script)
+    if not already_injected:
       response = copy.deepcopy(response)
       response.set_data(text)
   return response

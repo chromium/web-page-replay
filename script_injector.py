@@ -20,8 +20,12 @@ import os
 import re
 import util
 
-HTML_RE = re.compile(r'^.{,256}?<html.*?>', re.IGNORECASE | re.DOTALL)
-HEAD_RE = re.compile(r'^.{,256}?<head.*?>', re.IGNORECASE | re.DOTALL)
+DOCTYPE_RE = re.compile(r'^.{,256}?(<!--.*-->)?.{,256}?<!doctype html>',
+                        re.IGNORECASE | re.DOTALL)
+HTML_RE = re.compile(r'^.{,256}?(<!--.*-->)?.{,256}?<html.*?>',
+                     re.IGNORECASE | re.DOTALL)
+HEAD_RE = re.compile(r'^.{,256}?(<!--.*-->)?.{,256}?<head.*?>',
+                     re.IGNORECASE | re.DOTALL)
 
 
 def GetInjectScript(scripts):
@@ -38,7 +42,7 @@ def GetInjectScript(scripts):
         lines.extend(util.resource_string(script))
       else:
         raise Exception('Script does not exist: %s', script)
-  
+
   def MinifyScript(script):
     """Remove C-style comments and line breaks from script.
     Note: statements must be ';' terminated, and not depending on newline"""
@@ -58,17 +62,18 @@ def GetInjectScript(scripts):
 def InjectScript(content, content_type, script_to_inject):
   """Inject |script_to_inject| into |content| if |content_type| is 'text/html'.
 
-  Inject |script_to_inject| immediately after <head> or <html> in |content|.
+  Inject |script_to_inject| into |content| immediately after <head>, <html> or
+  <!doctype html>, if one of them is found. Otherwise, inject at the beginning.
 
   Returns:
-    content, is_injected
+    content, already_injected
     |content| is the new content if script is injected, otherwise the original.
-    |is_injected| indicates whether script is injected.
+    |already_injected| indicates if |script_to_inject| is already in |content|.
   """
-  is_injected = False
+  already_injected = False
   if content_type and content_type == 'text/html':
-    is_injected = not content or script_to_inject in content
-    if not is_injected:
+    already_injected = not content or script_to_inject in content
+    if not already_injected:
       def InsertScriptAfter(matchobj):
         return '%s<script>%s</script>' % (matchobj.group(0), script_to_inject)
 
@@ -76,5 +81,9 @@ def InjectScript(content, content_type, script_to_inject):
       if not is_injected:
         content, is_injected = HTML_RE.subn(InsertScriptAfter, content, 1)
       if not is_injected:
-        logging.warning('Failed to inject script.')
-  return content, is_injected
+        content, is_injected = DOCTYPE_RE.subn(InsertScriptAfter, content, 1)
+      if not is_injected:
+        content = '<script>%s</script>%s' % (script_to_inject, content)
+        logging.warning('Inject at the very beginning, because no tag of '
+                        '<head>, <html> or <!doctype html> is found.')
+  return content, already_injected
