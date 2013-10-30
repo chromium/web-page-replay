@@ -120,7 +120,8 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
         inject_script,
         options.diff_unknown_requests,
         cache_misses=cache_misses,
-        use_closest_match=options.use_closest_match)
+        use_closest_match=options.use_closest_match,
+        scramble_images=options.scramble_images)
     server_manager.Append(
         replayspdyserver.ReplaySpdyServer, archive_fetch,
         custom_handlers, host=host, port=options.port,
@@ -131,7 +132,8 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
         http_archive, real_dns_lookup,
         inject_script,
         options.diff_unknown_requests, options.record,
-        cache_misses=cache_misses, use_closest_match=options.use_closest_match)
+        cache_misses=cache_misses, use_closest_match=options.use_closest_match,
+        scramble_images=options.scramble_images)
     server_manager.AppendRecordCallback(archive_fetch.SetRecordMode)
     server_manager.AppendReplayCallback(archive_fetch.SetReplayMode)
     server_manager.Append(
@@ -504,6 +506,10 @@ def GetOptionParser():
       type='int',
       help='Port on which to apply traffic shaping.  Defaults to the '
            'listen port (--port)')
+  harness_group.add_option('--scramble_images', default=False,
+      action='store_true',
+      dest='scramble_images',
+      help='Scramble image responses.')
   harness_group.add_option('--ssl_shaping_port', default=None,
       action='store',
       type='int',
