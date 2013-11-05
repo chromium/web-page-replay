@@ -18,7 +18,6 @@
 import copy
 import httparchive
 import httplib
-import Image
 import logging
 import os
 import platformsettings
@@ -28,6 +27,12 @@ import script_injector
 import StringIO
 import util
 
+# PIL isn't always available, but we still want to be able to run without
+# the image scrambling functionality in this case.
+try:
+  import Image
+except ImportError:
+  Image = None
 
 TIMER = platformsettings.timer
 
@@ -70,6 +75,9 @@ def _ScrambleImages(response):
   Returns:
     an ArchivedHttpResponse
   """
+
+  assert Image, '--scramble_images requires the PIL module to be installed.'
+
   content_type = response.get_header('content-type')
   if content_type and content_type.startswith('image/'):
     try:
