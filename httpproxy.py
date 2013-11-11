@@ -243,7 +243,11 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
     self.num_active_requests = 0
     self.total_request_time = 0
     self.protocol = 'HTTPS' if self.is_ssl else 'HTTP'
-    logging.info('Started %s server on %s.', self.protocol, self.server_address)
+
+    # Note: This message may be scraped. Do not change it.
+    logging.warning(
+        '%s server started on %s:%d' % (self.protocol, self.server_address[0],
+                                        self.server_address[1]))
 
   def cleanup(self):
     try:

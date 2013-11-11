@@ -278,8 +278,8 @@ class OptionsWrapper(object):
     """Returns True iff the options require root access."""
     return (self.shaping_dummynet or
             self.dns_forwarding or
-            self.port < 1024 or
-            self.ssl_port < 1024) and self.admin_check
+            (self.port and self.port < 1024) or
+            (self.port and self.ssl_port < 1024)) and self.admin_check
 
 
 def replay(options, replay_filename):
