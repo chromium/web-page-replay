@@ -14,6 +14,16 @@
     }
     return (random_seed % 1);
   };
+  if (typeof(crypto) == 'object' &&
+      typeof(crypto.getRandomValues) == 'function') {
+    crypto.getRandomValues = function(arr) {
+      var scale = Math.pow(256, arr.BYTES_PER_ELEMENT);
+      for (var i = 0; i < arr.length; i++) {
+        arr[i] = Math.floor(Math.random() * scale);
+      }
+      return arr;
+    };
+  }
   Date = function() {
     if (this instanceof Date) {
       date_count++;
