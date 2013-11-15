@@ -244,6 +244,15 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
 
 class DnsProxyServer(SocketServer.ThreadingUDPServer,
                      daemonserver.DaemonServer):
+  # Increase the request queue size. The default value, 5, is set in
+  # SocketServer.TCPServer (the parent of BaseHTTPServer.HTTPServer).
+  # Since we're intercepting many domains through this single server,
+  # it is quite possible to get more than 5 concurrent requests.
+  request_queue_size = 128
+
+  # Don't prevent python from exiting when there is thread activity.
+  daemon_threads = True
+
   def __init__(self, host='', port=53, dns_lookup=None):
     """Initialize DnsProxyServer.
 
@@ -262,8 +271,12 @@ class DnsProxyServer(SocketServer.ThreadingUDPServer,
             'Unable to bind DNS server on (%s:%s)' % (host, port))
       raise
     self.dns_lookup = dns_lookup or (lambda host: self.server_address[0])
-    logging.info('Started DNS server on %s...', self.server_address)
+    logging.warning('DNS server started on %s:%d', (self.server_address[0],
+                                                    self.server_address[1]))
 
   def cleanup(self):
-    self.shutdown()
-    logging.info('Shutdown DNS server')
+    try:
+      self.shutdown()
+    except KeyboardInterrupt, e:
+      pass
+    logging.info('Stopped DNS server')
