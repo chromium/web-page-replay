@@ -20,6 +20,7 @@ import logging
 import os
 import proxyshaper
 import re
+import socket
 import SocketServer
 import ssl
 import subprocess
