@@ -146,25 +146,6 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       logging.error('Error sending response for %s%s: %s',
                     self.headers['host'], self.path, e)
 
-  def _manage_request_stats(fn):
-    """Decorator to track number of active requests and their total duration.
-
-    This decorator does not work on handle_one_request() because when
-    one request finishes it is called again to wait for another request -- and
-    another request may never arrive.
-    """
-    def wrapped(self, *args, **kwargs):
-      start_time = time.time()
-      self.server.num_active_requests += 1
-      try:
-        return fn(self, *args, **kwargs)
-      finally:
-        request_time_ms = (time.time() - start_time) * 1000.0;
-        logging.debug('Served: %s (%dms)', request, request_time_ms)
-        self.server.total_request_time += request_time_ms
-        self.server.num_active_requests -= 1
-    return wrapped
-
   def handle_one_request(self):
     """Handle a single HTTP request."""
     try:
@@ -176,35 +157,44 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.close_connection = 1
       return
 
-  @_manage_request_stats
   def do_parse_and_handle_one_request(self):
-    if len(self.raw_requestline) > 65536:
-      self.requestline = ''
-      self.request_version = ''
-      self.command = ''
-      self.send_error(414)
-      return
-    if not self.raw_requestline:
-      self.close_connection = 1
-      return
-    if not self.parse_request():
-      # An error code has been sent, just exit
-      return
-
+    start_time = time.time()
+    self.server.num_active_requests += 1
+    request = None
     try:
-      request = self.get_archived_http_request()
-      if request is None:
-        self.send_error(500)
+      if len(self.raw_requestline) > 65536:
+        self.requestline = ''
+        self.request_version = ''
+        self.command = ''
+        self.send_error(414)
         return
-      response = self.server.custom_handlers.handle(request)
-      if not response:
-        response = self.server.http_archive_fetch(request)
-      if response:
-        self.send_archived_http_response(response)
-      else:
-        self.send_error(404)
+      if not self.raw_requestline:
+        self.close_connection = 1
+        return
+      if not self.parse_request():
+        # An error code has been sent, just exit
+        return
+
+      try:
+        request = self.get_archived_http_request()
+        if request is None:
+          self.send_error(500)
+          return
+        response = self.server.custom_handlers.handle(request)
+        if not response:
+          response = self.server.http_archive_fetch(request)
+        if response:
+          self.send_archived_http_response(response)
+        else:
+          self.send_error(404)
+      finally:
+        self.wfile.flush()  # Actually send the response if not already done.
     finally:
-      self.wfile.flush()  # Actually send the response if not already done.
+      request_time_ms = (time.time() - start_time) * 1000.0;
+      if request:
+        logging.debug('Served: %s (%dms)', request, request_time_ms)
+      self.server.total_request_time += request_time_ms
+      self.server.num_active_requests -= 1
 
   def send_error(self, status, body=None):
     """Override the default send error with a version that doesn't unnecessarily
