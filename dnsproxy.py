@@ -271,8 +271,8 @@ class DnsProxyServer(SocketServer.ThreadingUDPServer,
             'Unable to bind DNS server on (%s:%s)' % (host, port))
       raise
     self.dns_lookup = dns_lookup or (lambda host: self.server_address[0])
-    logging.warning('DNS server started on %s:%d', (self.server_address[0],
-                                                    self.server_address[1]))
+    logging.warning('DNS server started on %s:%d', self.server_address[0],
+                                                   self.server_address[1])
 
   def cleanup(self):
     try:
