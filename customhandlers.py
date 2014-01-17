@@ -194,4 +194,7 @@ class CustomHandlers(object):
     elif command == 'exit':
       self.server_manager.should_exit = True
       return SimpleResponse(200)
+    elif command == 'log':
+      logging.info('log command: %s', str(request.request_body)[:1000000])
+      return SimpleResponse(200)
     return None
