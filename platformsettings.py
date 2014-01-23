@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Provides cross-platform utility fuctions.
+"""Provides cross-platform utility functions.
 
 Example:
   import platformsettings
@@ -170,6 +170,12 @@ class _BasePlatformSettings(object):
     """
     logging.error('Platform does not support loopback configuration.')
 
+  def _save_primary_interface_properties(self):
+    self._orig_nameserver = self.get_original_primary_nameserver()
+
+  def _restore_primary_interface_properties(self):
+    self._set_primary_nameserver(self._orig_nameserver)
+
   def _get_primary_nameserver(self):
     raise NotImplementedError
 
@@ -184,11 +190,11 @@ class _BasePlatformSettings(object):
     return self._original_nameserver
 
   def set_temporary_primary_nameserver(self, nameserver):
-    orig_nameserver = self.get_original_primary_nameserver()
+    self._save_primary_interface_properties()
     self._set_primary_nameserver(nameserver)
     if self._get_primary_nameserver() == nameserver:
       logging.info('Changed temporary primary nameserver to %s', nameserver)
-      atexit.register(self._set_primary_nameserver, orig_nameserver)
+      atexit.register(self._restore_primary_interface_properties)
     else:
       raise self._get_dns_update_error()
 
@@ -583,26 +589,67 @@ class _WindowsPlatformSettings(_BasePlatformSettings):
     """
     return _check_output('netsh', 'interface', 'ip', 'show', 'dns')
 
-  def _get_primary_nameserver(self):
-    match = re.search(r':\s+(\d+\.\d+\.\d+\.\d+)', self._netsh_show_dns())
-    return match.group(1) if match else None
+  def _netsh_set_dns(self, iface_name, addr):
+    """Modify DNS information on the primary interface."""
+    output = _check_output('netsh', 'interface', 'ip', 'set', 'dns',
+                          iface_name, 'static', addr)
 
+  def _netsh_set_dns_dhcp(self, iface_name):
+    """Modify DNS information on the primary interface."""
+    output = _check_output('netsh', 'interface', 'ip', 'set', 'dns',
+                           iface_name, 'dhcp')
+                           
+  def _get_interfaces_with_dns(self):
+    output = self._netsh_show_dns()
+    lines = output.split('\n')
+    iface_re = re.compile(r'^Configuration for interface \"(?P<name>.*)\"')
+    dns_re = re.compile(r'(?P<kind>.*):\s+(?P<dns>\d+\.\d+\.\d+\.\d+)')
+    iface_name = None
+    iface_dns = None
+    iface_kind = None
+    ifaces = []
+    for line in lines:
+      iface_match = iface_re.match(line)
+      if iface_match:
+        iface_name = iface_match.group('name')
+      dns_match = dns_re.match(line)
+      if dns_match:
+        iface_dns = dns_match.group('dns')
+        iface_dns_config = dns_match.group('kind').strip()
+        if iface_dns_config == "Statically Configured DNS Servers":
+          iface_kind = "static"
+        elif iface_dns_config == "DNS servers configured through DHCP":
+          iface_kind = "dhcp"
+      if iface_name and iface_dns and iface_kind:
+        ifaces.append( (iface_dns, iface_name, iface_kind) )
+        iface_name = None
+        iface_dns = None
+    return ifaces
+
+  def _save_primary_interface_properties(self):
+    # TODO(etienneb): On windows, an interface can have multiple DNS server
+    # configured. We should save/restore all of them.
+    ifaces = self._get_interfaces_with_dns()
+    self._primary_interfaces = ifaces
+    
+  def _restore_primary_interface_properties(self):
+    for iface in self._primary_interfaces:
+      (iface_dns, iface_name, iface_kind) = iface 
+      self._netsh_set_dns(iface_name, iface_dns)
+      if iface_kind == "dhcp":
+        self._netsh_set_dns_dhcp(iface_name)
+    
+  def _get_primary_nameserver(self):
+    ifaces = self._get_interfaces_with_dns()
+    if not len(ifaces):
+      raise DnsUpdateError("Interface with valid DNS configured not found.")
+    (iface_dns, iface_name, iface_kind) = ifaces[0]
+    return iface_dns
+  
   def _set_primary_nameserver(self, dns):
-    vbs = """
-Set objWMIService = GetObject( _
-   "winmgmts:{impersonationLevel=impersonate}!\\\\.\\root\\cimv2")
-Set colNetCards = objWMIService.ExecQuery( _
-    "Select * From Win32_NetworkAdapterConfiguration Where IPEnabled = True")
-For Each objNetCard in colNetCards
-  arrDNSServers = Array("%s")
-  objNetCard.SetDNSServerSearchOrder(arrDNSServers)
-Next
-""" % dns
-    vbs_file = tempfile.NamedTemporaryFile(suffix='.vbs', delete=False)
-    vbs_file.write(vbs)
-    vbs_file.close()
-    subprocess.check_call(['cscript', '//nologo', vbs_file.name])
-    os.remove(vbs_file.name)
+    for iface in self._primary_interfaces:
+      (iface_dns, iface_name, iface_kind) = iface 
+      self._netsh_set_dns(iface_name, dns)
 
 
 class _WindowsXpPlatformSettings(_WindowsPlatformSettings):
