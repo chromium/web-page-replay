@@ -71,6 +71,10 @@ class RealDnsLookup(object):
       answers = self.resolver.query(hostname, rdtype)
     except dns.resolver.NXDOMAIN:
       return None
+    except dns.resolver.NoNameservers:
+      logging.debug('_real_dns_lookup(%s) -> No nameserver.',
+                    hostname)
+      return None
     except (dns.resolver.NoAnswer, dns.resolver.Timeout) as ex:
       logging.debug('_real_dns_lookup(%s) -> None (%s)',
                     hostname, ex.__class__.__name__)
@@ -83,7 +87,7 @@ class RealDnsLookup(object):
     return ip
 
   def ClearCache(self):
-    """Clearn the dns cache."""
+    """Clear the dns cache."""
     self.dns_cache_lock.acquire()
     self.dns_cache.clear()
     self.dns_cache_lock.release()
