@@ -26,12 +26,14 @@ For the full list of functions, see the bottom of the file.
 """
 
 import atexit
+import distutils.spawn
 import fileinput
 import logging
 import os
 import platform
 import re
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -69,31 +71,6 @@ class CalledProcessError(PlatformSettingsError):
             ' '.join(self.cmd), self.returncode)
 
 
-def _check_output(*args):
-  """Run Popen(*args) and return its output as a byte string.
-
-  Python 2.7 has subprocess.check_output. This is essentially the same
-  except that, as a convenience, all the positional args are used as
-  command arguments.
-
-  Args:
-    *args: sequence of program arguments
-  Raises:
-    CalledProcessError if the program returns non-zero exit status.
-  Returns:
-    output as a byte string.
-  """
-  command_args = [str(a) for a in args]
-  logging.debug(' '.join(command_args))
-  process = subprocess.Popen(command_args,
-      stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-  output = process.communicate()[0]
-  retcode = process.poll()
-  if retcode:
-    raise CalledProcessError(retcode, command_args)
-  return output
-
-
 class _BasePlatformSettings(object):
 
   def get_system_logging_handler(self):
@@ -127,8 +104,8 @@ class _BasePlatformSettings(object):
     raise NotImplementedError
 
   def ipfw(self, *args):
-    ipfw_cmd = self._ipfw_cmd() + args
-    return _check_output(*ipfw_cmd)
+    ipfw_cmd = (self._ipfw_cmd(), ) + args
+    return self._check_output(*ipfw_cmd, elevate_privilege=True)
 
   def ping_rtt(self, hostname):
     """Pings the hostname by calling the OS system ping command.
@@ -146,6 +123,43 @@ class _BasePlatformSettings(object):
 
   def _set_cwnd(self, args):
     pass
+
+  def _elevate_privilege_for_cmd(self, args):
+    return args
+
+  def _check_output(self, *args, **kwargs):
+    """Run Popen(*args) and return its output as a byte string.
+
+    Python 2.7 has subprocess.check_output. This is essentially the same
+    except that, as a convenience, all the positional args are used as
+    command arguments and the |elevate_privilege| kwarg is supported.
+
+    Args:
+      *args: sequence of program arguments
+      elevate_privilege: Run the command with elevated privileges.
+    Raises:
+      CalledProcessError if the program returns non-zero exit status.
+    Returns:
+      output as a byte string.
+    """
+    command_args = [str(a) for a in args]
+
+    if os.path.sep not in command_args[0]:
+      qualified = distutils.spawn.find_executable(command_args[0])
+      assert qualified, 'Failed to find %s in path' % command_args[0]
+      command_args[0] = qualified
+
+    if kwargs.get('elevate_privilege'):
+      command_args = self._elevate_privilege_for_cmd(command_args)
+
+    logging.debug(' '.join(command_args))
+    process = subprocess.Popen(
+        command_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    output = process.communicate()[0]
+    retcode = process.poll()
+    if retcode:
+      raise CalledProcessError(retcode, command_args)
+    return output
 
   def set_temporary_tcp_init_cwnd(self, cwnd):
     cwnd = int(cwnd)
@@ -204,7 +218,6 @@ class _PosixPlatformSettings(_BasePlatformSettings):
   PING_CMD = ('ping', '-c', '3', '-i', '0.2', '-W', '1')
   # For OsX Lion non-root:
   PING_RESTRICTED_CMD = ('ping', '-c', '1', '-i', '1', '-W', '1')
-  SUDO_PATH = '/usr/bin/sudo'
 
   def rerun_as_administrator(self):
     """If needed, rerun the program with administrative privileges.
@@ -213,15 +226,38 @@ class _PosixPlatformSettings(_BasePlatformSettings):
     """
     if os.geteuid() != 0:
       logging.warn('Rerunning with sudo: %s', sys.argv)
-      os.execv(self.SUDO_PATH, ['--'] + sys.argv)
+      os.execv('sudo', ['--'] + sys.argv)
+
+  def _elevate_privilege_for_cmd(self, args):
+    def IsSetUID(path):
+      return (os.stat(path).st_mode & stat.S_ISUID) == stat.S_ISUID
+
+    def IsElevated():
+      p = subprocess.Popen(
+          ['sudo', '-nv'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+          stderr=subprocess.STDOUT)
+      stdout = p.communicate()[0]
+      # Some versions of sudo set the returncode based on whether sudo requires
+      # a password currently. Other versions return output when password is
+      # required and no output when the user is already authenticated.
+      return not p.returncode and not stdout
+
+    if not IsSetUID(args[0]):
+      args = ['sudo'] + args
+
+      if not IsElevated():
+        print 'WPR needs to run %s under sudo. Please authenticate.' % args[1]
+        subprocess.check_call(['sudo', '-v'])  # Synchronously authenticate.
+
+        prompt = ('Would you like to always allow %s to be run as the current '
+                  'user without sudo? If so, WPR will `sudo chmod +s %s`. '
+                  '(y/N)' % (args[1], args[1]))
+        if raw_input(prompt).lower() == 'y':
+          subprocess.check_call(['sudo', 'chmod', '+s', args[1]])
+    return args
 
   def _ipfw_cmd(self):
-    for ipfw_path in ['/usr/local/sbin/ipfw', '/sbin/ipfw']:
-      if os.path.exists(ipfw_path):
-        ipfw_cmd = (self.SUDO_PATH, ipfw_path)
-        self._ipfw_cmd = lambda: ipfw_cmd  # skip rechecking paths
-        return ipfw_cmd
-    raise PlatformSettingsError('ipfw not found.')
+    return 'ipfw'
 
   def _ping(self, hostname):
     """Return ping output or None if ping fails.
@@ -280,12 +316,9 @@ class _PosixPlatformSettings(_BasePlatformSettings):
 
   @classmethod
   def _sysctl(cls, *args, **kwargs):
-    sysctl_args = []
+    sysctl_args = [distutils.spawn.find_executable('sysctl')]
     if kwargs.get('use_sudo'):
-      sysctl_args.append(cls.SUDO_PATH)
-    sysctl_args.append('/usr/sbin/sysctl')
-    if not os.path.exists(sysctl_args[-1]):
-      sysctl_args[-1] = '/sbin/sysctl'
+      sysctl_args = _elevate_privilege_for_cmd(sysctl_args)
     sysctl_args.extend(str(a) for a in args)
     sysctl = subprocess.Popen(
         sysctl_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -312,21 +345,18 @@ class _PosixPlatformSettings(_BasePlatformSettings):
       logging.error('Unable to get sysctl %s: %s', name, rv)
       return None
 
-  def _check_output(self, *args):
-    """Allow tests to override this."""
-    return _check_output(*args)
-
 
 class _OsxPlatformSettings(_PosixPlatformSettings):
   LOCAL_SLOWSTART_MIB_NAME = 'net.inet.tcp.local_slowstart_flightsize'
 
   def _scutil(self, cmd):
     scutil = subprocess.Popen(
-        ['/usr/sbin/scutil'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        [distutils.spawn.find_executable('scutil')], stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE)
     return scutil.communicate(cmd)[0]
 
   def _ifconfig(self, *args):
-    return _check_output(self.SUDO_PATH, '/sbin/ifconfig', *args)
+    return self._check_output('ifconfig', *args, elevate_privilege=True)
 
   def set_sysctl(self, name, value):
     rv = self._sysctl('-w', '%s=%s' % (name, value), use_sudo=True)[0]
@@ -533,13 +563,13 @@ class _WindowsPlatformSettings(_BasePlatformSettings):
     return time.clock()
 
   def _arp(self, *args):
-    return _check_output('arp', *args)
+    return self._check_output('arp', *args)
 
   def _route(self, *args):
-    return _check_output('route', *args)
+    return self._check_output('route', *args)
 
   def _ipconfig(self, *args):
-    return _check_output('ipconfig', *args)
+    return self._check_output('ipconfig', *args)
 
   def _get_mac_address(self, ip):
     """Return the MAC address for the given ip."""
@@ -587,17 +617,17 @@ class _WindowsPlatformSettings(_BasePlatformSettings):
         DNS servers configured through DHCP:  192.168.1.1
         Register with which suffix:           Primary only
     """
-    return _check_output('netsh', 'interface', 'ip', 'show', 'dns')
+    return self._check_output('netsh', 'interface', 'ip', 'show', 'dns')
 
   def _netsh_set_dns(self, iface_name, addr):
     """Modify DNS information on the primary interface."""
-    output = _check_output('netsh', 'interface', 'ip', 'set', 'dns',
-                          iface_name, 'static', addr)
+    output = self._check_output('netsh', 'interface', 'ip', 'set', 'dns',
+                                iface_name, 'static', addr)
 
   def _netsh_set_dns_dhcp(self, iface_name):
     """Modify DNS information on the primary interface."""
-    output = _check_output('netsh', 'interface', 'ip', 'set', 'dns',
-                           iface_name, 'dhcp')
+    output = self._check_output('netsh', 'interface', 'ip', 'set', 'dns',
+                                iface_name, 'dhcp')
                            
   def _get_interfaces_with_dns(self):
     output = self._netsh_show_dns()

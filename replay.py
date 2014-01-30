@@ -94,7 +94,8 @@ def AddDnsForward(server_manager, host):
   server_manager.Append(platformsettings.set_temporary_primary_nameserver, host)
 
 
-def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
+def AddDnsProxy(server_manager, options, host, port, real_dns_lookup,
+                http_archive):
   dns_filters = []
   if options.dns_private_passthrough:
     private_filter = dnsproxy.PrivateIpFilter(real_dns_lookup, http_archive)
@@ -106,7 +107,7 @@ def AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive):
     dns_filters.append(delay_filter)
     server_manager.AppendRecordCallback(delay_filter.SetRecordMode)
     server_manager.AppendReplayCallback(delay_filter.SetReplayMode)
-  server_manager.Append(dnsproxy.DnsProxyServer, host,
+  server_manager.Append(dnsproxy.DnsProxyServer, host, port,
                         dns_lookup=dnsproxy.ReplayDnsLookup(host, dns_filters))
 
 
@@ -153,6 +154,7 @@ def AddTrafficShaper(server_manager, options, host):
     ssl_port = options.ssl_shaping_port if options.ssl else None
     kwargs = dict(
         host=host, port=options.shaping_port, ssl_port=ssl_port,
+        dns_port=options.dns_shaping_port,
         use_loopback=not options.server_mode and host == '127.0.0.1',
         **options.shaping_dummynet)
     if not options.dns_forwarding:
@@ -252,6 +254,8 @@ class OptionsWrapper(object):
       self._options.shaping_port = self.port
     if not self.ssl_shaping_port:
       self._options.ssl_shaping_port = self.ssl_port
+    if not self.dns_shaping_port:
+      self._options.dns_shaping_port = self.dns_port
     if not self.ssl:
       self._options.certfile = None
     self.shaping_dns = self._ShapingKeywordArgs('dns')
@@ -268,10 +272,10 @@ class OptionsWrapper(object):
 
   def IsRootRequired(self):
     """Returns True iff the options require root access."""
-    return (self.shaping_dummynet or
-            self.dns_forwarding or
+    return (self.dns_forwarding or
             (self.port and self.port < 1024) or
-            (self.port and self.ssl_port < 1024)) and self.admin_check
+            (self.ssl_port and self.ssl_port < 1024) or
+            (self.dns_port and self.dns_port < 1024)) and self.admin_check
 
 
 def replay(options, replay_filename):
@@ -316,7 +320,8 @@ def replay(options, replay_filename):
     if options.dns_forwarding:
       if not options.server_mode and host == '127.0.0.1':
         AddDnsForward(server_manager, host)
-      AddDnsProxy(server_manager, options, host, real_dns_lookup, http_archive)
+      AddDnsProxy(server_manager, options, host, options.dns_port,
+                  real_dns_lookup, http_archive)
     if options.ssl and options.certfile is None:
       options.certfile = os.path.join(os.path.dirname(__file__), 'wpr_cert.pem')
     http_proxy_address = options.host
@@ -493,20 +498,25 @@ def GetOptionParser():
       action='store',
       type='int',
       help='SSL port number to listen on.')
+  harness_group.add_option('--dns_port', default=53,
+      action='store',
+      type='int',
+      help='DNS port number to listen on.')
   harness_group.add_option('--shaping_port', default=None,
       action='store',
       type='int',
       help='Port on which to apply traffic shaping.  Defaults to the '
            'listen port (--port)')
-  harness_group.add_option('--scramble_images', default=False,
-      action='store_true',
-      dest='scramble_images',
-      help='Scramble image responses.')
   harness_group.add_option('--ssl_shaping_port', default=None,
       action='store',
       type='int',
       help='SSL port on which to apply traffic shaping.  Defaults to the '
            'SSL listen port (--ssl_port)')
+  harness_group.add_option('--dns_shaping_port', default=None,
+      action='store',
+      type='int',
+      help='DNS port on which to apply traffic shaping.  Defaults to the '
+           'DNS listen port (--dns_port)')
   harness_group.add_option('-c', '--certfile', default=None,
       action='store',
       type='string',
@@ -520,6 +530,10 @@ def GetOptionParser():
       action='store_false',
       dest='admin_check',
       help='Do not check if administrator access is needed.')
+  harness_group.add_option('--scramble_images', default=False,
+      action='store_true',
+      dest='scramble_images',
+      help='Scramble image responses.')
   return option_parser
 
 
