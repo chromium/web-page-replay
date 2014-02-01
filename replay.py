@@ -271,15 +271,27 @@ class OptionsWrapper(object):
     return json.dumps(self._options.__dict__)
 
   def IsRootRequired(self):
-    """Returns True iff the options require root access."""
-    return (self.dns_forwarding or
-            (self.port and self.port < 1024) or
-            (self.ssl_port and self.ssl_port < 1024) or
-            (self.dns_port and self.dns_port < 1024)) and self.admin_check
+    """Returns True iff the options require whole program root access."""
+    if self.server:
+      return True
+
+    def IsPrivilegedPort(port):
+      return port and port < 1024
+
+    if IsPrivilegedPort(self.port) or IsPrivilegedPort(self.ssl_port):
+      return True
+
+    if self.dns_forwarding:
+      if IsPrivilegedPort(self.dns_port):
+        return True
+      if not self.server_mode and host == '127.0.0.1':
+        return True
+
+    return False
 
 
 def replay(options, replay_filename):
-  if options.IsRootRequired():
+  if options.admin_check and options.IsRootRequired():
     platformsettings.rerun_as_administrator()
   configure_logging(options.log_level, options.log_file)
   server_manager = servermanager.ServerManager(options.record)

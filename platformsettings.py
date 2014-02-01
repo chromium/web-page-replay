@@ -145,9 +145,9 @@ class _BasePlatformSettings(object):
     command_args = [str(a) for a in args]
 
     if os.path.sep not in command_args[0]:
-      qualified = distutils.spawn.find_executable(command_args[0])
-      assert qualified, 'Failed to find %s in path' % command_args[0]
-      command_args[0] = qualified
+      qualified_command = distutils.spawn.find_executable(command_args[0])
+      assert qualified_command, 'Failed to find %s in path' % command_args[0]
+      command_args[0] = qualified_command
 
     if kwargs.get('elevate_privilege'):
       command_args = self._elevate_privilege_for_cmd(command_args)
@@ -226,7 +226,7 @@ class _PosixPlatformSettings(_BasePlatformSettings):
     """
     if os.geteuid() != 0:
       logging.warn('Rerunning with sudo: %s', sys.argv)
-      os.execv('sudo', ['--'] + sys.argv)
+      os.execv('/usr/bin/sudo', ['--'] + sys.argv)
 
   def _elevate_privilege_for_cmd(self, args):
     def IsSetUID(path):
@@ -249,9 +249,8 @@ class _PosixPlatformSettings(_BasePlatformSettings):
         print 'WPR needs to run %s under sudo. Please authenticate.' % args[1]
         subprocess.check_call(['sudo', '-v'])  # Synchronously authenticate.
 
-        prompt = ('Would you like to always allow %s to be run as the current '
-                  'user without sudo? If so, WPR will `sudo chmod +s %s`. '
-                  '(y/N)' % (args[1], args[1]))
+        prompt = ('Would you like to always allow %s to run without sudo '
+                  '(via `sudo chmod +s %s`)? (y/N)' % (args[1], args[1]))
         if raw_input(prompt).lower() == 'y':
           subprocess.check_call(['sudo', 'chmod', '+s', args[1]])
     return args
