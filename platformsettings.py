@@ -71,6 +71,25 @@ class CalledProcessError(PlatformSettingsError):
             ' '.join(self.cmd), self.returncode)
 
 
+def FindExecutable(executable):
+  """Finds the given executable in PATH.
+
+  Since WPR may be invoked as sudo, meaning PATH is empty, we also hardcode a
+  few common paths.
+
+  Returns:
+    The fully qualified path with .exe appended if appropriate or None if it
+    doesn't exist.
+  """
+  return distutils.spawn.find_executable(executable,
+                                         os.pathsep.join([os.environ['PATH'],
+                                                          '/sbin',
+                                                          '/usr/bin',
+                                                          '/usr/sbin/',
+                                                          '/usr/local/sbin',
+                                                          ]))
+
+
 class _BasePlatformSettings(object):
 
   def get_system_logging_handler(self):
@@ -145,7 +164,7 @@ class _BasePlatformSettings(object):
     command_args = [str(a) for a in args]
 
     if os.path.sep not in command_args[0]:
-      qualified_command = distutils.spawn.find_executable(command_args[0])
+      qualified_command = FindExecutable(command_args[0])
       assert qualified_command, 'Failed to find %s in path' % command_args[0]
       command_args[0] = qualified_command
 
@@ -315,7 +334,7 @@ class _PosixPlatformSettings(_BasePlatformSettings):
 
   @classmethod
   def _sysctl(cls, *args, **kwargs):
-    sysctl_args = [distutils.spawn.find_executable('sysctl')]
+    sysctl_args = [FindExecutable('sysctl')]
     if kwargs.get('use_sudo'):
       sysctl_args = _elevate_privilege_for_cmd(sysctl_args)
     sysctl_args.extend(str(a) for a in args)
@@ -349,9 +368,8 @@ class _OsxPlatformSettings(_PosixPlatformSettings):
   LOCAL_SLOWSTART_MIB_NAME = 'net.inet.tcp.local_slowstart_flightsize'
 
   def _scutil(self, cmd):
-    scutil = subprocess.Popen(
-        [distutils.spawn.find_executable('scutil')], stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE)
+    scutil = subprocess.Popen([FindExecutable('scutil')],
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     return scutil.communicate(cmd)[0]
 
   def _ifconfig(self, *args):
