@@ -53,9 +53,7 @@ class TrafficShaper(object):
   def __init__(self,
                dont_use=None,
                host='127.0.0.1',
-               port='80',
-               ssl_port='443',
-               dns_port='53',
+               ports=None,
                up_bandwidth='0',
                down_bandwidth='0',
                delay_ms='0',
@@ -66,9 +64,7 @@ class TrafficShaper(object):
 
     Args:
       host: a host string (name or IP) for the web proxy.
-      port: a port string (e.g. '80') for the web proxy.
-      ssl_port: a port string (e.g. '443') for the SSL web proxy.
-      dns_port: a port string for the dns proxy (for unit testing).
+      ports: a list of ports to shape traffic on.
       up_bandwidth: Upload bandwidth
       down_bandwidth: Download bandwidth
            Bandwidths measured in [K|M]{bit/s|Byte/s}. '0' means unlimited.
@@ -79,9 +75,7 @@ class TrafficShaper(object):
     """
     assert dont_use is None  # Force args to be named.
     self.host = host
-    self.port = port
-    self.ssl_port = ssl_port
-    self.dns_port = dns_port
+    self.ports = ports
     self.up_bandwidth = up_bandwidth
     self.down_bandwidth = down_bandwidth
     self.delay_ms = delay_ms
@@ -110,11 +104,10 @@ class TrafficShaper(object):
         self.delay_ms == '0' and self.packet_loss_rate == '0'):
       logging.info('Skipped shaping traffic.')
       return
-    if not self.dns_port and not self.port:
+    if not self.ports:
       raise TrafficShaperException('No ports on which to shape traffic.')
 
-    ports = ','.join(
-        str(p) for p in (self.port, self.ssl_port, self.dns_port) if p)
+    ports = ','.join(str(p) for p in self.ports)
     half_delay_ms = int(self.delay_ms) / 2  # split over up/down links
 
     try:

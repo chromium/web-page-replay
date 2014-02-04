@@ -33,6 +33,7 @@ class ServerManager(object):
     self.initializers = []
     self.record_callbacks = []
     self.replay_callbacks = []
+    self.traffic_shapers = []
     self.is_record_mode = is_record_mode
     self.should_exit = False
 
@@ -49,6 +50,17 @@ class ServerManager(object):
       init_args: keyword arguments for the initializer.
     """
     self.initializers.append((initializer, init_args, init_kwargs))
+
+  def AppendTrafficShaper(self, initializer, *init_args, **init_kwargs):
+    """Append a traffic shaper to the end of the list to run.
+
+    Args:
+      initializer: a function that returns a server instance.
+          A server needs to implement the with-statement interface.
+      init_args: positional arguments for the initializer.
+      init_args: keyword arguments for the initializer.
+    """
+    self.traffic_shapers.append((initializer, init_args, init_kwargs))
 
   def AppendRecordCallback(self, func):
     """Append a function to the list to call when switching to record mode.
@@ -91,6 +103,7 @@ class ServerManager(object):
       any exception raised by the servers
     """
     server_exits = []
+    server_ports = []
     exception_info = (None, None, None)
     try:
       for initializer, init_args, init_kwargs in self.initializers:
@@ -98,6 +111,14 @@ class ServerManager(object):
         if server:
           server_exits.insert(0, server.__exit__)
           server.__enter__()
+          if hasattr(server, 'server_port'):
+            server_ports.append(server.server_port)
+      for initializer, init_args, init_kwargs in self.traffic_shapers:
+        init_kwargs['ports'] = server_ports
+        shaper = initializer(*init_args, **init_kwargs)
+        if server:
+          server_exits.insert(0, shaper.__exit__)
+          shaper.__enter__()
       while True:
         time.sleep(1)
         if self.should_exit:

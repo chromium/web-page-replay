@@ -151,15 +151,10 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
 
 def AddTrafficShaper(server_manager, options, host):
   if options.shaping_dummynet:
-    ssl_port = options.ssl_shaping_port if options.ssl else None
-    kwargs = dict(
-        host=host, port=options.shaping_port, ssl_port=ssl_port,
-        dns_port=options.dns_shaping_port,
+    server_manager.AppendTrafficShaper(
+        trafficshaper.TrafficShaper, host=host,
         use_loopback=not options.server_mode and host == '127.0.0.1',
         **options.shaping_dummynet)
-    if not options.dns_forwarding:
-      kwargs['dns_port'] = None
-    server_manager.Append(trafficshaper.TrafficShaper, **kwargs)
 
 
 class OptionsWrapper(object):
@@ -250,12 +245,6 @@ class OptionsWrapper(object):
       self._options.down, self._options.up, self._options.delay_ms = \
           net_configs.GetNetConfig(self.net)
       self._nondefaults.update(['down', 'up', 'delay_ms'])
-    if not self.shaping_port:
-      self._options.shaping_port = self.port
-    if not self.ssl_shaping_port:
-      self._options.ssl_shaping_port = self.ssl_port
-    if not self.dns_shaping_port:
-      self._options.dns_shaping_port = self.dns_port
     if not self.ssl:
       self._options.certfile = None
     self.shaping_dns = self._ShapingKeywordArgs('dns')
@@ -514,21 +503,6 @@ def GetOptionParser():
       action='store',
       type='int',
       help='DNS port number to listen on.')
-  harness_group.add_option('--shaping_port', default=None,
-      action='store',
-      type='int',
-      help='Port on which to apply traffic shaping.  Defaults to the '
-           'listen port (--port)')
-  harness_group.add_option('--ssl_shaping_port', default=None,
-      action='store',
-      type='int',
-      help='SSL port on which to apply traffic shaping.  Defaults to the '
-           'SSL listen port (--ssl_port)')
-  harness_group.add_option('--dns_shaping_port', default=None,
-      action='store',
-      type='int',
-      help='DNS port on which to apply traffic shaping.  Defaults to the '
-           'DNS listen port (--dns_port)')
   harness_group.add_option('-c', '--certfile', default=None,
       action='store',
       type='string',
