@@ -284,7 +284,7 @@ class OptionsWrapper(object):
     if self.dns_forwarding:
       if IsPrivilegedPort(self.dns_port):
         return True
-      if not self.server_mode and host == '127.0.0.1':
+      if not self.server_mode and self.host == '127.0.0.1':
         return True
 
     return False
