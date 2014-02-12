@@ -458,7 +458,7 @@ class ArchivedHttpRequest(object):
     self.command = command
     self.host = host
     self.path = path
-    self.path_without_query = urlparse.urlparse(path).path
+    self.path_without_query = urlparse.urlparse(path).path if path else None
     self.request_body = request_body
     self.headers = headers
     self.is_ssl = is_ssl
