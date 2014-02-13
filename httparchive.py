@@ -370,7 +370,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       use_path: If True, closest matching request's path component must match.
         (Note: this refers to the 'path' component within the URL, not the
          query string component.)
-        If use_path=False, candidate will NOT match in example below
+        If use_path=True, candidate will NOT match in example below
         e.g. request   = GET www.test.com/path?aaa
              candidate = GET www.test.com/diffpath?aaa
     Returns:
