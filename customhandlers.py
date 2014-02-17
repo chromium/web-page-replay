@@ -90,8 +90,8 @@ class CustomHandlers(object):
       ArchivedHttpResponse or None.
     """
     for prefix, handler in self.handlers:
-      if request.path.startswith(prefix):
-        return handler(request, request.path[len(prefix):])
+      if request.full_path.startswith(prefix):
+        return handler(request, request.full_path[len(prefix):])
     return None
 
   def get_generator_url_response_code(self, request, url_suffix):

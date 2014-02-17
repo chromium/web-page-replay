@@ -83,21 +83,21 @@ class HttpArchiveTest(unittest.TestCase):
         'GET', 'www.test.com', '/index.html?foo=bar', None, headers)
 
     self.assert_(not request1.matches(
-        request2.command, request2.host, request2.path, use_query=True))
+        request2.command, request2.host, request2.full_path, use_query=True))
     self.assert_(request1.matches(
-        request2.command, request2.host, request2.path, use_query=False))
+        request2.command, request2.host, request2.full_path, use_query=False))
 
     self.assert_(request1.matches(
         request2.command, request2.host, None, use_query=True))
     self.assert_(request1.matches(
-        request2.command, None, request2.path, use_query=False))
+        request2.command, None, request2.full_path, use_query=False))
 
     empty_request = httparchive.ArchivedHttpRequest(
         None, None, None, None, headers)
     self.assert_(not empty_request.matches(
         request2.command, request2.host, None, use_query=True))
     self.assert_(not empty_request.matches(
-        request2.command, None, request2.path, use_query=False))
+        request2.command, None, request2.full_path, use_query=False))
 
   def setup_find_closest_request(self):
     headers = {}

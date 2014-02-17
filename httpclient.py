@@ -262,7 +262,7 @@ class RealHttpFetch(object):
     Returns:
       an ArchivedHttpResponse
     """
-    logging.debug('RealHttpFetch: %s %s', request.host, request.path)
+    logging.debug('RealHttpFetch: %s %s', request.host, request.full_path)
     if ':' in request.host:
       parts = request.host.split(':')
       truehost = parts[0]
@@ -291,7 +291,7 @@ class RealHttpFetch(object):
         start = TIMER()
         connection.request(
             request.command,
-            request.path,
+            request.full_path,
             request.request_body,
             request.headers)
         response = connection.getresponse()
