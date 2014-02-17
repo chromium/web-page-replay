@@ -15,6 +15,7 @@
 
 import BaseHTTPServer
 import daemonserver
+import errno
 import httparchive
 import logging
 import os
@@ -156,6 +157,12 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.log_error("Request timed out: %r", e)
       self.close_connection = 1
       return
+    except socket.error, e:
+      # Connection reset errors happen all the time due to the browser closing
+      # without terminating the connection properly.  They can be safely
+      # ignored.
+      if e[0] != errno.ECONNRESET:
+        raise
 
   def do_parse_and_handle_one_request(self):
     start_time = time.time()
