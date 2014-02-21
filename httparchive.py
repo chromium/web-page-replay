@@ -891,18 +891,18 @@ def main():
 
   http_archive = HttpArchive.Load(replay_file)
   if command == 'ls':
-    print http_archive.ls(options.command, options.host, options.path)
+    print http_archive.ls(options.command, options.host, options.full_path)
   elif command == 'cat':
-    print http_archive.cat(options.command, options.host, options.path)
+    print http_archive.cat(options.command, options.host, options.full_path)
   elif command == 'stats':
-    print http_archive.stats(options.command, options.host, options.path)
+    print http_archive.stats(options.command, options.host, options.full_path)
   elif command == 'merge':
     if not options.merged_file:
       print 'Error: Must specify a merged file name (use --merged_file)'
       return
     http_archive.merge(options.merged_file, args[2:])
   elif command == 'edit':
-    http_archive.edit(options.command, options.host, options.path)
+    http_archive.edit(options.command, options.host, options.full_path)
     http_archive.Persist(replay_file)
   else:
     option_parser.error('Unknown command "%s"' % command)
