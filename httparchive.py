@@ -761,7 +761,8 @@ class ArchivedHttpResponse(object):
     content_type = self.get_header('content-type')
     if (not content_type or
         not (content_type.startswith('text/') or
-             content_type == 'application/x-javascript')):
+             content_type == 'application/x-javascript' or
+             content_type.startswith('application/json'))):
       return None
     if self.is_compressed():
       uncompressed_chunks = httpzlib.uncompress_chunks(
