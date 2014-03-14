@@ -9,12 +9,12 @@ the origin servers, the network, etc.
 
 ## Tell me more
 Check out the [getting
-started](blob/master/documentation/GettingStarted.md) guide or take a
+started](documentation/GettingStarted.md) guide or take a
 look at the [architecture
-diagram](blob/master/documentation/WebPageReplatDiagram.png).
+diagram](documentation/WebPageReplatDiagram.png).
 
 ## I want to help
 If you find issues with the project, you can file issues on this repo.
 If you want to do more and contribute code to help the project evolve,
 check out our [contribution
-guidelines](blob/master/documentation/Contributing.md).
+guidelines](documentation/Contributing.md).
