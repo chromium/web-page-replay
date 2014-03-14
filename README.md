@@ -1,4 +1,20 @@
 # Web Page Replay
-Record web pages using a local DNS and local HTTP/HTTPS servers which
-act as proxies and record performance metrics in addition to the actual
-resources.
+Record live Web pages and use them for local performance testing!
+
+## How?
+Use local DNS and HTTP(S) proxies to captures your live traffic. Then
+use these captures in order to replay the same exact content, making
+sure that your tests get consistent results, that are not affected by
+the origin servers, the network, etc.
+
+## Tell me more
+Check out the [getting
+started](blob/master/documentation/GettingStarted.md) guide or take a
+look at the [architecture
+diagram](blob/master/documentation/WebPageReplatDiagram.png).
+
+## I want to help
+If you find issues with the project, you can file issues on this repo.
+If you want to do more and contribute code to help the project evolve,
+check out our [contribution
+guidelines](blob/master/documentation/Contributing.md).
