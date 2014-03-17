@@ -315,9 +315,9 @@ def replay(options, replay_filename):
     server_manager.AppendRecordCallback(real_dns_lookup.ClearCache)
     server_manager.AppendRecordCallback(http_archive.clear)
 
-    # compute the ip/host used for the DNS server and traffic shaping
     ipfw_dns_host = None
     if options.dns_forwarding or options.shaping_dummynet:
+      # compute the ip/host used for the DNS server and traffic shaping
       ipfw_dns_host = options.host
       if not ipfw_dns_host:
         ipfw_dns_host = platformsettings.get_server_ip_address(options.server_mode)
