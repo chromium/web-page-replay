@@ -57,8 +57,6 @@ import time
 import urlparse
 from collections import defaultdict
 
-import platformsettings
-
 
 def LogRunTime(fn):
   """Annotation which logs the run time of the function."""
