@@ -298,9 +298,6 @@ def replay(options, replay_filename):
   if options.server:
     AddDnsForward(server_manager, options.server)
   else:
-    host = options.host
-    if not host:
-      host = platformsettings.get_server_ip_address(options.server_mode)
     real_dns_lookup = dnsproxy.RealDnsLookup(
         name_servers=[platformsettings.get_original_primary_nameserver()])
     if options.record:
@@ -318,10 +315,17 @@ def replay(options, replay_filename):
     server_manager.AppendRecordCallback(real_dns_lookup.ClearCache)
     server_manager.AppendRecordCallback(http_archive.clear)
 
+    # compute the ip/host used for the DNS server and traffic shaping
+    ipfw_dns_host = None
+    if options.dns_forwarding or options.shaping_dummynet:
+      ipfw_dns_host = options.host
+      if not ipfw_dns_host:
+        ipfw_dns_host = platformsettings.get_server_ip_address(options.server_mode)
+
     if options.dns_forwarding:
-      if not options.server_mode and host == '127.0.0.1':
-        AddDnsForward(server_manager, host)
-      AddDnsProxy(server_manager, options, host, options.dns_port,
+      if not options.server_mode and ipfw_dns_host == '127.0.0.1':
+        AddDnsForward(server_manager, ipfw_dns_host)
+      AddDnsProxy(server_manager, options, ipfw_dns_host, options.dns_port,
                   real_dns_lookup, http_archive)
     if options.ssl and options.certfile is None:
       options.certfile = os.path.join(os.path.dirname(__file__), 'wpr_cert.pem')
@@ -331,7 +335,7 @@ def replay(options, replay_filename):
           options.server_mode)
     AddWebProxy(server_manager, options, http_proxy_address, real_dns_lookup,
                 http_archive, cache_misses)
-    AddTrafficShaper(server_manager, options, host)
+    AddTrafficShaper(server_manager, options, ipfw_dns_host)
 
   exit_status = 0
   try:
