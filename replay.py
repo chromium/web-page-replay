@@ -320,7 +320,8 @@ def replay(options, replay_filename):
       # compute the ip/host used for the DNS server and traffic shaping
       ipfw_dns_host = options.host
       if not ipfw_dns_host:
-        ipfw_dns_host = platformsettings.get_server_ip_address(options.server_mode)
+        ipfw_dns_host = platformsettings.get_server_ip_address(
+            options.server_mode)
 
     if options.dns_forwarding:
       if not options.server_mode and ipfw_dns_host == '127.0.0.1':
