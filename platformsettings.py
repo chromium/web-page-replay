@@ -374,6 +374,41 @@ class _OsxPlatformSettings(_PosixPlatformSettings):
     self._scutil(command)
 
 
+class _FreeBSDPlatformSettings(_PosixPlatformSettings):
+  """Partial implementation for FreeBSD.  Does not allow a DNS server to be
+  launched nor ipfw to be used.
+  """
+  RESOLV_CONF = '/etc/resolv.conf'
+
+  def _get_default_route_line(self):
+    raise NotImplementedError
+
+  def _set_cwnd(self, cwnd):
+    raise NotImplementedError
+
+  def _get_cwnd(self):
+    raise NotImplementedError
+
+  def setup_temporary_loopback_config(self):
+    raise NotImplementedError
+
+  def _write_resolve_conf(self, dns):
+    raise NotImplementedError
+
+  def _get_primary_nameserver(self):
+    try:
+      resolv_file = open(self.RESOLV_CONF)
+    except IOError:
+      raise DnsReadError()
+    for line in resolv_file:
+      if line.startswith('nameserver '):
+        return line.split()[1]
+    raise DnsReadError()
+
+  def _set_primary_nameserver(self, dns):
+    raise NotImplementedError
+
+
 class _LinuxPlatformSettings(_PosixPlatformSettings):
   """The following thread recommends a way to update DNS on Linux:
 
@@ -647,6 +682,8 @@ def _new_platform_settings(system, release):
     return _WindowsXpPlatformSettings()
   if system == 'Windows':
     return _WindowsPlatformSettings()
+  if system == 'FreeBSD':
+    return _FreeBSDPlatformSettings()
   raise NotImplementedError('Sorry %s %s is not supported.' % (system, release))
 
 
