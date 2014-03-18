@@ -184,15 +184,13 @@ class DetailedHTTPSConnection(httplib.HTTPSConnection):
 
 
 class RealHttpFetch(object):
-  def __init__(self, real_dns_lookup, get_server_rtt):
+  def __init__(self, real_dns_lookup):
     """Initialize RealHttpFetch.
 
     Args:
       real_dns_lookup: a function that resolves a host to an IP.
-      get_server_rtt: a function that returns the round-trip time of a host.
     """
     self._real_dns_lookup = real_dns_lookup
-    self._get_server_rtt = get_server_rtt
 
   @staticmethod
   def _GetHeaderNameValue(header):
@@ -288,6 +286,9 @@ class RealHttpFetch(object):
             connection = DetailedHTTPConnection(host_ip, trueport)
           else:
             connection = DetailedHTTPConnection(host_ip)
+        connect_start = TIMER()
+        connection.connect()
+        connect_delay = int((TIMER() - connect_start) * 1000)
         start = TIMER()
         connection.request(
             request.command,
@@ -296,10 +297,10 @@ class RealHttpFetch(object):
             request.headers)
         response = connection.getresponse()
         headers_delay = int((TIMER() - start) * 1000)
-        headers_delay -= self._get_server_rtt(request.host)
 
         chunks, chunk_delays = response.read_chunks()
         delays = {
+            'connect': connect_delay,
             'headers': headers_delay,
             'data': chunk_delays
             }
@@ -334,8 +335,7 @@ class RecordHttpArchiveFetch(object):
       cache_misses: instance of CacheMissArchive
     """
     self.http_archive = http_archive
-    self.real_http_fetch = RealHttpFetch(real_dns_lookup,
-                                         http_archive.get_server_rtt)
+    self.real_http_fetch = RealHttpFetch(real_dns_lookup)
     self.inject_script = inject_script
     self.cache_misses = cache_misses
 
@@ -391,8 +391,7 @@ class ReplayHttpArchiveFetch(object):
     self.cache_misses = cache_misses
     self.use_closest_match = use_closest_match
     self.scramble_images = scramble_images
-    self.real_http_fetch = RealHttpFetch(real_dns_lookup,
-                                         http_archive.get_server_rtt)
+    self.real_http_fetch = RealHttpFetch(real_dns_lookup)
 
   def __call__(self, request):
     """Fetch the request and return the response.

@@ -141,12 +141,14 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
     server_manager.Append(
         httpproxy.HttpProxyServer,
         archive_fetch, custom_handlers,
-        host=host, port=options.port, **options.shaping_http)
+        host=host, port=options.port, use_delays=options.use_server_delay,
+        **options.shaping_http)
     if options.ssl:
       server_manager.Append(
           httpproxy.HttpsProxyServer,
           archive_fetch, custom_handlers, options.certfile,
-          host=host, port=options.ssl_port, **options.shaping_http)
+          host=host, port=options.ssl_port, use_delays=options.use_server_delay,
+          **options.shaping_http)
 
 
 def AddTrafficShaper(server_manager, options, host):

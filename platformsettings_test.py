@@ -198,48 +198,5 @@ class OsxPlatformSettingsTest(unittest.TestCase):
                       self.settings._get_primary_nameserver)
 
 
-PING_OUTPUT = '''PING www.a.shifen.com (119.75.218.77) 56(84) bytes of data.
-
---- www.a.shifen.com ping statistics ---
-3 packets transmitted, 3 received, 0% packet loss, time 2204ms
-rtt min/avg/max/mdev = 191.206/191.649/191.980/0.325 ms
-'''
-PING_AVG = 191.649
-
-class PingSettings(platformsettings._PosixPlatformSettings):
-  def __init__(self):
-    super(PingSettings, self).__init__()
-    self.working_cmd = None
-    self.working_output = None
-
-  def _check_output(self, *args):
-    if self.working_cmd and ' '.join(self.working_cmd) == ' '.join(args[:-1]):
-      return self.working_output
-    raise platformsettings.CalledProcessError(99, args)
-
-class PingTest(unittest.TestCase):
-  def setUp(self):
-    self.settings = PingSettings()
-
-  def testNoWorkingPingReturnsZero(self):
-    self.assertEqual(0, self.settings.ping_rtt('www.noworking.com'))
-
-  def testRegularPingCmdReturnsValue(self):
-    self.settings.working_cmd = self.settings.PING_CMD
-    self.settings.working_output = PING_OUTPUT
-    self.assertEqual(PING_AVG, self.settings.ping_rtt('www.regular.com'))
-
-  def testRestrictedPingCmdReturnsValue(self):
-    self.settings.working_cmd = self.settings.PING_RESTRICTED_CMD
-    self.settings.working_output = PING_OUTPUT
-    self.assertEqual(PING_AVG, self.settings.ping_rtt('www.restricted.com'))
-
-  def testNoWorkingPingConfiguresOnce(self):
-    self.settings.ping_rtt('www.first.com')
-    def AssertNotCalled(*args):
-      self.fail('Unexpected _check_output call.')
-    self.settings._check_output = AssertNotCalled
-    self.settings.ping_rtt('www.second.com')
-
 if __name__ == '__main__':
   unittest.main()
