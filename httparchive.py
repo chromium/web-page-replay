@@ -40,6 +40,7 @@ To merge multiple archives
   $ ./httparchive.py merge --merged_file new.wpr archive1.wpr archive2.wpr ...
 """
 
+import calendar
 import difflib
 import email.utils
 import httplib
@@ -166,8 +167,8 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
   def get_conditional_status(self, request, response):
     status = 200
     last_modified = email.utils.parsedate(
-        response.get_header_case_insensitive('last-modified'))
-    response_etag = response.get_header_case_insensitive('etag')
+        response.update_date(response.get_header('last-modified')))
+    response_etag = response.get_header('etag')
     is_get_or_head = request.command.upper() in ('GET', 'HEAD')
 
     match_value = request.headers.get('if-match', None)
@@ -710,15 +711,9 @@ class ArchivedHttpResponse(object):
 
   def get_header(self, key, default=None):
     for k, v in self.headers:
-      if key == k:
-        return v
-    return default
-
-  def get_header_case_insensitive(self, key):
-    for k, v in self.headers:
       if key.lower() == k.lower():
         return v
-    return None
+    return default
 
   def set_header(self, key, value):
     for i, (k, v) in enumerate(self.headers):
@@ -729,9 +724,40 @@ class ArchivedHttpResponse(object):
 
   def remove_header(self, key):
     for i, (k, v) in enumerate(self.headers):
-      if key == k:
+      if key.lower() == k.lower():
         self.headers.pop(i)
         return
+
+  def _get_epoch_seconds(self, date_str):
+    """Return the epoch seconds of a date header.
+
+    Args:
+      date_str: a date string (e.g. "Thu, 01 Dec 1994 16:00:00 GMT")
+    Returns:
+      epoch seconds as a float
+    """
+    date_tuple = email.utils.parsedate(date_str)
+    if date_tuple:
+      return calendar.timegm(date_tuple)
+    return None
+
+  def update_date(self, date_str, now=None):
+    """Return an updated date based on its delta from the "Date" header.
+
+    For example, if |date_str| is one week later than the "Date" header,
+    then the returned date string is one week later than the current date.
+
+    Args:
+      date_str: a date string (e.g. "Thu, 01 Dec 1994 16:00:00 GMT")
+    Returns:
+      a date string
+    """
+    date_seconds = self._get_epoch_seconds(self.get_header('date'))
+    header_seconds = self._get_epoch_seconds(date_str)
+    if date_seconds and header_seconds:
+      updated_seconds = header_seconds + (now or time.time()) - date_seconds
+      return email.utils.formatdate(updated_seconds, usegmt=True)
+    return date_str
 
   def is_gzip(self):
     return self.get_header('content-encoding') == 'gzip'

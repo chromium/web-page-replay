@@ -123,7 +123,9 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.send_response(response.status, response.reason)
       # TODO(mbelshe): This is lame - each write is a packet!
       for header, value in response.headers:
-        if header != 'server':
+        if header in ('last-modified', 'expires'):
+          self.send_header(header, response.update_date(value))
+        elif header not in ('date', 'server'):
           self.send_header(header, value)
       self.end_headers()
 

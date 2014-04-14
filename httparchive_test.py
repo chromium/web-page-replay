@@ -14,8 +14,11 @@
 # limitations under the License.
 
 import ast
+import calendar
+import email.utils
 import httparchive
 import os
+import time
 import unittest
 
 
@@ -341,6 +344,45 @@ class HttpArchiveTest(unittest.TestCase):
     }
     request = create_request(request_headers)
     self.assertEqual(archive.get(request), response)
+
+
+class ArchivedHttpResponse(unittest.TestCase):
+  PAST_DATE_A = 'Tue, 13 Jul 2010 03:47:07 GMT'
+  PAST_DATE_B = 'Tue, 13 Jul 2010 02:47:07 GMT'  # PAST_DATE_A -1 hour
+  PAST_DATE_C = 'Tue, 13 Jul 2010 04:47:07 GMT'  # PAST_DATE_A +1 hour
+  NOW_DATE_A = 'Wed, 20 Jul 2011 04:58:08 GMT'
+  NOW_DATE_B = 'Wed, 20 Jul 2011 03:58:08 GMT'  # NOW_DATE_A -1 hour
+  NOW_DATE_C = 'Wed, 20 Jul 2011 05:58:08 GMT'  # NOW_DATE_A +1 hour
+  NOW_SECONDS = calendar.timegm(email.utils.parsedate(NOW_DATE_A))
+
+  def setUp(self):
+    self.response = create_response([('date', self.PAST_DATE_A)])
+
+  def test_update_date_same_date(self):
+    self.assertEqual(
+        self.response.update_date(self.PAST_DATE_A, now=self.NOW_SECONDS),
+        self.NOW_DATE_A)
+
+  def test_update_date_before_date(self):
+    self.assertEqual(
+        self.response.update_date(self.PAST_DATE_B, now=self.NOW_SECONDS),
+        self.NOW_DATE_B)
+
+  def test_update_date_after_date(self):
+    self.assertEqual(
+        self.response.update_date(self.PAST_DATE_C, now=self.NOW_SECONDS),
+        self.NOW_DATE_C)
+
+  def test_update_date_bad_date_param(self):
+    self.assertEqual(
+        self.response.update_date('garbage date', now=self.NOW_SECONDS),
+        'garbage date')
+
+  def test_update_date_bad_date_header(self):
+    self.response.set_header('date', 'garbage date')
+    self.assertEqual(
+        self.response.update_date(self.PAST_DATE_B, now=self.NOW_SECONDS),
+        self.PAST_DATE_B)
 
 
 if __name__ == '__main__':
