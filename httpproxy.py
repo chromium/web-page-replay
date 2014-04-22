@@ -282,4 +282,4 @@ class HttpsProxyServer(HttpProxyServer):
                              is_ssl=True, **kwargs)
     self.socket = ssl.wrap_socket(
         self.socket, certfile=certfile, server_side=True)
-    # Ancestor class, deamonserver, calls serve_forever() during its __init__.
+    # Ancestor class, DaemonServer, calls serve_forever() during its __init__.
