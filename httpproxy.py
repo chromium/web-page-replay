@@ -131,6 +131,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
       for chunk, delay in zip(response.response_data, delays):
         if delay:
+          self.wfile.flush()
           time.sleep(delay / 1000.0)
         if is_chunked:
           # Write chunk length (hex) and data (e.g. "A\r\nTESSELATED\r\n").
