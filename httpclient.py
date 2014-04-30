@@ -429,7 +429,8 @@ class ReplayHttpArchiveFetch(object):
               "('-' for archived request, '+' for current request):\n%s" % diff)
       logging.warning('Could not replay: %s', reason)
     else:
-      response = _InjectScripts(response, self.inject_script)
+      if self.inject_script:
+        response = _InjectScripts(response, self.inject_script)
       if self.scramble_images:
         response = _ScrambleImages(response)
     return response
