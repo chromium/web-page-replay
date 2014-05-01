@@ -146,7 +146,8 @@ class PrivateIpFilter(object):
 
   def InitializeArchiveHosts(self):
     """Recompute the archive_hosts from the http_archive."""
-    self.archive_hosts = set('%s.' % req.host for req in self.http_archive)
+    self.archive_hosts = set('%s.' % req.host.split(':')[0]
+                             for req in self.http_archive)
 
 
 class DelayFilter(object):
