@@ -265,11 +265,10 @@ class _PosixPlatformSettings(_BasePlatformSettings):
   def _get_dns_update_error(self):
     return DnsUpdateError('Did you run under sudo?')
 
-  @classmethod
-  def _sysctl(cls, *args, **kwargs):
+  def _sysctl(self, *args, **kwargs):
     sysctl_args = [FindExecutable('sysctl')]
     if kwargs.get('use_sudo'):
-      sysctl_args = _elevate_privilege_for_cmd(sysctl_args)
+      sysctl_args = self._elevate_privilege_for_cmd(sysctl_args)
     sysctl_args.extend(str(a) for a in args)
     sysctl = subprocess.Popen(
         sysctl_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
