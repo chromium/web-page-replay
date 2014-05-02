@@ -155,7 +155,7 @@ class TcpTrafficShaperTest(TimedTestCase):
 
   def TrafficShaper(self, **kwargs):
     return trafficshaper.TrafficShaper(
-        host=self.host, port=self.port, dns_port=None, **kwargs)
+        host=self.host, ports=(self.port,), **kwargs)
 
   def GetTcpSendTimeMs(self, num_bytes):
     """Return time in milliseconds to send |num_bytes|."""
@@ -228,7 +228,7 @@ class UdpTrafficShaperTest(TimedTestCase):
 
   def TrafficShaper(self, **kwargs):
     return trafficshaper.TrafficShaper(
-        host=self.host, port=None, dns_port=self.dns_port, **kwargs)
+        host=self.host, ports=(self.dns_port,), **kwargs)
 
   def GetUdpSendReceiveTimesMs(self):
     """Return time in milliseconds to send |num_bytes|."""
