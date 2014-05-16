@@ -149,6 +149,13 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
           archive_fetch, custom_handlers, options.certfile,
           host=host, port=options.ssl_port, use_delays=options.use_server_delay,
           **options.shaping_http)
+    if options.http_to_https_port:
+      server_manager.Append(
+          httpproxy.HttpToHttpsProxyServer,
+          archive_fetch, custom_handlers,
+          host=host, port=options.http_to_https_port,
+          use_delays=options.use_server_delay,
+          **options.shaping_http)
 
 
 def AddTrafficShaper(server_manager, options, host):
@@ -507,6 +514,11 @@ def GetOptionParser():
       action='store',
       type='int',
       help='SSL port number to listen on.')
+  harness_group.add_option('--http_to_https_port', default=None,
+      action='store',
+      type='int',
+      help='Port on which WPR will listen for HTTP requests that it will send '
+           'along as HTTPS requests.')
   harness_group.add_option('--dns_port', default=53,
       action='store',
       type='int',
