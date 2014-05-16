@@ -269,7 +269,8 @@ class OptionsWrapper(object):
     def IsPrivilegedPort(port):
       return port and port < 1024
 
-    if IsPrivilegedPort(self.port) or IsPrivilegedPort(self.ssl_port):
+    if IsPrivilegedPort(self.port) or (self.ssl and
+                                       IsPrivilegedPort(self.ssl_port)):
       return True
 
     if self.dns_forwarding:
