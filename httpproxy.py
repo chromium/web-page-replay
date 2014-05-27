@@ -283,7 +283,8 @@ class HttpsProxyServer(HttpProxyServer):
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, protocol='HTTPS', **kwargs)
     self.socket = ssl.wrap_socket(
-        self.socket, certfile=certfile, server_side=True)
+        self.socket, certfile=certfile, server_side=True,
+        do_handshake_on_connect=False)
     # Ancestor class, DaemonServer, calls serve_forever() during its __init__.
 
 class HttpToHttpsProxyServer(HttpProxyServer):
