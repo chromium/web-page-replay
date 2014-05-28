@@ -599,7 +599,7 @@ class ArchivedHttpRequest(object):
       if headers['accept-encoding'].endswith(','):
         headers['accept-encoding'] = headers['accept-encoding'][:-1]
     undesirable_keys = [
-        'accept', 'accept-charset', 'accept-language',
+        'accept', 'accept-charset', 'accept-language', 'cache-control',
         'connection', 'cookie', 'keep-alive', 'method',
         'referer', 'scheme', 'url', 'version', 'user-agent', 'proxy-connection',
         'x-chrome-variations']
