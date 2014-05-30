@@ -573,6 +573,7 @@ class ArchivedHttpRequest(object):
     - accept: Causes problems with www.bing.com. During record, CSS is fetched
               with *. During replay, it's text/css.
     - accept-charset, accept-language, referer: vary between clients.
+    - cache-control:  sometimes sent from Chrome with 'max-age=0' as value.
     - connection, method, scheme, url, version: Cause problems with spdy.
     - cookie: Extremely sensitive to request/response order.
     - keep-alive: Not supported by Web Page Replay.
