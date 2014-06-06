@@ -94,7 +94,6 @@ def generate_dummy_ca_cert(subject='_WebPageReplayCert'):
   """
   if openssl_import_error:
     raise openssl_import_error
-
   key = crypto.PKey()
   key.generate_key(crypto.TYPE_RSA, 1024)
 
@@ -222,7 +221,6 @@ def generate_cert(root_ca_cert_str, server_cert_str, server_host):
   subj.CN = common_name
   req.set_pubkey(ca_cert.get_pubkey())
   req.sign(key, 'sha1')
-
   cert = crypto.X509()
   cert.gmtime_adj_notBefore(-60 * 60)
   cert.gmtime_adj_notAfter(60 * 60 * 24 * 30)
@@ -231,5 +229,5 @@ def generate_cert(root_ca_cert_str, server_cert_str, server_host):
   cert.set_serial_number(int(time.time()*10000))
   cert.set_pubkey(req.get_pubkey())
   cert.sign(key, 'sha1')
-
   return _dump_cert(cert)
+
