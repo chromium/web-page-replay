@@ -276,16 +276,32 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
   def get_active_request_count(self):
     return self.num_active_requests
 
+
 class HttpsProxyServer(HttpProxyServer):
   """SSL server."""
 
   def __init__(self, http_archive_fetch, custom_handlers, certfile, **kwargs):
-    HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
-                             is_ssl=True, protocol='HTTPS', **kwargs)
-    self.socket = ssl.wrap_socket(
+    self.generate_certs = generate_certs
+    if self.generate_certs:
+      self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler, certfile)
+      HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
+                               is_ssl=True, **kwargs)
+    else:
+      HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
+                               is_ssl=True, protocol='HTTPS', **kwargs)
+      self.socket = ssl.wrap_socket(
         self.socket, certfile=certfile, server_side=True,
         do_handshake_on_connect=False)
     # Ancestor class, DaemonServer, calls serve_forever() during its __init__.
+
+  def cleanup(self):
+    if self.generate_certs:
+      try:
+        self.shutdown()
+      except KeyboardInterrupt, e:
+        pass
+      sslproxy.certstore.cleanup()
+
 
 class HttpToHttpsProxyServer(HttpProxyServer):
   """Listens for HTTP requests but sends them to the target as HTTPS requests"""
