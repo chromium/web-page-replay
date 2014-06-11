@@ -13,8 +13,7 @@ except ImportError, e:
 
 
 def generate_dummy_ca():
-  """Generates dummy certificate authority.
-  """ 
+  """Generates dummy certificate authority."""
   if openssl_exception:
     raise openssl_exception
 
