@@ -3,12 +3,12 @@
 import socket
 import certutils
 
-openssl_exception = None
+openssl_import_error = None
 try:
   # Requires: pyOpenSSL 0.13+
   from OpenSSL import SSL
 except ImportError, e:
-  openssl_exception = e
+  openssl_import_error = e
 
 cert_store = None
 
@@ -81,8 +81,8 @@ class SSLHandshakeHandler:
 
 def wrap_handler(handler_class, cert_file):
   """Wraps a BaseHTTPHandler wtih SSL MITM certificates."""
-  if openssl_exception:
-    raise openssl_exception
+  if openssl_import_error:
+    raise openssl_import_error
   set_ca_cert(cert_file)
 
   class WrappedHandler(SSLHandshakeHandler, handler_class):
