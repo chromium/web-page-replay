@@ -10,13 +10,12 @@ try:
 except ImportError, e:
   openssl_exception = e
 
-certstore = None
+cert_store = None
 
 
-def set_cacert(cert):
-  global certstore
-  cacert = cert
-  certstore = certutils.CertStore(cacert, certdir=None)
+def set_ca_cert(ca_cert):
+  global cert_store
+  cert_store = certutils.CertStore(ca_cert, cert_dir=None)
 
 
 class SSLHandshakeHandler:
@@ -34,10 +33,10 @@ class SSLHandshakeHandler:
         host = connection.get_servername()
         if host:
           self.server_name = host
-          cert = certstore.get_cert(host)
+          cert = cert_store.get_cert(host)
           new_context = SSL.Context(SSL.SSLv23_METHOD)
           new_context.use_certificate_file(cert)
-          new_context.use_privatekey_file(certstore.cacert)
+          new_context.use_privatekey_file(cert_store.ca_cert)
           connection.set_context(new_context)
           return new_context
         # else: fail with 'no shared cipher'
@@ -80,11 +79,11 @@ class SSLHandshakeHandler:
     self.connection.close()
 
 
-def wrap_handler(handler_class, certfile):
+def wrap_handler(handler_class, cert_file):
   """Wraps a BaseHTTPHandler wtih SSL MITM certificates."""
   if openssl_exception:
     raise openssl_exception
-  set_cacert(certfile)
+  set_ca_cert(cert_file)
 
   class WrappedHandler(SSLHandshakeHandler, handler_class):
 
