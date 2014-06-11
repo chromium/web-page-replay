@@ -144,11 +144,16 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
         host=host, port=options.port, use_delays=options.use_server_delay,
         **options.shaping_http)
     if options.ssl:
-      server_manager.Append(
-          httpproxy.HttpsProxyServer, archive_fetch, custom_handlers,
-          options.certfile, options.generate_certs, host=host,
-          port=options.ssl_port, use_delays=options.use_server_delay,
-          **options.shaping_http)
+      if options.should_generate_certs:
+        server_manager.Append(
+            httpproxy.HttpsProxyServer, archive_fetch, custom_handlers,
+            options.certfile, host=host, port=options.ssl_port,
+            use_delays=options.use_server_delay, **options.shaping_http)
+      else: 
+        server_manager.Append(
+            httpproxy.SingleCertHttpsProxyServer, archive_fetch, custom_handlers,
+            options.certfile, host=host, port=options.ssl_port,
+            use_delays=options.use_server_delay, **options.shaping_http)
     if options.http_to_https_port:
       server_manager.Append(
           httpproxy.HttpToHttpsProxyServer,
@@ -532,9 +537,9 @@ def GetOptionParser():
       dest='ssl',
       help='Do not setup an SSL proxy.')
   option_parser.add_option_group(harness_group)
-  harness_group.add_option('--generate_certs', default=False,
+  harness_group.add_option('--should_generate_certs', default=False,
       action='store_true',
-      dest='generate_certs',
+      dest='should_generate_certs',
       help='Use OpenSSL to generate certificate files for requested hosts.')
   harness_group.add_option('--no-admin-check', default=True,
       action='store_false',

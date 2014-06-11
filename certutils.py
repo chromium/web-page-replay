@@ -5,17 +5,17 @@ import shutil
 import tempfile
 import time
 
-openssl_exception = None
+openssl_import_error = None
 try:
   from OpenSSL import crypto
 except ImportError, e:
-  openssl_exception = e
+  openssl_import_error = e
 
 
-def generate_dummy_ca():
-  """Generates dummy certificate authority."""
-  if openssl_exception:
-    raise openssl_exception
+def generate_dummy_ca(subject = 'sslproxy'):
+  """Generates dummy certificate authority.""" 
+  if openssl_import_error:
+    raise openssl_import_error
 
   key = crypto.PKey()
   key.generate_key(crypto.TYPE_RSA, 1024)
@@ -23,8 +23,8 @@ def generate_dummy_ca():
   ca = crypto.X509()
   ca.set_serial_number(int(time.time()*10000))
   ca.set_version(2)
-  ca.get_subject().CN = 'sslproxy'
-  ca.get_subject().O = 'sslproxy'
+  ca.get_subject().CN = subject
+  ca.get_subject().O = subject
   ca.gmtime_adj_notBefore(-60 * 60 * 24 * 365 * 2)
   ca.gmtime_adj_notAfter(60 * 60 * 24 * 365 * 2)
   ca.set_issuer(ca.get_subject())
@@ -43,7 +43,9 @@ def generate_dummy_ca():
   return ca, key
 
 def write_dummy_ca(cert_path, ca, key):
-  """ Writes four certificate files. For example, if cert_path is "mycert.pem":
+  """ Writes four certificate files.
+
+  For example, if cert_path is "mycert.pem":
       mycert.pem - CA plus private key
       mycert-cert.pem - CA in PEM format
       mycert-cert.cer - CA for Android
@@ -87,8 +89,8 @@ def write_dummy_ca(cert_path, ca, key):
 
 def generate_dummy_cert(path, ca, common_name):
   """Generates a certificate for |common_name| signed by |ca| in |path|."""
-  if openssl_exception:
-    raise openssl_exception
+  if openssl_import_error:
+    raise openssl_import_error
   raw = open(ca, 'r').read()
   ca = crypto.load_certificate(crypto.FILETYPE_PEM, raw)
   key = crypto.load_privatekey(crypto.FILETYPE_PEM, raw)
@@ -117,8 +119,10 @@ class CertStore(object):
 
   def __init__(self, ca_cert, cert_dir=None):
     if not os.path.exists(ca_cert):
-      ca, key = generate_dummy_ca()
-      write_dummy_ca(ca_cert, ca, key)
+      raise ValueError('ca_cert path does not exist %s' %ca_cert)
+      # If you were to generate a cert here's an example
+      # ca, key = generate_dummy_ca()
+      # write_dummy_ca(ca_cert, ca, key)
     self.ca_cert = ca_cert
     if cert_dir:
       self.is_temporary_cert_store = False
