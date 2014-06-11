@@ -40,6 +40,8 @@ class SSLHandshakeHandler:
           connection.set_context(new_context)
           return new_context
         # else: fail with 'no shared cipher'
+        # TODO(mruthven): move cert generation to after fetch so the host name
+        # can be gotten from the server.
       except Exception, e:
         # Do not leak any exceptions or else openssl crashes.
         print('Exception in SNI handler', e)
