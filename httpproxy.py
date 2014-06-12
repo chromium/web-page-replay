@@ -24,6 +24,7 @@ import re
 import socket
 import SocketServer
 import ssl
+import sslproxy
 import subprocess
 import sys
 import time
@@ -288,7 +289,7 @@ class HttpsProxyServer(HttpProxyServer):
   def cleanup(self):
     try:
       self.shutdown()
-    except KeyboardInterrupt, e:
+    except KeyboardInterrupt:
       pass
     sslproxy.certstore.cleanup()
 
@@ -300,7 +301,8 @@ class SingleCertHttpsProxyServer(HttpProxyServer):
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, protocol='HTTPS', **kwargs)
     self.socket = ssl.wrap_socket(
-        self.socket, certfile=certfile, server_side=True, do_handshake_on_connect=False)
+        self.socket, certfile=certfile, server_side=True,
+        do_handshake_on_connect=False)
     # Ancestor class, DaemonServer, calls serve_forever() during its __init__.
 
 

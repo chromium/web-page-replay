@@ -149,11 +149,12 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
             httpproxy.HttpsProxyServer, archive_fetch, custom_handlers,
             options.certfile, host=host, port=options.ssl_port,
             use_delays=options.use_server_delay, **options.shaping_http)
-      else: 
+      else:
         server_manager.Append(
-            httpproxy.SingleCertHttpsProxyServer, archive_fetch, custom_handlers,
-            options.certfile, host=host, port=options.ssl_port,
-            use_delays=options.use_server_delay, **options.shaping_http)
+            httpproxy.SingleCertHttpsProxyServer, archive_fetch,
+            custom_handlers, options.certfile, host=host,
+            port=options.ssl_port, use_delays=options.use_server_delay,
+            **options.shaping_http)
     if options.http_to_https_port:
       server_manager.Append(
           httpproxy.HttpToHttpsProxyServer,
