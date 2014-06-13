@@ -84,7 +84,8 @@ def parse_args():
 
 def main():
   args = parse_args()
-  cert_installer = AndroidCertInstaller(args.device_id, args.cert_name, args.cert_path)
+  cert_installer = AndroidCertInstaller(args.device_id, args.cert_name,
+                                        args.cert_path)
   cert_installer.install_cert()
 
 
