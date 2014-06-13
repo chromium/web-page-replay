@@ -1,83 +1,91 @@
 """Installs certificate on phone with KitKat."""
 import argparse
+import logging
 import os
 import subprocess
 import sys
 
-TAB_KEY = 61
-ENTER_KEY = 66
+KEYCODE_ENTER = '66'
+KEYCODE_TAB = '61'
 
 
 class AndroidCertInstaller(object):
   """Certificate installer for phones with KitKat."""
 
-  def __init__(self, args):
-    if not os.path.exists(args.cert_path):
+  def __init__(self, device_id, cert_name, cert_path):
+    if not os.path.exists(cert_path):
       raise ValueError('Not a valid certificate path')
-    self.device_id = args.device_id
-    self.cert_name = args.cert_name
-    self.cert_path = args.cert_path
+    self.device_id = device_id
+    self.cert_name = cert_name
+    self.cert_path = cert_path
     self.file_name = os.path.basename(self.cert_path)
 
-  def adb(self, command_arg):
+  def _adb(self, *args):
     """Runs the adb command."""
     cmd = ['adb']
     if self.device_id:
       cmd.extend(['-s', self.device_id])
-    cmd.extend(command_arg.split(' '))
+    cmd.extend(args)
     return subprocess.check_output(cmd)
 
-  def input_key(self, key):
+  def _input_key(self, key):
     """Inputs a keyevent."""
-    self.adb('shell input keyevent %i' %key)
+    self._adb('shell', 'input', 'keyevent', key)
+
+  def _input_text(self, text):
+    self._adb('shell', 'input', 'text', text)
 
   def install_cert(self):
     """Installs certificate on the device using adb commands."""
-    # Update certificate
-    print 'Installing %s on %s' %(self.cert_path, self.device_id)
-    self.adb('push %s /sdcard/' %self.cert_path)
+    # TODO: Add a check to see if the certificate is already installed
+    # TODO: Check to see if device is hammerhead and build release is 4.4.2.
+    # Install the certificate.
+    logging.info('Installing %s on %s', self.cert_path, self.device_id)
+    self._adb('push', self.cert_path, '/sdcard/')
 
     # Start credential install intent.
-    self.adb('shell am start -W -a android.credentials.INSTALL')
+    self._adb('shell', 'am', 'start', '-W', '-a', 'android.credentials.INSTALL')
 
     # Move to and click search button.
-    self.input_key(TAB_KEY)
-    self.input_key(TAB_KEY)
-    self.input_key(ENTER_KEY)
+    self._input_key(KEYCODE_TAB)
+    self._input_key(KEYCODE_TAB)
+    self._input_key(KEYCODE_ENTER)
 
     # Search for certificate and click it.
     # Search only works with lower case letters
-    self.adb('shell input text %s' %self.file_name.lower())
-    self.input_key(ENTER_KEY)
-    self.adb('shell input tap 300 300')
+    self._input_text(self.file_name.lower())
+    self._input_key(KEYCODE_ENTER)
 
-    # Name certificate and click enter
-    self.adb('shell input text %s' %self.cert_name)
-    self.input_key(TAB_KEY)
-    self.input_key(TAB_KEY)
-    self.input_key(TAB_KEY)
-    self.input_key(ENTER_KEY)
+    # These coordinates work for hammerhead devices.
+    self._adb('shell', 'input', 'tap', '300', '300')
 
-    # remove the file
-    self.adb('shell rm /sdcard/%s' %self.file_name)
+    # Name the certificate and click enter.
+    self._input_text(self.cert_name)
+    self._input_key(KEYCODE_TAB)
+    self._input_key(KEYCODE_TAB)
+    self._input_key(KEYCODE_TAB)
+    self._input_key(KEYCODE_ENTER)
+
+    # Remove the file.
+    self._adb('shell', 'rm', '/sdcard/' + self.file_name)
 
 
 def parse_args():
   """Parses command line arguments."""
   parser = argparse.ArgumentParser(description='Install cert on device.')
-  parser.add_argument('-s', dest='device_id', type=str,
-                      help='device serial number')
-  parser.add_argument('cert_path', type=str, help='Certificate file path')
-  parser.add_argument('-n', dest='cert_name', type=str, default='dummycert',
-                      help='certificate name')
+  parser.add_argument(
+      '-n', '--cert-name', default='dummycert', help='certificate name')
+  parser.add_argument(
+      '--device-id', help='device serial number')
+  parser.add_argument(
+      'cert_path', help='Certificate file path')
   return parser.parse_args()
 
 
 def main():
   args = parse_args()
-  cert_installer = AndroidCertInstaller(args)
-  if args.device_id:
-    cert_installer.install_cert()
+  cert_installer = AndroidCertInstaller(args.device_id, args.cert_name, args.cert_path)
+  cert_installer.install_cert()
 
 
 if __name__ == '__main__':
