@@ -1,7 +1,7 @@
 """Test routines to generate dummy certificates."""
 
 import BaseHTTPServer
-import os
+import shutil
 import signal
 import socket
 import tempfile
@@ -115,8 +115,7 @@ class TestClient(unittest.TestCase):
   _temp_dir = None
 
   def setUp(self):
-    if not self._temp_dir:
-      self._temp_dir = tempfile.mkdtemp(prefix='certutils_', dir='/tmp')
+    self._temp_dir = tempfile.mkdtemp(prefix='sslproxy_', dir='/tmp')
 
     self.ca = self._temp_dir + 'testCA.pem'
     self.cert = self._temp_dir + 'testCA-cert.cer'
@@ -132,8 +131,8 @@ class TestClient(unittest.TestCase):
   def tearDown(self):
     global error_function
     error_function = None
-    for fn in os.listdir(self._temp_dir):
-      os.remove(os.path.join(self._temp_dir, fn))
+    if self._temp_dir:
+      shutil.rmtree(self._temp_dir)
 
   def verify_cb(self, conn, cert, errnum, depth, ok):
     """A callback that verifies the certificate authentication worked.
