@@ -28,6 +28,20 @@ class AndroidCertInstaller(object):
     cmd.extend(args)
     return subprocess.check_output(cmd)
 
+  def _get_property(self, prop):
+    return self._adb('shell', 'getprop', prop).strip()
+
+  def check_device(self):
+    install_warning = False
+    if self._get_property('ro.product.device') != 'hammerhead':
+      logging.warning('Device is not hammerhead')
+      install_warning = True
+    if self._get_property('ro.build.version.release') != '4.4.2':
+      logging.warning('Version is not 4.4.2')
+      install_warning = True
+    if install_warning:
+      logging.warning('Certificate may not install properly')
+
   def _input_key(self, key):
     """Inputs a keyevent."""
     self._adb('shell', 'input', 'keyevent', key)
@@ -38,7 +52,6 @@ class AndroidCertInstaller(object):
   def install_cert(self):
     """Installs certificate on the device using adb commands."""
     # TODO: Add a check to see if the certificate is already installed
-    # TODO: Check to see if device is hammerhead and build release is 4.4.2.
     # Install the certificate.
     logging.info('Installing %s on %s', self.cert_path, self.device_id)
     self._adb('push', self.cert_path, '/sdcard/')
@@ -86,6 +99,7 @@ def main():
   args = parse_args()
   cert_installer = AndroidCertInstaller(args.device_id, args.cert_name,
                                         args.cert_path)
+  cert_installer.check_device()
   cert_installer.install_cert()
 
 
