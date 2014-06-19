@@ -64,13 +64,9 @@ class AndroidCertInstaller(object):
     if os.path.exists(file_name):
       self._run_cmd(['rm', file_name])
 
-  def _generate_hashed_cert(self):
+  def _format_hashed_cert(self):
     """Makes a certificate file that follows the format of files in cacerts."""
-    output = self._run_cmd(['openssl', 'x509', '-inform', 'PEM',
-                            '-subject_hash_old', '-in', self.cert_path])
-    self.reformatted_cert_path = output.partition('\n')[0].strip() + '.0'
     self._remove(self.reformatted_cert_path)
-
     contents = self._run_cmd(['openssl', 'x509', '-inform', 'PEM', '-text',
                               '-in', self.cert_path])
     description, begin_cert, cert_body = contents.rpartition('-----BEGIN '
@@ -82,29 +78,33 @@ class AndroidCertInstaller(object):
   def _remove_cert_from_cacerts(self):
     self._adb_su_shell('rm', self.android_cacerts_path)
 
-  def is_cert_installed(self):
+  def _is_cert_installed(self):
     return (self._adb_su_shell('ls', self.android_cacerts_path).strip() ==
             self.android_cacerts_path)
 
   def install_cert(self, overwrite_cert=False):
     """Installs a certificate putting it in /system/etc/security/cacerts."""
-    self._generate_hashed_cert()
+    output = self._run_cmd(['openssl', 'x509', '-inform', 'PEM',
+                            '-subject_hash_old', '-in', self.cert_path])
+    self.reformatted_cert_path = output.partition('\n')[0].strip() + '.0'
     self.android_cacerts_path = ('/system/etc/security/cacerts/%s'
                                  % self.reformatted_cert_path)
 
-    if self.is_cert_installed():
+    if self._is_cert_installed():
       if overwrite_cert:
         self._remove_cert_from_cacerts()
       else:
         logging.info('cert is already installed')
         return
 
+    self._format_hashed_cert()
     self._adb('push', self.reformatted_cert_path, '/sdcard/')
+    self._remove(self.reformatted_cert_path)
     self._adb_su_shell('mount', '-o', 'remount,rw', '/system')
     self._adb_su_shell('cp', '/sdcard/%s' % self.reformatted_cert_path,
                        self.android_cacerts_path)
     self._adb_su_shell('chmod', '644', self.android_cacerts_path)
-    if not self.is_cert_installed():
+    if not self._is_cert_installed():
       logging.warning('Cert Install Failed')
 
   def install_cert_using_gui(self):
