@@ -20,9 +20,6 @@ class AndroidCertInstaller(object):
     self.cert_path = cert_path
     self.file_name = os.path.basename(self.cert_path)
 
-  def _run_pipe_cmd(self, cmd):
-    return subprocess.check_output(' '.join(cmd), shell=True)
-
   def _run_cmd(self, cmd):
     return subprocess.check_output(cmd)
 
@@ -62,70 +59,58 @@ class AndroidCertInstaller(object):
     """Inputs text."""
     self._adb('shell', 'input', 'text', text)
 
-  def _get_file_length(self, file_name):
-    return (int)(self._run_cmd(['wc', '-l', file_name]).split(' ')[0])
-
   def _remove(self, file_name):
     """Deletes file."""
     if os.path.exists(file_name):
       self._run_cmd(['rm', file_name])
 
-  def _remove_cert_from_end(self, file_name):
-    """Removes the certificate from the end of a file."""
-    ca_length = self._get_file_length(self.cert_path)
-    file_length = self._get_file_length(file_name)
-
-    temp_file = 'temp_' + file_name
-    self._run_pipe_cmd(['head', '-%i' % (file_length - ca_length), file_name,
-                        '>', temp_file])
-    self._run_cmd(['mv', temp_file, file_name])
-
   def _generate_hashed_cert(self):
     """Makes a certificate file that follows the format of files in cacerts."""
     output = self._run_cmd(['openssl', 'x509', '-inform', 'PEM',
                             '-subject_hash_old', '-in', self.cert_path])
-    self.reformatted_cert_file = output.partition('\n')[0].strip() + '.0'
+    self.reformatted_cert_path = output.partition('\n')[0].strip() + '.0'
+    self._remove(self.reformatted_cert_path)
 
-    self._remove(self.reformatted_cert_file)
-
-    self._run_pipe_cmd(['cat', self.cert_path, '>', self.reformatted_cert_file])
-    self._run_pipe_cmd(['openssl', 'x509', '-inform', 'PEM', '-text', '-in',
-                        self.cert_path, '>>', self.reformatted_cert_file])
-
-    self._remove_cert_from_end(self.reformatted_cert_file)
+    contents = self._run_cmd(['openssl', 'x509', '-inform', 'PEM', '-text',
+                              '-in', self.cert_path])
+    description, begin_cert, cert_body = contents.rpartition('-----BEGIN '
+                                                             'CERTIFICATE')
+    contents = ''.join([begin_cert, cert_body, description])
+    with open(self.reformatted_cert_path, 'w') as cert_file:
+      cert_file.write(contents)
 
   def _remove_cert_from_cacerts(self):
     self._adb_su_shell('rm', self.android_cacerts_path)
 
-  def cert_is_installed(self):
-    ls_of_file = self._adb_su_shell('ls', self.android_cacerts_path)
-    return ls_of_file.strip() == self.android_cacerts_path
+  def is_cert_installed(self):
+    return (self._adb_su_shell('ls', self.android_cacerts_path).strip() ==
+            self.android_cacerts_path)
 
   def install_cert(self, overwrite_cert=False):
     """Installs a certificate putting it in /system/etc/security/cacerts."""
     self._generate_hashed_cert()
-
     self.android_cacerts_path = ('/system/etc/security/cacerts/%s'
-                                 % self.reformatted_cert_file)
+                                 % self.reformatted_cert_path)
 
-    if self.cert_is_installed():
+    if self.is_cert_installed():
       if overwrite_cert:
         self._remove_cert_from_cacerts()
       else:
         logging.info('cert is already installed')
         return
 
-    self._adb('push', self.reformatted_cert_file, '/sdcard/')
+    self._adb('push', self.reformatted_cert_path, '/sdcard/')
     self._adb_su_shell('mount', '-o', 'remount,rw', '/system')
-    self._adb_su_shell('cp', '/sdcard/%s' % self.reformatted_cert_file,
+    self._adb_su_shell('cp', '/sdcard/%s' % self.reformatted_cert_path,
                        self.android_cacerts_path)
     self._adb_su_shell('chmod', '644', self.android_cacerts_path)
-    if not self.cert_is_installed():
+    if not self.is_cert_installed():
       logging.warning('Cert Install Failed')
 
   def install_cert_using_gui(self):
     """Installs certificate on the device using adb commands."""
-    # TODO: Add a check to see if the certificate is already installed
+    self.check_device()
+    # TODO(mruthven): Add a check to see if the certificate is already installed
     # Install the certificate.
     logging.info('Installing %s on %s', self.cert_path, self.device_id)
     self._adb('push', self.cert_path, '/sdcard/')
@@ -163,6 +148,9 @@ def parse_args():
   parser.add_argument(
       '-n', '--cert-name', default='dummycert', help='certificate name')
   parser.add_argument(
+      '--overwrite', default=False, action='store_true',
+      help='Overwrite certificate file if its already installed')
+  parser.add_argument(
       '--device-id', help='device serial number')
   parser.add_argument(
       'cert_path', help='Certificate file path')
@@ -173,8 +161,7 @@ def main():
   args = parse_args()
   cert_installer = AndroidCertInstaller(args.device_id, args.cert_name,
                                         args.cert_path)
-  cert_installer.check_device()
-  cert_installer.install_cert()
+  cert_installer.install_cert(args.overwrite)
 
 
 if __name__ == '__main__':
