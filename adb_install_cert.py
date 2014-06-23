@@ -62,7 +62,7 @@ class AndroidCertInstaller(object):
   def _remove(self, file_name):
     """Deletes file."""
     if os.path.exists(file_name):
-      self._run_cmd(['rm', file_name])
+      os.remove(file_name)
 
   def _format_hashed_cert(self):
     """Makes a certificate file that follows the format of files in cacerts."""
