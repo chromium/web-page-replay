@@ -10,7 +10,6 @@ from OpenSSL import crypto
 
 
 class CertutilsTest(unittest.TestCase):
-  _temp_dir = None
 
   def checkCertFile(self, cert_file_path, cert, key=None):
     raw_cert = open(cert_file_path, 'r').read()
