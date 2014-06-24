@@ -1,8 +1,8 @@
 """Extends BaseHTTPRequestHandler with SSL certificate generation."""
-
-import httparchive
 import logging
 import socket
+
+import httparchive
 
 openssl_import_error = None
 try:
@@ -14,6 +14,7 @@ except ImportError, e:
 
 def get_cert_request(host):
   return httparchive.ArchivedHttpRequest('DUMMY_CERT', host, '', None, {})
+
 
 class SSLHandshakeHandler:
   """Handles Server Name Indication (SNI) using dummy certs."""
@@ -85,7 +86,7 @@ class SSLHandshakeHandler:
       print 'shutdown'
 
 
-def wrap_handler(handler_class, cert_file):
+def wrap_handler(handler_class):
   """Wraps a BaseHTTPHandler wtih SSL MITM certificates."""
   if openssl_import_error:
     raise openssl_import_error

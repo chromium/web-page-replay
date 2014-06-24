@@ -8,10 +8,11 @@ import tempfile
 import threading
 import time
 import unittest
+
 from OpenSSL import SSL
+import sslproxy
 
 import certutils
-import sslproxy
 
 signal.signal(signal.SIGINT, signal.SIG_DFL)  # Exit on Ctrl-C
 
@@ -55,6 +56,7 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 
 class DummyResponse(object):
+
   def __init__(self, response):
     self.response_data = response
 
@@ -67,7 +69,7 @@ class Server(BaseHTTPServer.HTTPServer):
     self.ca = cert_file
     self.cert = ''
     if use_sslproxy_wrapper:
-      self.HANDLER = sslproxy.wrap_handler(Handler, cert_file)
+      self.HANDLER = sslproxy.wrap_handler(Handler)
     else:
       self.HANDLER = WrappedErrorHandler
     try:

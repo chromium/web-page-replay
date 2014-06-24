@@ -1,13 +1,11 @@
 """Routines to generate dummy certificates."""
 
 import os
-import shutil
-import tempfile
 import time
 
 openssl_import_error = None
 try:
-  from OpenSSL import crypto, SSL
+  from OpenSSL import crypto
 except ImportError, e:
   openssl_import_error = e
 
@@ -89,21 +87,38 @@ def write_dummy_ca(cert_path, ca, key):
     f.write(p12.export())
 
 
-def generate_dummy_cert_from_file(ca, common_name):
-  """Generates a certificate for |common_name| signed by |ca| in |path|."""
+def generate_dummy_cert_from_file(path, common_name):
+  """Generates a cert for |common_name| signed by the root cert in |path|.
+
+  Args:
+    path: location of a PEM formatted root cert
+    common_name: Desired subject for the generated cert
+  Returns:
+    a PEM formatted certificate
+  """
   if openssl_import_error:
     raise openssl_import_error
-  with open(ca, 'r') as ca_file:
+  with open(path, 'r') as ca_file:
     raw = ca_file.read()
   return generate_dummy_cert(raw, common_name)
 
+
 def generate_dummy_cert_from_server(root_cert, server_cert):
+  """Generates a cert with the sni field in server_cert signed by the root_cert.
+
+  Args:
+    root_cert: PEM formatted string representing the root cert
+    server_cert: PEM formatted string representing cert
+  Returns:
+    a PEM formatted certificate
+  """
   cert = crypto.load_certificate(crypto.FILETYPE_PEM, server_cert)
   sni = cert.get_subject().commonName
   return generate_dummy_cert(root_cert, sni)
 
 
 def generate_dummy_cert(root_cert, common_name):
+  """Generates a certificate for common_name signed by signed by root_cert."""
   ca = crypto.load_certificate(crypto.FILETYPE_PEM, root_cert)
   key = crypto.load_privatekey(crypto.FILETYPE_PEM, root_cert)
 

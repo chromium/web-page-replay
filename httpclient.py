@@ -15,20 +15,17 @@
 
 """Retrieve web resources over http."""
 
-import certutils
 import copy
-import httparchive
 import httplib
 import logging
-import os
-import platformsettings
 import random
-import re
-import script_injector
 import socket
 import StringIO
-import time
-import util
+
+import certutils
+import httparchive
+import platformsettings
+import script_injector
 
 openssl_import_error = None
 try:
@@ -46,7 +43,8 @@ except ImportError:
   Image = None
 
 TIMER = platformsettings.timer
-ROOT_CA_REQUEST =  httparchive.ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
+ROOT_CA_REQUEST = httparchive.ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
+
 
 def CreateCertificateResponse(cert):
   c = httparchive.ArchivedHttpResponse(11, 200, 'OK', [], cert, {})
@@ -81,6 +79,7 @@ def _InjectScripts(response, inject_script):
       response.set_data(text)
   return response
 
+
 def _ScrambleImages(response):
   """If the |response| is an image, attempt to scramble it.
 
@@ -114,10 +113,11 @@ def _ScrambleImages(response):
 
       response = copy.deepcopy(response)
       response.set_data(output_image_data)
-    except Exception, err:
+    except Exception:
       pass
 
   return response
+
 
 class DetailedHTTPResponse(httplib.HTTPResponse):
   """Preserve details relevant to replaying responses.
@@ -194,12 +194,14 @@ class DetailedHTTPSResponse(DetailedHTTPResponse):
   """Preserve details relevant to replaying SSL responses."""
   pass
 
+
 class DetailedHTTPSConnection(httplib.HTTPSConnection):
   """Preserve details relevant to replaying SSL connections."""
   response_class = DetailedHTTPSResponse
 
 
 class RealHttpFetch(object):
+
   def __init__(self, real_dns_lookup):
     """Initialize RealHttpFetch.
 
@@ -377,11 +379,11 @@ class RecordHttpArchiveFetch(object):
 
     cert = ''
     if req.host in self.cert_dict:
-      cert = crypto.dump_certificate(crypto.FILETYPE_PEM, self.cert_dict[req.host])
+      cert = crypto.dump_certificate(crypto.FILETYPE_PEM,
+                                     self.cert_dict[req.host])
     cert_response = CreateCertificateResponse(cert)
     self.http_archive[req] = cert_response
     return cert_response
-
 
   def _GenerateDummyCert(self, req):
     root_cert_response = self.http_archive[ROOT_CA_REQUEST]
@@ -397,7 +399,6 @@ class RecordHttpArchiveFetch(object):
       cert = certutils.generate_dummy_cert_from_server(root_cert, server_cert)
     self.http_archive[req] = CreateCertificateResponse(cert)
     return self.http_archive[req]
-
 
   def __call__(self, request):
     """Fetch the request and return the response.
