@@ -1,47 +1,47 @@
 """Extends BaseHTTPRequestHandler with SSL certificate generation."""
 
+import httparchive
+import logging
 import socket
-import certutils
 
 openssl_import_error = None
 try:
   # Requires: pyOpenSSL 0.13+
-  from OpenSSL import SSL
+  from OpenSSL import crypto, SSL
 except ImportError, e:
   openssl_import_error = e
 
-cert_store = None
 
-
-def set_ca_cert(ca_cert):
-  global cert_store
-  cert_store = certutils.CertStore(ca_cert, cert_dir=None)
-
+def get_cert_request(host):
+  return httparchive.ArchivedHttpRequest('DUMMY_CERT', host, '', None, {})
 
 class SSLHandshakeHandler:
   """Handles Server Name Indication (SNI) using dummy certs."""
+  past_certs = {}
 
   def setup(self):
     """Sets up connection providing the certificate to the client."""
     self.server_name = None
     # One of: One of SSLv2_METHOD, SSLv3_METHOD, SSLv23_METHOD, or TLSv1_METHOD
-    method = SSL.SSLv23_METHOD
-    context = SSL.Context(method)
+    context = SSL.Context(SSL.SSLv23_METHOD)
     def handle_servername(connection):
       """A SNI callback that happens during do_handshake()."""
       try:
         host = connection.get_servername()
         if host:
-          self.server_name = host
-          cert = cert_store.get_cert(host)
-          new_context = SSL.Context(SSL.SSLv23_METHOD)
-          new_context.use_certificate_file(cert)
-          new_context.use_privatekey_file(cert_store.ca_cert)
-          connection.set_context(new_context)
-          return new_context
+          certificate_request = get_cert_request(host)
+          cert_response = self.server.http_archive_fetch(certificate_request)
+          cert = cert_response.response_data
+          self.server.cert = cert
+          if cert:
+            self.server_name = host
+            new_context = SSL.Context(SSL.SSLv23_METHOD)
+            cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert)
+            new_context.use_certificate(cert)
+            new_context.use_privatekey_file(self.server.ca)
+            connection.set_context(new_context)
+            return new_context
         # else: fail with 'no shared cipher'
-        # TODO(mruthven): move cert generation to after fetch so the host name
-        # can be gotten from the server.
       except Exception, e:
         # Do not leak any exceptions or else openssl crashes.
         print('Exception in SNI handler', e)
@@ -52,9 +52,11 @@ class SSLHandshakeHandler:
     try:
       self.connection.do_handshake()
     except SSL.Error, v:
-      self.connection.shutdown()
-      self.connection.close()
-      raise Exception('SSL handshake error: %s' % str(v))
+      host = self.connection.get_servername()
+      if not host or not self.server.cert:
+        logging.error('Dropping request without SNI')
+        return ''
+      raise SSL.Error('SSL handshake error %s: %s' % (host, str(v)))
 
     def wrap_recv(recv):
       """Wraps recv to handle ragged EOFs and ZeroReturnErrors."""
@@ -77,15 +79,16 @@ class SSLHandshakeHandler:
                                     close=False)
 
   def finish(self):
-    self.connection.shutdown()
-    self.connection.close()
+    try:
+      self.connection.shutdown()
+    except:
+      print 'shutdown'
 
 
 def wrap_handler(handler_class, cert_file):
   """Wraps a BaseHTTPHandler wtih SSL MITM certificates."""
   if openssl_import_error:
     raise openssl_import_error
-  set_ca_cert(cert_file)
 
   class WrappedHandler(SSLHandshakeHandler, handler_class):
 
@@ -97,5 +100,3 @@ def wrap_handler(handler_class, cert_file):
       handler_class.finish(self)
       SSLHandshakeHandler.finish(self)
   return WrappedHandler
-
-

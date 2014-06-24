@@ -15,6 +15,7 @@
 
 """Retrieve web resources over http."""
 
+import certutils
 import copy
 import httparchive
 import httplib
@@ -24,8 +25,18 @@ import platformsettings
 import random
 import re
 import script_injector
+import socket
 import StringIO
+import time
 import util
+
+openssl_import_error = None
+try:
+  # Requires: pyOpenSSL 0.13+
+  from OpenSSL import SSL, crypto
+except ImportError, e:
+  openssl_import_error = e
+
 
 # PIL isn't always available, but we still want to be able to run without
 # the image scrambling functionality in this case.
@@ -35,6 +46,11 @@ except ImportError:
   Image = None
 
 TIMER = platformsettings.timer
+ROOT_CA_REQUEST =  httparchive.ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
+
+def CreateCertificateResponse(cert):
+  c = httparchive.ArchivedHttpResponse(11, 200, 'OK', [], cert, {})
+  return c
 
 
 class HttpClientException(Exception):
@@ -338,6 +354,50 @@ class RecordHttpArchiveFetch(object):
     self.real_http_fetch = RealHttpFetch(real_dns_lookup)
     self.inject_script = inject_script
     self.cache_misses = cache_misses
+    self.cert_dict = {}
+
+  def _GetServerCertificate(self, req):
+    """Contacts server and gets SNI from the returned certificate."""
+    def verify_cb(conn, cert, errnum, depth, ok):
+      self.cert_dict[req.host] = cert
+      # say that the certificate was ok
+      return 1
+
+    context = SSL.Context(SSL.SSLv23_METHOD)
+    context.set_verify(SSL.VERIFY_PEER, verify_cb)  # Demand a certificate
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    connection = SSL.Connection(context, s)
+    try:
+      connection.connect((req.host, 443))
+      connection.send('\r\n\r\n')
+    except:
+      pass
+    connection.shutdown()
+    connection.close()
+
+    cert = ''
+    if req.host in self.cert_dict:
+      cert = crypto.dump_certificate(crypto.FILETYPE_PEM, self.cert_dict[req.host])
+    cert_response = CreateCertificateResponse(cert)
+    self.http_archive[req] = cert_response
+    return cert_response
+
+
+  def _GenerateDummyCert(self, req):
+    root_cert_response = self.http_archive[ROOT_CA_REQUEST]
+    root_cert = root_cert_response.response_data
+
+    server_cert_request = httparchive.ArchivedHttpRequest(
+        'SERVER_CERT', req.host, '', None, {})
+    server_cert_response = self(server_cert_request)
+    server_cert = server_cert_response.response_data
+
+    cert = ''
+    if server_cert:
+      cert = certutils.generate_dummy_cert_from_server(root_cert, server_cert)
+    self.http_archive[req] = CreateCertificateResponse(cert)
+    return self.http_archive[req]
+
 
   def __call__(self, request):
     """Fetch the request and return the response.
@@ -356,6 +416,10 @@ class RecordHttpArchiveFetch(object):
       logging.debug('Repeated request found: %s', request)
       response = self.http_archive[request]
     else:
+      if request.command == 'DUMMY_CERT':
+        return self._GenerateDummyCert(request)
+      if request.command == 'SERVER_CERT':
+        return self._GetServerCertificate(request)
       response = self.real_http_fetch(request)
       if response is None:
         return None
@@ -456,6 +520,7 @@ class ControllableHttpArchiveFetch(object):
       use_closest_match: If True, on replay mode, serve the closest match
         in the archive instead of giving a 404.
     """
+    self.http_archive = http_archive
     self.record_fetch = RecordHttpArchiveFetch(
         http_archive, real_dns_lookup, inject_script,
         cache_misses)
@@ -467,6 +532,11 @@ class ControllableHttpArchiveFetch(object):
       self.SetRecordMode()
     else:
       self.SetReplayMode()
+
+  def SetRootCertificate(self, cert_path):
+    with open(cert_path, 'r') as cert_file:
+      cert = cert_file.read()
+    self.http_archive[ROOT_CA_REQUEST] = CreateCertificateResponse(cert)
 
   def SetRecordMode(self):
     self.fetch = self.record_fetch

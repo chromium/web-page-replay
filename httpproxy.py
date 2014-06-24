@@ -282,6 +282,8 @@ class HttpsProxyServer(HttpProxyServer):
   """SSL server that generates certs for each host."""
 
   def __init__(self, http_archive_fetch, custom_handlers, certfile, **kwargs):
+    self.ca = certfile
+    http_archive_fetch.SetRootCertificate(certfile)
     self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler, certfile)
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, **kwargs)
@@ -291,7 +293,6 @@ class HttpsProxyServer(HttpProxyServer):
       self.shutdown()
     except KeyboardInterrupt:
       pass
-    sslproxy.certstore.cleanup()
 
 
 class SingleCertHttpsProxyServer(HttpProxyServer):
