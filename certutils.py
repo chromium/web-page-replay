@@ -103,7 +103,7 @@ def generate_dummy_cert_from_file(path, common_name):
   return generate_dummy_cert(raw, common_name)
 
 
-def generate_dummy_cert_from_server(root_cert, server_cert):
+def generate_dummy_cert_from_server(root_cert, server_cert, host):
   """Generates a cert with the sni field in server_cert signed by the root_cert.
 
   Args:
@@ -112,8 +112,10 @@ def generate_dummy_cert_from_server(root_cert, server_cert):
   Returns:
     a PEM formatted certificate
   """
-  cert = crypto.load_certificate(crypto.FILETYPE_PEM, server_cert)
-  sni = cert.get_subject().commonName
+  sni = host
+  if server_cert:
+    cert = crypto.load_certificate(crypto.FILETYPE_PEM, server_cert)
+    sni = cert.get_subject().commonName
   return generate_dummy_cert(root_cert, sni)
 
 

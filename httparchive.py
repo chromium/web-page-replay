@@ -279,43 +279,43 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     stats['HTTP_response_code'] = defaultdict(int)
     stats['content_type'] = defaultdict(int)
     stats['Documents'] = defaultdict(int)
-    
+
     for request in matching_requests:
       stats['Domains'][request.host] += 1
       stats['HTTP_response_code'][self[request].status] += 1
-      
+
       content_type = self[request].get_header('content-type')
       # Remove content type options for readability and higher level groupings.
-      str_content_type = str(content_type.split(';')[0] 
+      str_content_type = str(content_type.split(';')[0]
                             if content_type else None)
       stats['content_type'][str_content_type] += 1
 
       #  Documents are the main URL requested and not a referenced resource.
       if str_content_type == 'text/html' and not 'referer' in request.headers:
         stats['Documents'][request.host] += 1
-    
+
     print >>out, json.dumps(stats, indent=4)
     return out.getvalue()
 
   def merge(self, merged_archive=None, other_archives=None):
-    """Merge multiple archives into merged_archive by 'chaining' resources, 
+    """Merge multiple archives into merged_archive by 'chaining' resources,
     only resources that are not part of the accumlated archive are added"""
     if not other_archives:
       print 'No archives passed to merge'
       return
-    
-    # Note we already loaded 'replay_file'. 
+
+    # Note we already loaded 'replay_file'.
     print 'Loaded %d responses' % len(self)
 
     for archive in other_archives:
       if not os.path.exists(archive):
         print 'Error: Replay file "%s" does not exist' % archive
         return
-      
+
       http_archive_other = HttpArchive.Load(archive)
       print 'Loaded %d responses from %s' % (len(http_archive_other), archive)
       for r in http_archive_other:
-        # Only resources that are not already part of the current archive 
+        # Only resources that are not already part of the current archive
         # get added.
         if r not in self:
           print '\t %s ' % r

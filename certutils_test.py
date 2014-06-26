@@ -63,14 +63,15 @@ class CertutilsTest(unittest.TestCase):
     certutils.write_dummy_ca(ca_path, cert, key)
 
     subject = 'testSubject'
-    cert_string = certutils.generate_dummy_cert_from_file(ca_path, subject) 
+    cert_string = certutils.generate_dummy_cert_from_file(ca_path, subject)
     cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_string)
     self.assertEqual(issuer, cert.get_issuer().commonName)
     self.assertEqual(subject, cert.get_subject().commonName)
 
     with open(ca_path, 'r') as ca_file:
       ca = ca_file.read()
-    cert_string = certutils.generate_dummy_cert_from_server(ca, cert_string)
+    cert_string = certutils.generate_dummy_cert_from_server(ca, cert_string,
+                                                            'host')
     cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_string)
     self.assertEqual(issuer, cert.get_issuer().commonName)
     self.assertEqual(subject, cert.get_subject().commonName)
