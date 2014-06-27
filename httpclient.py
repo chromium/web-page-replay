@@ -394,9 +394,7 @@ class RecordHttpArchiveFetch(object):
     server_cert_response = self(server_cert_request)
     server_cert = server_cert_response.response_data
 
-    cert = ''
-    if server_cert:
-      cert = certutils.generate_dummy_cert_from_server(root_cert, server_cert,
+    cert = certutils.generate_dummy_cert_from_server(root_cert, server_cert,
                                                        req.host)
     self.http_archive[req] = CreateCertificateResponse(cert)
     return self.http_archive[req]
