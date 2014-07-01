@@ -134,7 +134,7 @@ class TestClient(unittest.TestCase):
     if self._temp_dir:
       shutil.rmtree(self._temp_dir)
 
-  def verify_cb(self, conn, cert, errnum, depth, ok):
+  def _verify_cb(self, conn, cert, errnum, depth, ok):
     """A callback that verifies the certificate authentication worked.
 
     Args:
@@ -157,30 +157,30 @@ class TestClient(unittest.TestCase):
   def stopServer(self):
     self.s.__exit__()
 
-  def test__NoHost(self):
+  def test_no_host(self):
     port = 12345
     self.startServer(port)
 
-    c = Client(SSL.SSLv23_METHOD, self.cert, self.verify_cb, port, '')
+    c = Client(SSL.SSLv23_METHOD, self.cert, self._verify_cb, port, '')
     self.assertRaises(SSL.Error, c.run_request)
     c.shutDown()
 
     self.stopServer()
 
-  def test__NoCA(self):
+  def test_no_ca(self):
     port = 12344
     self.assertRaises(ValueError, Server, port, 'no.pem')
 
-  def test__ClientConnection(self):
+  def test_client_connection(self):
     port = 12346
     self.startServer(port, True)
 
-    c = Client(SSL.SSLv23_METHOD, self.cert, self.verify_cb, port, 'foo.com')
+    c = Client(SSL.SSLv23_METHOD, self.cert, self._verify_cb, port, 'foo.com')
     c.run_request()
     self.assertTrue(self.ok)
     c.shutDown()
 
-    c = Client(SSL.SSLv23_METHOD, self.cert, self.verify_cb, port,
+    c = Client(SSL.SSLv23_METHOD, self.cert, self._verify_cb, port,
                'random.host')
     c.run_request()
     self.assertTrue(self.ok)
@@ -188,11 +188,11 @@ class TestClient(unittest.TestCase):
 
     self.stopServer
 
-  def test__WrongCert(self):
+  def test_wrong_cert(self):
     port = 12347
     self.startServer(port)
 
-    c = Client(SSL.SSLv23_METHOD, self.wrong_cert, self.verify_cb, port,
+    c = Client(SSL.SSLv23_METHOD, self.wrong_cert, self._verify_cb, port,
                'foo.com')
     self.assertRaises(SSL.Error, c.run_request)
     self.assertFalse(self.ok)

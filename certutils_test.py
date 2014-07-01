@@ -11,15 +11,15 @@ from OpenSSL import crypto
 
 class CertutilsTest(unittest.TestCase):
 
-  def checkCertFile(self, cert_file_path, cert, key=None):
+  def _check_cert_file(self, cert_file_path, cert, key=None):
     raw_cert = open(cert_file_path, 'r').read()
     cert_load = crypto.load_certificate(crypto.FILETYPE_PEM, raw_cert)
-    self.assertX509IsEqual(cert, cert_load, crypto.dump_certificate)
+    self._assert_x509_is_equal(cert, cert_load, crypto.dump_certificate)
     if key:
       key_load = crypto.load_privatekey(crypto.FILETYPE_PEM, raw_cert)
-      self.assertX509IsEqual(key_load, key, crypto.dump_privatekey)
+      self._assert_x509_is_equal(key_load, key, crypto.dump_privatekey)
 
-  def assertX509IsEqual(self, a, b, dump_function):
+  def _assert_x509_is_equal(self, a, b, dump_function):
     pem = crypto.FILETYPE_PEM
     self.assertEqual(dump_function(pem, a), dump_function(pem, b))
 
@@ -30,16 +30,16 @@ class CertutilsTest(unittest.TestCase):
     if self._temp_dir:
       shutil.rmtree(self._temp_dir)
 
-  def test__BadCertStoreCa(self):
+  def test_bad_cert_store_ca(self):
     ca_cert = 'not.here'
     self.assertRaises(ValueError, certutils.CertStore, (ca_cert))
 
-  def test__GenerateDummyCA(self):
+  def test_generate_dummy_ca(self):
     subject = 'testSubject'
     c, _ = certutils.generate_dummy_ca(subject)
     self.assertEqual(c.get_subject().commonName, subject)
 
-  def test__WriteDummyCA(self):
+  def test_write_dummy_ca(self):
     base_path = os.path.join(self._temp_dir, 'testCA')
     ca_path = base_path + '.pem'
     ca_pem = base_path + '-cert.pem'
@@ -54,12 +54,12 @@ class CertutilsTest(unittest.TestCase):
     c, k = certutils.generate_dummy_ca()
     certutils.write_dummy_ca(ca_path, c, k)
 
-    self.checkCertFile(ca_path, c, k)
-    self.checkCertFile(ca_pem, c)
-    self.checkCertFile(ca_android, c)
+    self._check_cert_file(ca_path, c, k)
+    self._check_cert_file(ca_pem, c)
+    self._check_cert_file(ca_android, c)
     self.assertTrue(os.path.exists(ca_windows))
 
-  def test__CertStore(self):
+  def test_cert_store(self):
     ca_path = os.path.join(self._temp_dir, 'testCA.pem')
     cert, key = certutils.generate_dummy_ca()
     certutils.write_dummy_ca(ca_path, cert, key)
