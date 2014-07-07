@@ -8,7 +8,6 @@ import tempfile
 import threading
 import time
 import unittest
-from OpenSSL import SSL
 
 import certutils
 import sslproxy
@@ -17,9 +16,8 @@ import sslproxy
 class Client(object):
 
   def __init__(self, pem_path, verify_cb, port, host_name='foo.com',
-               host='localhost', method=SSL.SSLv23_METHOD):
+               host='localhost'):
     self.host_name = host_name
-    self.method = method
     self.verify_cb = verify_cb
     self.pem_path = pem_path
     self.port = port
@@ -28,13 +26,13 @@ class Client(object):
     self.connection = None
 
   def run_request(self):
-    context = SSL.Context(self.method)
-    context.set_verify(SSL.VERIFY_PEER, self.verify_cb)  # Demand a certificate
+    context = certutils.get_ssl_context()
+    context.set_verify(certutils.VERIFY_PEER, self.verify_cb)  # Demand a certificate
     context.use_certificate_file(self.pem_path)
     context.load_verify_locations(self.pem_path)
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    self.connection = SSL.Connection(context, s)
+    self.connection = certutils.get_ssl_connection(context, s)
     self.connection.connect((self.host, self.port))
     self.connection.set_tlsext_host_name(self.host_name)
 
@@ -60,8 +58,8 @@ class WrappedErrorHandler(sslproxy.SSLHandshakeHandler, Handler):
     Handler.setup(self)
     try:
       sslproxy.SSLHandshakeHandler.setup(self)
-    except SSL.Error:
-      self.server.error_function = SSL.Error
+    except certutils.Error:
+      self.server.error_function = certutils.Error
 
   def finish(self):
     sslproxy.SSLHandshakeHandler.finish(self)
@@ -153,7 +151,7 @@ class TestClient(unittest.TestCase):
   def test_no_host(self):
     with Server(self.pem_path) as server:
       c = Client(self.cert_path, self.verify_cb, server.server_port, '')
-      self.assertRaises(SSL.Error, c.run_request)
+      self.assertRaises(certutils.Error, c.run_request)
 
   def test_client_connection(self):
     with Server(self.pem_path) as server:
@@ -168,7 +166,7 @@ class TestClient(unittest.TestCase):
     with Server(self.pem_path, True) as server:
       c = Client(self.wrong_cert_path, self.verify_cb, server.server_port,
                  'foo.com')
-      self.assertRaises(SSL.Error, c.run_request)
+      self.assertRaises(certutils.Error, c.run_request)
 
 
 if __name__ == '__main__':

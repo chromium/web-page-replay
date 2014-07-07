@@ -4,8 +4,6 @@ import shutil
 import tempfile
 import unittest
 
-from OpenSSL import crypto
-
 import certutils
 
 
@@ -13,15 +11,14 @@ class CertutilsTest(unittest.TestCase):
 
   def _check_cert_file(self, cert_file_path, cert, key=None):
     raw_cert = open(cert_file_path, 'r').read()
-    cert_load = crypto.load_certificate(crypto.FILETYPE_PEM, raw_cert)
-    self._assert_x509_is_equal(cert, cert_load, crypto.dump_certificate)
+    cert_load = certutils.load_cert(raw_cert)
+    self._assert_x509_is_equal(cert, cert_load, certutils.dump_cert)
     if key:
-      key_load = crypto.load_privatekey(crypto.FILETYPE_PEM, raw_cert)
-      self._assert_x509_is_equal(key_load, key, crypto.dump_privatekey)
+      key_load = certutils.load_privatekey(raw_cert)
+      self._assert_x509_is_equal(key_load, key, certutils.dump_privatekey)
 
   def _assert_x509_is_equal(self, a, b, dump_function):
-    pem = crypto.FILETYPE_PEM
-    self.assertEqual(dump_function(pem, a), dump_function(pem, b))
+    self.assertEqual(dump_function(a), dump_function(b))
 
   def setUp(self):
     self._temp_dir = tempfile.mkdtemp(prefix='certutils_', dir='/tmp')
@@ -66,7 +63,7 @@ class CertutilsTest(unittest.TestCase):
     subject = 'testSubject'
     cert_string = certutils.generate_dummy_crt(
         root_string, '', subject)
-    cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_string)
+    cert = certutils.load_cert(cert_string)
     self.assertEqual(issuer, cert.get_issuer().commonName)
     self.assertEqual(subject, cert.get_subject().commonName)
 
@@ -74,7 +71,7 @@ class CertutilsTest(unittest.TestCase):
       pem = ca_file.read()
     cert_string = certutils.generate_dummy_crt(pem, cert_string,
                                                'host')
-    cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_string)
+    cert = certutils.load_cert(cert_string)
     self.assertEqual(issuer, cert.get_issuer().commonName)
     self.assertEqual(subject, cert.get_subject().commonName)
 

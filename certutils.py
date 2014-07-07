@@ -13,10 +13,52 @@ import socket
 import time
 
 openssl_import_error = None
+
+SSL_METHOD = None
+VERIFY_PEER = None
+SysCallError = None
+Error = None
+ZeroReturnError = None
+
 try:
   from OpenSSL import crypto, SSL
+
+  SSL_METHOD = SSL.SSLv23_METHOD
+  VERIFY_PEER = SSL.VERIFY_PEER
+  SysCallError = SSL.SysCallError
+  Error = SSL.Error
+  ZeroReturnError = SSL.ZeroReturnError
 except ImportError, e:
   openssl_import_error = e
+
+
+def get_ssl_context(method=SSL_METHOD):
+  # One of: One of SSLv2_METHOD, SSLv3_METHOD, SSLv23_METHOD, or TLSv1_METHOD
+  return SSL.Context(method)
+
+
+def get_ssl_connection(context, connection):
+  return SSL.Connection(context, connection)
+
+
+def load_privatekey(key, filetype=crypto.FILETYPE_PEM):
+  """Loads x509 private key object from string."""
+  return crypto.load_privatekey(filetype, key)
+
+
+def load_cert(crt, filetype=crypto.FILETYPE_PEM):
+  """Loads x509 cert object from string."""
+  return crypto.load_certificate(filetype, crt)
+
+
+def dump_privatekey(key, filetype=crypto.FILETYPE_PEM):
+  """Dumps x509 private key object to string."""
+  return crypto.dump_privatekey(filetype, key)
+
+
+def dump_cert(cert, filetype=crypto.FILETYPE_PEM):
+  """Dumps x509 cert object to string."""
+  return crypto.dump_certificate(filetype, cert)
 
 
 def generate_dummy_ca(subject='sslproxy'):
@@ -80,7 +122,7 @@ def get_SNI_from_server(host):
   connection.close()
   cert = certs[-1]
   if cert:
-    cert = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
+    cert = dump_cert(cert)
   return cert
 
 
@@ -106,8 +148,8 @@ def write_dummy_ca(cert_path, ca, key):
   android_cer_path = root_path + '-cert.cer'
   windows_p12_path = root_path + '-cert.p12'
 
-  pem_key = crypto.dump_privatekey(crypto.FILETYPE_PEM, key)
-  pem_ca = crypto.dump_certificate(crypto.FILETYPE_PEM, ca)
+  pem_key = dump_privatekey(key)
+  pem_ca = dump_cert(ca)
 
   # Dump the CA plus private key
   with open(cert_path, 'w') as f:
@@ -140,13 +182,16 @@ def generate_dummy_crt(root_pem, server_crt, host):
   Returns:
     a PEM formatted certificate string
   """
+
+  if openssl_import_error:
+    raise openssl_import_error
   common_name = host
   if server_crt:
-    cert = crypto.load_certificate(crypto.FILETYPE_PEM, server_crt)
+    cert = load_cert(server_crt)
     common_name = cert.get_subject().commonName
 
-  ca = crypto.load_certificate(crypto.FILETYPE_PEM, root_pem)
-  key = crypto.load_privatekey(crypto.FILETYPE_PEM, root_pem)
+  ca = load_cert(root_pem)
+  key = load_privatekey(root_pem)
 
   req = crypto.X509Req()
   subj = req.get_subject()
@@ -163,4 +208,4 @@ def generate_dummy_crt(root_pem, server_crt, host):
   cert.set_pubkey(req.get_pubkey())
   cert.sign(key, 'sha1')
 
-  return crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
+  return dump_cert(cert)
