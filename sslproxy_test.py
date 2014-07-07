@@ -80,7 +80,6 @@ class Server(BaseHTTPServer.HTTPServer):
     self.pem_path = pem_path
     with open(pem_path, 'r') as pem_file:
       self.root_pem = pem_file.read()
-    self.crt = ''
     if use_error_handler:
       self.HANDLER = WrappedErrorHandler
     else:

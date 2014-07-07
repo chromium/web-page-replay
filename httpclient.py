@@ -365,6 +365,8 @@ class RecordHttpArchiveFetch(object):
   def _GenerateDummyCert(self, req):
     """Generates a dummy crt using the SNI field from the real server crt."""
     assert req.command == 'DUMMY_CERT'
+    if ROOT_CA_REQUEST not in self.http_archive:
+      raise KeyError('Root cert is not in archive')
     root_pem_response = self.http_archive[ROOT_CA_REQUEST]
     root_pem = root_pem_response.response_data[0]
 

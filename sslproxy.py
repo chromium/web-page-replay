@@ -26,15 +26,13 @@ class SSLHandshakeHandler:
           crt_request = get_crt_request(host)
           crt_response = self.server.http_archive_fetch(crt_request)
           crt = crt_response.response_data[0]
-          self.server.crt = crt
-          if crt:
-            self.server_name = host
-            new_context = certutils.get_ssl_context()
-            cert = certutils.load_cert(crt)
-            new_context.use_certificate(cert)
-            new_context.use_privatekey_file(self.server.pem_path)
-            connection.set_context(new_context)
-            return new_context
+          self.server_name = host
+          new_context = certutils.get_ssl_context()
+          cert = certutils.load_cert(crt)
+          new_context.use_certificate(cert)
+          new_context.use_privatekey_file(self.server.pem_path)
+          connection.set_context(new_context)
+          return new_context
         # else: fail with 'no shared cipher'
       except Exception, e:
         # Do not leak any exceptions or else openssl crashes.
@@ -47,7 +45,7 @@ class SSLHandshakeHandler:
       self.connection.do_handshake()
     except certutils.Error, v:
       host = self.connection.get_servername()
-      if not host or not self.server.crt:
+      if not host:
         logging.error('Dropping request without SNI')
         return ''
       raise certutils.Error('SSL handshake error %s: %s' % (host, str(v)))
