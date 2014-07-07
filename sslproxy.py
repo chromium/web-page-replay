@@ -12,13 +12,12 @@ except ImportError, e:
   openssl_import_error = e
 
 
-def get_cert_request(host):
+def get_crt_request(host):
   return httparchive.ArchivedHttpRequest('DUMMY_CERT', host, '', None, {})
 
 
 class SSLHandshakeHandler:
   """Handles Server Name Indication (SNI) using dummy certs."""
-  past_certs = {}
 
   def setup(self):
     """Sets up connection providing the certificate to the client."""
@@ -30,16 +29,16 @@ class SSLHandshakeHandler:
       try:
         host = connection.get_servername()
         if host:
-          certificate_request = get_cert_request(host)
-          cert_response = self.server.http_archive_fetch(certificate_request)
-          cert = cert_response.response_data
-          self.server.cert = cert
-          if cert:
+          crt_request = get_crt_request(host)
+          crt_response = self.server.http_archive_fetch(crt_request)
+          crt = crt_response.response_data[0]
+          self.server.crt = crt
+          if crt:
             self.server_name = host
             new_context = SSL.Context(SSL.SSLv23_METHOD)
-            cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert)
+            cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt)
             new_context.use_certificate(cert)
-            new_context.use_privatekey_file(self.server.ca)
+            new_context.use_privatekey_file(self.server.pem_path)
             connection.set_context(new_context)
             return new_context
         # else: fail with 'no shared cipher'
@@ -54,7 +53,7 @@ class SSLHandshakeHandler:
       self.connection.do_handshake()
     except SSL.Error, v:
       host = self.connection.get_servername()
-      if not host or not self.server.cert:
+      if not host or not self.server.crt:
         logging.error('Dropping request without SNI')
         return ''
       raise SSL.Error('SSL handshake error %s: %s' % (host, str(v)))
@@ -80,10 +79,8 @@ class SSLHandshakeHandler:
                                     close=False)
 
   def finish(self):
-    try:
-      self.connection.shutdown()
-    except:
-      print 'shutdown'
+    self.connection.shutdown()
+    self.connection.close()
 
 
 def wrap_handler(handler_class):

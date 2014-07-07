@@ -1,17 +1,36 @@
-"""Routines to generate dummy certificates."""
+"""Routines to generate root and server certificates."""
 
+import logging
 import os
+import shutil
+import socket
+import tempfile
 import time
+
 
 openssl_import_error = None
 try:
-  from OpenSSL import crypto
+  from OpenSSL import crypto, SSL
 except ImportError, e:
   openssl_import_error = e
-
+"""
+Let's add a comment with our naming conventions, and adopt something like:
+  ca:   a private crypto.X509  (w/ both the pub & priv keys)
+  cert: a public crypto.X509  (w/ just the pub key)
+  crt:  a public string (w/ just the pub cert)
+  key:  a private crypto.PKey  (from ca or pem)
+  pem:  a private string (w/ both the pub & priv certs)
+"""
 
 def generate_dummy_ca(subject='sslproxy'):
-  """Generates dummy certificate authority."""
+  """Generates dummy certificate authority.
+
+  Args:
+    subject: a string representing the desired root cert issuer
+  Returns: 
+    A tuple of the public key and the private key x509 objects for the root
+    certificate 
+  """
   if openssl_import_error:
     raise openssl_import_error
 
@@ -39,6 +58,33 @@ def generate_dummy_ca(subject='sslproxy'):
       ])
   ca.sign(key, 'sha1')
   return ca, key
+
+
+def get_SNI_from_server(host):
+  """Contacts server and gets SNI from the returned certificate."""
+  certs = ['']
+  def verify_cb(conn, cert, errnum, depth, ok):
+    certs.append(cert)
+    # say that the certificate was ok
+    return 1
+
+  context = SSL.Context(SSL.SSLv23_METHOD)
+  context.set_verify(SSL.VERIFY_PEER, verify_cb)  # Demand a certificate
+  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  connection = SSL.Connection(context, s)
+  try:
+    connection.connect((host, 443))
+    connection.send('')
+  except SSL.SysCallError:
+    pass
+  except socket.gaierror:
+    logging.debug('Host name is not valid')
+  connection.shutdown()
+  connection.close()
+  cert = certs[-1]
+  if cert:
+    cert = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
+  return cert
 
 
 def write_dummy_ca(cert_path, ca, key):
@@ -87,42 +133,22 @@ def write_dummy_ca(cert_path, ca, key):
     f.write(p12.export())
 
 
-def generate_dummy_cert_from_file(path, common_name):
-  """Generates a cert for |common_name| signed by the root cert in |path|.
+def generate_dummy_crt_from_server(root_pem, server_crt, host):
+  """Generates a crt with the sni field in server_crt signed by the root_pem.
 
   Args:
-    path: location of a PEM formatted root cert
-    common_name: Desired subject for the generated cert
+    root_pem: PEM formatted string representing the root cert
+    server_crt: PEM formatted string representing cert
   Returns:
-    a PEM formatted certificate
+    a PEM formatted certificate string
   """
-  if openssl_import_error:
-    raise openssl_import_error
-  with open(path, 'r') as ca_file:
-    raw = ca_file.read()
-  return generate_dummy_cert(raw, common_name)
+  common_name = host
+  if server_crt:
+    cert = crypto.load_certificate(crypto.FILETYPE_PEM, server_crt)
+    common_name = cert.get_subject().commonName
 
-
-def generate_dummy_cert_from_server(root_cert, server_cert, host):
-  """Generates a cert with the sni field in server_cert signed by the root_cert.
-
-  Args:
-    root_cert: PEM formatted string representing the root cert
-    server_cert: PEM formatted string representing cert
-  Returns:
-    a PEM formatted certificate
-  """
-  sni = host
-  if server_cert:
-    cert = crypto.load_certificate(crypto.FILETYPE_PEM, server_cert)
-    sni = cert.get_subject().commonName
-  return generate_dummy_cert(root_cert, sni)
-
-
-def generate_dummy_cert(root_cert, common_name):
-  """Generates a certificate for common_name signed by signed by root_cert."""
-  ca = crypto.load_certificate(crypto.FILETYPE_PEM, root_cert)
-  key = crypto.load_privatekey(crypto.FILETYPE_PEM, root_cert)
+  ca = crypto.load_certificate(crypto.FILETYPE_PEM, root_pem)
+  key = crypto.load_privatekey(crypto.FILETYPE_PEM, root_pem)
 
   req = crypto.X509Req()
   subj = req.get_subject()

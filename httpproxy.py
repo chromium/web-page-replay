@@ -279,9 +279,10 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
 class HttpsProxyServer(HttpProxyServer):
   """SSL server that generates certs for each host."""
 
-  def __init__(self, http_archive_fetch, custom_handlers, certfile, **kwargs):
-    self.ca = certfile
-    http_archive_fetch.SetRootCertificate(certfile)
+  def __init__(self, http_archive_fetch, custom_handlers, https_root_pem_path,
+               **kwargs):
+    self.pem_path = https_root_pem_path
+    http_archive_fetch.SetRootCertificate(https_root_pem_path)
     self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler)
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, **kwargs)
@@ -296,11 +297,12 @@ class HttpsProxyServer(HttpProxyServer):
 class SingleCertHttpsProxyServer(HttpProxyServer):
   """SSL server."""
 
-  def __init__(self, http_archive_fetch, custom_handlers, certfile, **kwargs):
+  def __init__(self, http_archive_fetch, custom_handlers, https_root_pem_path,
+               **kwargs):
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, protocol='HTTPS', **kwargs)
     self.socket = ssl.wrap_socket(
-        self.socket, certfile=certfile, server_side=True,
+        self.socket, certfile=https_root_pem_path, server_side=True,
         do_handshake_on_connect=False)
     # Ancestor class, DaemonServer, calls serve_forever() during its __init__.
 

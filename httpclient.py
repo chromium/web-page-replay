@@ -27,13 +27,6 @@ import httparchive
 import platformsettings
 import script_injector
 
-openssl_import_error = None
-try:
-  # Requires: pyOpenSSL 0.13+
-  from OpenSSL import SSL, crypto
-except ImportError, e:
-  openssl_import_error = e
-
 
 # PIL isn't always available, but we still want to be able to run without
 # the image scrambling functionality in this case.
@@ -46,9 +39,16 @@ TIMER = platformsettings.timer
 ROOT_CA_REQUEST = httparchive.ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
 
 
-def CreateCertificateResponse(cert):
-  c = httparchive.ArchivedHttpResponse(11, 200, 'OK', [], cert, {})
-  return c
+def CreateCertificateResponse(crt):
+  """Creates ArchivedHttpResponse with the cert string as the response_data.
+
+  Args:
+    crt: A string representing a PEM formatted cert. The string can
+          contain the private key if it is for the root cert.
+  Returns:
+    an ArchivedHttpResponse
+  """
+  return httparchive.ArchivedHttpResponse(11, 200, 'OK', [], [crt], {})
 
 
 class HttpClientException(Exception):
@@ -356,48 +356,25 @@ class RecordHttpArchiveFetch(object):
     self.real_http_fetch = RealHttpFetch(real_dns_lookup)
     self.inject_script = inject_script
     self.cache_misses = cache_misses
-    self.cert_dict = {}
 
   def _GetServerCertificate(self, req):
-    """Contacts server and gets SNI from the returned certificate."""
-    def verify_cb(conn, cert, errnum, depth, ok):
-      self.cert_dict[req.host] = cert
-      # say that the certificate was ok
-      return 1
-
-    context = SSL.Context(SSL.SSLv23_METHOD)
-    context.set_verify(SSL.VERIFY_PEER, verify_cb)  # Demand a certificate
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    connection = SSL.Connection(context, s)
-    try:
-      connection.connect((req.host, 443))
-      connection.send('\r\n\r\n')
-    except:
-      pass
-    connection.shutdown()
-    connection.close()
-
-    cert = ''
-    if req.host in self.cert_dict:
-      cert = crypto.dump_certificate(crypto.FILETYPE_PEM,
-                                     self.cert_dict[req.host])
-    cert_response = CreateCertificateResponse(cert)
-    self.http_archive[req] = cert_response
-    return cert_response
+    """Gets SNI from server and stores it in archive"""
+    assert req.command == 'SERVER_CERT'
+    crt = certutils.get_SNI_from_server(req.host)
+    return CreateCertificateResponse(crt)
 
   def _GenerateDummyCert(self, req):
-    root_cert_response = self.http_archive[ROOT_CA_REQUEST]
-    root_cert = root_cert_response.response_data
+    assert req.command == 'DUMMY_CERT'
+    root_pem_response = self.http_archive[ROOT_CA_REQUEST]
+    root_pem = root_pem_response.response_data[0]
 
-    server_cert_request = httparchive.ArchivedHttpRequest(
+    server_crt_request = httparchive.ArchivedHttpRequest(
         'SERVER_CERT', req.host, '', None, {})
-    server_cert_response = self(server_cert_request)
-    server_cert = server_cert_response.response_data
-
-    cert = certutils.generate_dummy_cert_from_server(root_cert, server_cert,
-                                                       req.host)
-    self.http_archive[req] = CreateCertificateResponse(cert)
-    return self.http_archive[req]
+    server_crt_response = self(server_crt_request)
+    server_crt = server_crt_response.response_data[0]
+    crt = certutils.generate_dummy_crt_from_server(root_pem, server_crt,
+                                                     req.host)
+    return CreateCertificateResponse(crt)
 
   def __call__(self, request):
     """Fetch the request and return the response.
@@ -417,10 +394,11 @@ class RecordHttpArchiveFetch(object):
       response = self.http_archive[request]
     else:
       if request.command == 'DUMMY_CERT':
-        return self._GenerateDummyCert(request)
-      if request.command == 'SERVER_CERT':
-        return self._GetServerCertificate(request)
-      response = self.real_http_fetch(request)
+        response = self._GenerateDummyCert(request)
+      elif request.command == 'SERVER_CERT':
+        response = self._GetServerCertificate(request)
+      else:
+        response = self.real_http_fetch(request)
       if response is None:
         return None
       self.http_archive[request] = response
