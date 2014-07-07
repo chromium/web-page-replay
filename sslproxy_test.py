@@ -77,7 +77,7 @@ class DummyResponse(object):
 class Server(BaseHTTPServer.HTTPServer):
   """SSL server."""
 
-  def __init__(self, pem_path, use_error_handler = False, port=0,
+  def __init__(self, pem_path, use_error_handler=False, port=0,
                host='localhost'):
     self.pem_path = pem_path
     with open(pem_path, 'r') as pem_file:
@@ -85,7 +85,7 @@ class Server(BaseHTTPServer.HTTPServer):
     self.crt = ''
     if use_error_handler:
       self.HANDLER = WrappedErrorHandler
-    else: 
+    else:
       self.HANDLER = sslproxy.wrap_handler(Handler)
     try:
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), self.HANDLER)
@@ -94,8 +94,7 @@ class Server(BaseHTTPServer.HTTPServer):
                          % (port, e))
 
   def http_archive_fetch(self, req):
-    crt = certutils.generate_dummy_crt_from_server(
-       self.root_pem, '', req.host)
+    crt = certutils.generate_dummy_crt(self.root_pem, '', req.host)
     return DummyResponse(crt)
 
   def __enter__(self):
@@ -126,8 +125,9 @@ class TestClient(unittest.TestCase):
     self.wrong_cert_path = self._temp_dir + 'wrong-cert.cer'
 
     # Write both pem and cer files for certificates
-    certutils.write_dummy_ca( self.pem_path, *certutils.generate_dummy_ca())
-    certutils.write_dummy_ca(self.wrong_pem_path, *certutils.generate_dummy_ca())
+    certutils.write_dummy_ca(self.pem_path, *certutils.generate_dummy_ca())
+    certutils.write_dummy_ca(self.wrong_pem_path,
+                             *certutils.generate_dummy_ca())
 
   def tearDown(self):
     if self._temp_dir:

@@ -19,7 +19,6 @@ import copy
 import httplib
 import logging
 import random
-import socket
 import StringIO
 
 import certutils
@@ -358,12 +357,13 @@ class RecordHttpArchiveFetch(object):
     self.cache_misses = cache_misses
 
   def _GetServerCertificate(self, req):
-    """Gets SNI from server and stores it in archive"""
+    """Gets certificate from the real server and stores it in archive"""
     assert req.command == 'SERVER_CERT'
     crt = certutils.get_SNI_from_server(req.host)
     return CreateCertificateResponse(crt)
 
   def _GenerateDummyCert(self, req):
+    """Generates a dummy crt using the SNI field from the real server crt."""
     assert req.command == 'DUMMY_CERT'
     root_pem_response = self.http_archive[ROOT_CA_REQUEST]
     root_pem = root_pem_response.response_data[0]
@@ -372,8 +372,7 @@ class RecordHttpArchiveFetch(object):
         'SERVER_CERT', req.host, '', None, {})
     server_crt_response = self(server_crt_request)
     server_crt = server_crt_response.response_data[0]
-    crt = certutils.generate_dummy_crt_from_server(root_pem, server_crt,
-                                                     req.host)
+    crt = certutils.generate_dummy_crt(root_pem, server_crt, req.host)
     return CreateCertificateResponse(crt)
 
   def __call__(self, request):

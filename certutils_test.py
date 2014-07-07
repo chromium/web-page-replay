@@ -1,12 +1,12 @@
 """Test routines to generate dummy certificates."""
-
 import os
 import shutil
 import tempfile
 import unittest
 
-import certutils
 from OpenSSL import crypto
+
+import certutils
 
 
 class CertutilsTest(unittest.TestCase):
@@ -64,7 +64,7 @@ class CertutilsTest(unittest.TestCase):
     with open(pem_path, 'r') as root_file:
       root_string = root_file.read()
     subject = 'testSubject'
-    cert_string = certutils.generate_dummy_crt_from_server(
+    cert_string = certutils.generate_dummy_crt(
         root_string, '', subject)
     cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_string)
     self.assertEqual(issuer, cert.get_issuer().commonName)
@@ -72,12 +72,11 @@ class CertutilsTest(unittest.TestCase):
 
     with open(pem_path, 'r') as ca_file:
       pem = ca_file.read()
-    cert_string = certutils.generate_dummy_crt_from_server(pem, cert_string,
-                                                            'host')
+    cert_string = certutils.generate_dummy_crt(pem, cert_string,
+                                               'host')
     cert = crypto.load_certificate(crypto.FILETYPE_PEM, cert_string)
     self.assertEqual(issuer, cert.get_issuer().commonName)
     self.assertEqual(subject, cert.get_subject().commonName)
-
 
 
 if __name__ == '__main__':

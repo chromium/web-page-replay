@@ -1,35 +1,32 @@
-"""Routines to generate root and server certificates."""
+"""Routines to generate root and server certificates.
 
-import logging
-import os
-import shutil
-import socket
-import tempfile
-import time
-
-
-openssl_import_error = None
-try:
-  from OpenSSL import crypto, SSL
-except ImportError, e:
-  openssl_import_error = e
-"""
-Let's add a comment with our naming conventions, and adopt something like:
+Certificate Naming Conventions:
   ca:   a private crypto.X509  (w/ both the pub & priv keys)
   cert: a public crypto.X509  (w/ just the pub key)
   crt:  a public string (w/ just the pub cert)
   key:  a private crypto.PKey  (from ca or pem)
   pem:  a private string (w/ both the pub & priv certs)
 """
+import logging
+import os
+import socket
+import time
+
+openssl_import_error = None
+try:
+  from OpenSSL import crypto, SSL
+except ImportError, e:
+  openssl_import_error = e
+
 
 def generate_dummy_ca(subject='sslproxy'):
   """Generates dummy certificate authority.
 
   Args:
     subject: a string representing the desired root cert issuer
-  Returns: 
+  Returns:
     A tuple of the public key and the private key x509 objects for the root
-    certificate 
+    certificate
   """
   if openssl_import_error:
     raise openssl_import_error
@@ -133,12 +130,13 @@ def write_dummy_ca(cert_path, ca, key):
     f.write(p12.export())
 
 
-def generate_dummy_crt_from_server(root_pem, server_crt, host):
+def generate_dummy_crt(root_pem, server_crt, host):
   """Generates a crt with the sni field in server_crt signed by the root_pem.
 
   Args:
     root_pem: PEM formatted string representing the root cert
     server_crt: PEM formatted string representing cert
+    host: host name to use if there is no server_crt
   Returns:
     a PEM formatted certificate string
   """
