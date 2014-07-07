@@ -58,7 +58,8 @@ class SSLHandshakeHandler:
         print('Exception in SNI handler', e)
 
     context.set_tlsext_servername_callback(handle_servername)
-    self.connection = WrappedConnection(SSL.Connection(context, self.connection))
+    self.connection = WrappedConnection(SSL.Connection(context,
+                                                       self.connection))
     self.connection.set_accept_state()
     try:
       self.connection.do_handshake()
