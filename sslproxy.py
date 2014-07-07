@@ -13,6 +13,17 @@ except ImportError, e:
 cert_store = None
 
 
+class WrappedConnection(object):
+
+  def __init__(self, obj):
+    self._wrapped_obj = obj
+
+  def __getattr__(self, attr):
+    if attr in self.__dict__:
+      return getattr(self, attr)
+    return getattr(self._wrapped_obj, attr)
+
+
 def set_ca_cert(ca_cert):
   global cert_store
   cert_store = certutils.CertStore(ca_cert, cert_dir=None)
@@ -47,7 +58,7 @@ class SSLHandshakeHandler:
         print('Exception in SNI handler', e)
 
     context.set_tlsext_servername_callback(handle_servername)
-    self.connection = SSL.Connection(context, self.connection)
+    self.connection = WrappedConnection(SSL.Connection(context, self.connection))
     self.connection.set_accept_state()
     try:
       self.connection.do_handshake()
