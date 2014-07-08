@@ -23,6 +23,17 @@ class WrappedConnection(object):
       return getattr(self, attr)
     return getattr(self._wrapped_obj, attr)
 
+  def recv(self, buflen=1024, flags=0):
+    try:
+      return self._wrapped_obj.recv(buflen, flags)
+    except SSL.SysCallError, e:
+      if e.args[1] == 'Unexpected EOF':
+        return ''
+      raise
+    except SSL.ZeroReturnError:
+      return ''
+
+
 
 def set_ca_cert(ca_cert):
   global cert_store
@@ -67,20 +78,6 @@ class SSLHandshakeHandler:
       self.connection.shutdown()
       self.connection.close()
       raise Exception('SSL handshake error: %s' % str(v))
-
-    def wrap_recv(recv):
-      """Wraps recv to handle ragged EOFs and ZeroReturnErrors."""
-      def wrapped_recv(buflen=1024, flags=0):
-        try:
-          return recv(buflen, flags)
-        except SSL.SysCallError, e:
-          if e.args[1] == 'Unexpected EOF':
-            return ''
-          raise
-        except SSL.ZeroReturnError:
-          return ''
-      return wrapped_recv
-    self.connection.recv = wrap_recv(self.connection.recv)
 
     # Re-wrap the read/write streams with our new connection.
     self.rfile = socket._fileobject(self.connection, 'rb', self.rbufsize,
