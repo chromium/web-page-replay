@@ -1,75 +1,19 @@
-"""Routines to generate root and server certificates.
+"""Routines to generate dummy certificates."""
 
-Certificate Naming Conventions:
-  ca:   a private crypto.X509  (w/ both the pub & priv keys)
-  cert: a public crypto.X509  (w/ just the pub key)
-  crt:  a public string (w/ just the pub cert)
-  key:  a private crypto.PKey  (from ca or pem)
-  pem:  a private string (w/ both the pub & priv certs)
-"""
-import logging
 import os
-import socket
+import shutil
+import tempfile
 import time
 
 openssl_import_error = None
-
-SSL_METHOD = None
-VERIFY_PEER = None
-SysCallError = None
-Error = None
-ZeroReturnError = None
-
 try:
-  from OpenSSL import crypto, SSL
-
-  SSL_METHOD = SSL.SSLv23_METHOD
-  VERIFY_PEER = SSL.VERIFY_PEER
-  SysCallError = SSL.SysCallError
-  Error = SSL.Error
-  ZeroReturnError = SSL.ZeroReturnError
+  from OpenSSL import crypto
 except ImportError, e:
   openssl_import_error = e
 
 
-def get_ssl_context(method=SSL_METHOD):
-  # One of: One of SSLv2_METHOD, SSLv3_METHOD, SSLv23_METHOD, or TLSv1_METHOD
-  return SSL.Context(method)
-
-
-def get_ssl_connection(context, connection):
-  return SSL.Connection(context, connection)
-
-
-def load_privatekey(key, filetype=crypto.FILETYPE_PEM):
-  """Loads x509 private key object from string."""
-  return crypto.load_privatekey(filetype, key)
-
-
-def load_cert(crt, filetype=crypto.FILETYPE_PEM):
-  """Loads x509 cert object from string."""
-  return crypto.load_certificate(filetype, crt)
-
-
-def dump_privatekey(key, filetype=crypto.FILETYPE_PEM):
-  """Dumps x509 private key object to string."""
-  return crypto.dump_privatekey(filetype, key)
-
-
-def dump_cert(cert, filetype=crypto.FILETYPE_PEM):
-  """Dumps x509 cert object to string."""
-  return crypto.dump_certificate(filetype, cert)
-
-
-def generate_dummy_ca(subject='sslproxy'):
-  """Generates dummy certificate authority.
-
-  Args:
-    subject: a string representing the desired root cert issuer
-  Returns:
-    A tuple of the public key and the private key x509 objects for the root
-    certificate
-  """
+def generate_dummy_ca(subject = 'sslproxy'):
+  """Generates dummy certificate authority.""" 
   if openssl_import_error:
     raise openssl_import_error
 
@@ -98,36 +42,8 @@ def generate_dummy_ca(subject='sslproxy'):
   ca.sign(key, 'sha1')
   return ca, key
 
-
-def get_SNI_from_server(host):
-  """Contacts server and gets SNI from the returned certificate."""
-  certs = ['']
-  def verify_cb(conn, cert, errnum, depth, ok):
-    certs.append(cert)
-    # say that the certificate was ok
-    return 1
-
-  context = SSL.Context(SSL.SSLv23_METHOD)
-  context.set_verify(SSL.VERIFY_PEER, verify_cb)  # Demand a certificate
-  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  connection = SSL.Connection(context, s)
-  try:
-    connection.connect((host, 443))
-    connection.send('')
-  except SSL.SysCallError:
-    pass
-  except socket.gaierror:
-    logging.debug('Host name is not valid')
-  connection.shutdown()
-  connection.close()
-  cert = certs[-1]
-  if cert:
-    cert = dump_cert(cert)
-  return cert
-
-
 def write_dummy_ca(cert_path, ca, key):
-  """Writes four certificate files.
+  """ Writes four certificate files.
 
   For example, if cert_path is "mycert.pem":
       mycert.pem - CA plus private key
@@ -138,7 +54,7 @@ def write_dummy_ca(cert_path, ca, key):
     cert_path: path string such as "mycert.pem"
     ca: crypto X509 generated certificate
     key: crypto X509 generated private key
-  """
+  """ 
   dirname = os.path.dirname(cert_path)
   if dirname and not os.path.exists(dirname):
     os.makedirs(dirname)
@@ -148,8 +64,8 @@ def write_dummy_ca(cert_path, ca, key):
   android_cer_path = root_path + '-cert.cer'
   windows_p12_path = root_path + '-cert.p12'
 
-  pem_key = dump_privatekey(key)
-  pem_ca = dump_cert(ca)
+  pem_key = crypto.dump_privatekey(crypto.FILETYPE_PEM, key)
+  pem_ca = crypto.dump_certificate(crypto.FILETYPE_PEM, ca)
 
   # Dump the CA plus private key
   with open(cert_path, 'w') as f:
@@ -157,41 +73,27 @@ def write_dummy_ca(cert_path, ca, key):
     f.write(pem_ca)
 
   # Dump the certificate in PEM format
-  with open(pem_path, 'w') as f:
+  with open(pem_path , 'w') as f:
     f.write(pem_ca)
 
   # Create a .cer file with the same contents for Android
-  with open(android_cer_path, 'w') as f:
+  with open(android_cer_path , 'w') as f:
     f.write(pem_ca)
 
   # Dump the certificate in PKCS12 format for Windows devices
-  with open(windows_p12_path, 'w') as f:
+  with open(windows_p12_path , 'w') as f:
     p12 = crypto.PKCS12()
     p12.set_certificate(ca)
     p12.set_privatekey(key)
     f.write(p12.export())
 
-
-def generate_dummy_crt(root_pem, server_crt, host):
-  """Generates a crt with the sni field in server_crt signed by the root_pem.
-
-  Args:
-    root_pem: PEM formatted string representing the root cert
-    server_crt: PEM formatted string representing cert
-    host: host name to use if there is no server_crt
-  Returns:
-    a PEM formatted certificate string
-  """
-
+def generate_dummy_cert(path, ca, common_name):
+  """Generates a certificate for |common_name| signed by |ca| in |path|."""
   if openssl_import_error:
     raise openssl_import_error
-  common_name = host
-  if server_crt:
-    cert = load_cert(server_crt)
-    common_name = cert.get_subject().commonName
-
-  ca = load_cert(root_pem)
-  key = load_privatekey(root_pem)
+  raw = open(ca, 'r').read()
+  ca = crypto.load_certificate(crypto.FILETYPE_PEM, raw)
+  key = crypto.load_privatekey(crypto.FILETYPE_PEM, raw)
 
   req = crypto.X509Req()
   subj = req.get_subject()
@@ -208,4 +110,45 @@ def generate_dummy_crt(root_pem, server_crt, host):
   cert.set_pubkey(req.get_pubkey())
   cert.sign(key, 'sha1')
 
-  return dump_cert(cert)
+  with open(path, 'w') as f:
+    f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
+
+
+class CertStore(object):
+  """Implements an on-disk certificate store."""
+
+  def __init__(self, ca_cert, cert_dir=None):
+    if not os.path.exists(ca_cert):
+      raise ValueError('ca_cert path does not exist %s' %ca_cert)
+      # If you were to generate a cert here's an example
+      # ca, key = generate_dummy_ca()
+      # write_dummy_ca(ca_cert, ca, key)
+    self.ca_cert = ca_cert
+    if cert_dir:
+      self.is_temporary_cert_store = False
+      self.cert_dir = cert_dir
+    else:
+      self.is_temporary_cert_store = True
+      self.cert_dir = tempfile.mkdtemp(prefix='certstore')
+
+  def is_valid_domain(self, common_name):
+    """Checks for valid domain."""
+    try:
+      common_name.decode('idna')
+      common_name.decode('ascii')
+    except:
+      return False
+    return ('..' not in common_name and '/' not in common_name)
+
+  def get_cert(self, common_name):
+    """Returns the path to the certificate for |common_name|."""
+    if not self.is_valid_domain(common_name):
+      return None
+    path = os.path.join(self.cert_dir, common_name + '.pem')
+    if not os.path.exists(path):
+      generate_dummy_cert(path, self.ca_cert, common_name)
+    return path
+
+  def cleanup(self):
+    if self.is_temporary_cert_store:
+      shutil.rmtree(self.cert_dir)
