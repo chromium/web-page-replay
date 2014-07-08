@@ -40,7 +40,7 @@ def set_ca_cert(ca_cert):
   cert_store = certutils.CertStore(ca_cert, cert_dir=None)
 
 
-class SSLHandshakeHandler:
+class SslHandshakeHandler:
   """Handles Server Name Indication (SNI) using dummy certs."""
 
   def setup(self):
@@ -91,20 +91,20 @@ class SSLHandshakeHandler:
 
 
 def wrap_handler(handler_class, cert_file):
-  """Wraps a BaseHTTPHandler wtih SSL MITM certificates."""
+  """Wraps a BaseHTTPHandler with SSL MITM certificates."""
   if openssl_import_error:
     raise openssl_import_error
   set_ca_cert(cert_file)
 
-  class WrappedHandler(SSLHandshakeHandler, handler_class):
+  class WrappedHandler(SslHandshakeHandler, handler_class):
 
     def setup(self):
       handler_class.setup(self)
-      SSLHandshakeHandler.setup(self)
+      SslHandshakeHandler.setup(self)
 
     def finish(self):
       handler_class.finish(self)
-      SSLHandshakeHandler.finish(self)
+      SslHandshakeHandler.finish(self)
   return WrappedHandler
 
 
