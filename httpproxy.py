@@ -30,6 +30,7 @@ import sslproxy
 
 ROOT_CA_REQUEST = httparchive.ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
 
+
 class HttpProxyError(Exception):
   """Module catch-all error."""
   pass
