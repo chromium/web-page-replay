@@ -359,7 +359,7 @@ class RecordHttpArchiveFetch(object):
   def _GetServerCertificate(self, req):
     """Gets certificate from the real server and stores it in archive"""
     assert req.command == 'SERVER_CERT'
-    crt = certutils.get_SNI_from_server(req.host)
+    crt = certutils.get_host_cert(req.host)
     return CreateCertificateResponse(crt)
 
   def _GenerateDummyCert(self, req):

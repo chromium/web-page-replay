@@ -17,7 +17,7 @@ class SSLHandshakeHandler:
     """Sets up connection providing the certificate to the client."""
     self.server_name = None
     # One of: One of SSLv2_METHOD, SSLv3_METHOD, SSLv23_METHOD, or TLSv1_METHOD
-    context = certutils.get_ssl_context()#SSL.Context(SSL.SSLv23_METHOD)
+    context = certutils.get_ssl_context()
     def handle_servername(connection):
       """A SNI callback that happens during do_handshake()."""
       try:

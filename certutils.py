@@ -99,12 +99,12 @@ def generate_dummy_ca(subject='sslproxy'):
   return ca, key
 
 
-def get_SNI_from_server(host):
+def get_host_cert(host):
   """Contacts server and gets SNI from the returned certificate."""
-  certs = ['']
+  host_cert = None
   def verify_cb(conn, cert, errnum, depth, ok):
-    certs.append(cert)
-    # say that the certificate was ok
+    host_cert = cert
+    # The return code of 1 indicates that the certificate was ok.
     return 1
 
   context = SSL.Context(SSL.SSLv23_METHOD)
@@ -118,12 +118,12 @@ def get_SNI_from_server(host):
     pass
   except socket.gaierror:
     logging.debug('Host name is not valid')
-  connection.shutdown()
-  connection.close()
-  cert = certs[-1]
-  if cert:
-    cert = dump_cert(cert)
-  return cert
+  finally:
+    connection.shutdown()
+    connection.close()
+    if host_cert:
+      return dump_cert(host_cert)
+    return host_cert
 
 
 def write_dummy_ca(cert_path, ca, key):
@@ -182,7 +182,6 @@ def generate_dummy_crt(root_pem, server_crt, host):
   Returns:
     a PEM formatted certificate string
   """
-
   if openssl_import_error:
     raise openssl_import_error
   common_name = host
