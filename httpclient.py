@@ -35,19 +35,6 @@ except ImportError:
   Image = None
 
 TIMER = platformsettings.timer
-ROOT_CA_REQUEST = httparchive.ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
-
-
-def CreateCertificateResponse(crt):
-  """Creates ArchivedHttpResponse with the cert string as the response_data.
-
-  Args:
-    crt: A string representing a PEM formatted cert. The string can
-          contain the private key if it is for the root cert.
-  Returns:
-    an ArchivedHttpResponse
-  """
-  return httparchive.ArchivedHttpResponse(11, 200, 'OK', [], [crt], {})
 
 
 class HttpClientException(Exception):
@@ -356,27 +343,6 @@ class RecordHttpArchiveFetch(object):
     self.inject_script = inject_script
     self.cache_misses = cache_misses
 
-  def _GetServerCertificate(self, req):
-    """Gets certificate from the real server and stores it in archive"""
-    assert req.command == 'SERVER_CERT'
-    crt = certutils.get_host_cert(req.host)
-    return CreateCertificateResponse(crt)
-
-  def _GenerateDummyCert(self, req):
-    """Generates a dummy crt using the SNI field from the real server crt."""
-    assert req.command == 'DUMMY_CERT'
-    if ROOT_CA_REQUEST not in self.http_archive:
-      raise KeyError('Root cert is not in archive')
-    root_pem_response = self.http_archive[ROOT_CA_REQUEST]
-    root_pem = root_pem_response.response_data[0]
-
-    server_crt_request = httparchive.ArchivedHttpRequest(
-        'SERVER_CERT', req.host, '', None, {})
-    server_crt_response = self(server_crt_request)
-    server_crt = server_crt_response.response_data[0]
-    crt = certutils.generate_dummy_crt(root_pem, server_crt, req.host)
-    return CreateCertificateResponse(crt)
-
   def __call__(self, request):
     """Fetch the request and return the response.
 
@@ -394,12 +360,7 @@ class RecordHttpArchiveFetch(object):
       logging.debug('Repeated request found: %s', request)
       response = self.http_archive[request]
     else:
-      if request.command == 'DUMMY_CERT':
-        response = self._GenerateDummyCert(request)
-      elif request.command == 'SERVER_CERT':
-        response = self._GetServerCertificate(request)
-      else:
-        response = self.real_http_fetch(request)
+      response = self.real_http_fetch(request)
       if response is None:
         return None
       self.http_archive[request] = response
@@ -512,10 +473,13 @@ class ControllableHttpArchiveFetch(object):
     else:
       self.SetReplayMode()
 
-  def SetRootCertificate(self, cert_path):
-    with open(cert_path, 'r') as cert_file:
-      cert = cert_file.read()
-    self.http_archive[ROOT_CA_REQUEST] = CreateCertificateResponse(cert)
+  def GetResponse(self, req):
+    if req not in self.http_archive:
+      return None
+    return self.http_archive[req]
+
+  def SetResponse(self, req, resp):
+    self.http_archive[req] = resp
 
   def SetRecordMode(self):
     self.fetch = self.record_fetch

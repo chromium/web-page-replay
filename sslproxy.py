@@ -24,7 +24,7 @@ class SSLHandshakeHandler:
         host = connection.get_servername()
         if host:
           crt_request = get_crt_request(host)
-          crt_response = self.server.http_archive_fetch(crt_request)
+          crt_response = self.server.get_certificate(crt_request)
           crt = crt_response.response_data[0]
           self.server_name = host
           new_context = certutils.get_ssl_context()

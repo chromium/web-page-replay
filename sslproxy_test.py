@@ -90,7 +90,7 @@ class Server(BaseHTTPServer.HTTPServer):
       raise RuntimeError('Could not start HTTPSServer on port %d: %s'
                          % (port, e))
 
-  def http_archive_fetch(self, req):
+  def get_certificate(self, req):
     crt = certutils.generate_dummy_crt(self.root_pem, '', req.host)
     return DummyResponse(crt)
 
