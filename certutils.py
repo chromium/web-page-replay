@@ -100,7 +100,7 @@ def generate_dummy_ca(subject='sslproxy'):
 
 
 def get_host_cert(host):
-  """Contacts server and gets SNI from the returned certificate."""
+  """Contacts the host and returns its certificate."""
   host_cert = None
   def verify_cb(conn, cert, errnum, depth, ok):
     host_cert = cert
