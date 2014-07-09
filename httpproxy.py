@@ -316,10 +316,10 @@ class HttpsProxyServer(HttpProxyServer):
   def _generate_dummy_cert(self, req):
     """Generates a dummy crt using the SNI field from the real server crt."""
     assert req.command == 'DUMMY_CERT'
-    if ROOT_CA_REQUEST not in self.http_archive_fetch.http_archive:
-      raise KeyError('Root cert is not in archive')
 
     root_pem_response = self.http_archive_fetch.GetResponse(ROOT_CA_REQUEST)
+    if not root_pem_response:
+      raise KeyError('Root cert is not in archive')
     root_pem = root_pem_response.response_data[0]
 
     server_crt_request = httparchive.ArchivedHttpRequest(
