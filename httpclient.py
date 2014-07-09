@@ -21,7 +21,6 @@ import logging
 import random
 import StringIO
 
-import certutils
 import httparchive
 import platformsettings
 import script_injector
