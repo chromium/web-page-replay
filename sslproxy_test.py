@@ -27,7 +27,7 @@ class Client(object):
 
   def run_request(self):
     context = certutils.get_ssl_context()
-    context.set_verify(certutils.VERIFY_PEER, self.verify_cb)  # Demand a certificate
+    context.set_verify(certutils.VERIFY_PEER, self.verify_cb)  # Demand a cert
     context.use_certificate_file(self.pem_path)
     context.load_verify_locations(self.pem_path)
 
