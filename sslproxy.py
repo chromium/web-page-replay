@@ -6,7 +6,7 @@ import certutils
 import httparchive
 
 
-def get_crt_request(host):
+def get_crt_str_request(host):
   return httparchive.ArchivedHttpRequest('DUMMY_CERT', host, '', None, {})
 
 
@@ -23,13 +23,13 @@ class SSLHandshakeHandler:
       try:
         host = connection.get_servername()
         if host:
-          crt_request = get_crt_request(host)
-          crt_response = self.server.get_certificate(crt_request)
-          crt = crt_response.response_data[0]
+          crt_str_request = get_crt_str_request(host)
+          crt_str = self.server.http_archive_fetch.http_archive.get_certificate(
+              crt_str_request)
           self.server_name = host
           new_context = certutils.get_ssl_context()
-          cert = certutils.load_cert(crt)
-          new_context.use_certificate(cert)
+          crt_x509 = certutils.load_crt_x509(crt_str)
+          new_context.use_certificate(crt_x509)
           new_context.use_privatekey_file(self.server.pem_path)
           connection.set_context(new_context)
           return new_context

@@ -9,12 +9,12 @@ import certutils
 
 class CertutilsTest(unittest.TestCase):
 
-  def _check_cert_file(self, cert_file_path, cert, key=None):
-    raw_cert = open(cert_file_path, 'r').read()
-    cert_load = certutils.load_cert(raw_cert)
-    self._assert_x509_is_equal(cert, cert_load, certutils.dump_cert)
+  def _check_cert_file(self, cert_file_path, crt_x509, key=None):
+    crt_str = open(cert_file_path, 'r').read()
+    cert_load = certutils.load_crt_x509(crt_str)
+    self._assert_x509_is_equal(crt_x509, cert_load, certutils.dump_crt_x509)
     if key:
-      key_load = certutils.load_privatekey(raw_cert)
+      key_load = certutils.load_privatekey(crt_str)
       self._assert_x509_is_equal(key_load, key, certutils.dump_privatekey)
 
   def _assert_x509_is_equal(self, a, b, dump_function):
@@ -55,25 +55,25 @@ class CertutilsTest(unittest.TestCase):
   def test_generate_cert(self):
     pem_path = os.path.join(self._temp_dir, 'testCA.pem')
     issuer = 'testIssuer'
-    cert, key = certutils.generate_dummy_ca(issuer)
-    certutils.write_dummy_ca(pem_path, cert, key)
+    crt_x509, key = certutils.generate_dummy_ca(issuer)
+    certutils.write_dummy_ca(pem_path, crt_x509, key)
 
     with open(pem_path, 'r') as root_file:
       root_string = root_file.read()
     subject = 'testSubject'
-    cert_string = certutils.generate_dummy_crt(
+    cert_string = certutils.generate_dummy_crt_str(
         root_string, '', subject)
-    cert = certutils.load_cert(cert_string)
-    self.assertEqual(issuer, cert.get_issuer().commonName)
-    self.assertEqual(subject, cert.get_subject().commonName)
+    crt_x509 = certutils.load_crt_x509(cert_string)
+    self.assertEqual(issuer, crt_x509.get_issuer().commonName)
+    self.assertEqual(subject, crt_x509.get_subject().commonName)
 
     with open(pem_path, 'r') as ca_file:
       pem = ca_file.read()
-    cert_string = certutils.generate_dummy_crt(pem, cert_string,
+    cert_string = certutils.generate_dummy_crt_str(pem, cert_string,
                                                'host')
-    cert = certutils.load_cert(cert_string)
-    self.assertEqual(issuer, cert.get_issuer().commonName)
-    self.assertEqual(subject, cert.get_subject().commonName)
+    crt_x509 = certutils.load_crt_x509(cert_string)
+    self.assertEqual(issuer, crt_x509.get_issuer().commonName)
+    self.assertEqual(subject, crt_x509.get_subject().commonName)
 
 
 if __name__ == '__main__':

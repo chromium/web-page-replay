@@ -28,8 +28,6 @@ import httparchive
 import proxyshaper
 import sslproxy
 
-ROOT_CA_REQUEST = httparchive.ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
-
 
 class HttpProxyError(Exception):
   """Module catch-all error."""
@@ -288,59 +286,7 @@ class HttpsProxyServer(HttpProxyServer):
     self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler)
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, **kwargs)
-    self.set_root_cert(https_root_pem_path)
-
-  def create_crt_response(self, crt):
-    """Creates ArchivedHttpResponse with the cert string as the response_data.
-
-    Args:
-      crt: A string representing a PEM formatted cert. The string can
-            contain the private key if it is for the root cert.
-    Returns:
-      an ArchivedHttpResponse
-    """
-    return httparchive.ArchivedHttpResponse(11, 200, 'OK', [], [crt], {})
-
-  def set_root_cert(self, cert_path):
-    with open(cert_path, 'r') as cert_file:
-      crt = cert_file.read()
-    crt_response = self.create_crt_response(crt)
-    self.http_archive_fetch.SetResponse(ROOT_CA_REQUEST, crt_response)
-
-  def _get_server_cert(self, req):
-    """Gets certificate from the real server and stores it in archive"""
-    assert req.command == 'SERVER_CERT'
-    crt = certutils.get_host_cert(req.host)
-    return self.create_crt_response(crt)
-
-  def _generate_dummy_cert(self, req):
-    """Generates a dummy crt using the SNI field from the real server crt."""
-    assert req.command == 'DUMMY_CERT'
-
-    root_pem_response = self.http_archive_fetch.GetResponse(ROOT_CA_REQUEST)
-    if not root_pem_response:
-      raise KeyError('Root cert is not in archive')
-    root_pem = root_pem_response.response_data[0]
-
-    server_crt_request = httparchive.ArchivedHttpRequest(
-        'SERVER_CERT', req.host, '', None, {})
-    server_crt_response = self.get_certificate(server_crt_request)
-    server_crt = server_crt_response.response_data[0]
-
-    crt = certutils.generate_dummy_crt(root_pem, server_crt, req.host)
-    return self.create_crt_response(crt)
-
-  def get_certificate(self, req):
-    response = self.http_archive_fetch.GetResponse(req)
-    if response:
-      return response
-
-    if req.command == 'DUMMY_CERT':
-      response = self._generate_dummy_cert(req)
-    elif req.command == 'SERVER_CERT':
-      response = self._get_server_cert(req)
-    self.http_archive_fetch.SetResponse(req, response)
-    return response
+    self.http_archive_fetch.http_archive.set_root_cert(https_root_pem_path)
 
   def cleanup(self):
     try:

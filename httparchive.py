@@ -41,6 +41,7 @@ To merge multiple archives
 """
 
 import calendar
+import certutils
 import difflib
 import email.utils
 import httplib
@@ -409,6 +410,56 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       closest_request_lines = closest_request.formatted_request.split('\n')
       return '\n'.join(difflib.ndiff(closest_request_lines, request_lines))
     return None
+
+  def create_crt_str_response(self, crt_str):
+    """Creates ArchivedHttpResponse with the cert string as the response_data.
+
+    Args:
+      crt_str: A string representing a PEM formatted cert. The string can
+            contain the private key if it is for the root cert.
+    Returns:
+      an ArchivedHttpResponse
+    """
+    return ArchivedHttpResponse(11, 200, 'OK', [], [crt_str], {})
+
+  def set_root_cert(self, cert_path):
+    with open(cert_path, 'r') as cert_file:
+      crt_str = cert_file.read()
+    crt_str_response = self.create_crt_str_response(crt_str)
+    root_request = ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
+    self[root_request] = crt_str_response
+
+  def _get_server_cert(self, request):
+    """Gets certificate from the real server and stores it in archive"""
+    assert request.command == 'SERVER_CERT'
+    crt_str = certutils.get_host_cert(request.host)
+    return self.create_crt_str_response(crt_str)
+
+  def _generate_dummy_cert(self, request):
+    """Generat a dummy crt_str with the SNI field from the server crt_str."""
+    assert request.command == 'DUMMY_CERT'
+    root_request = ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
+    root_pem = self.get_certificate(root_request)
+
+    server_crt_str_request = ArchivedHttpRequest(
+        'SERVER_CERT', request.host, '', None, {})
+    server_crt_str= self.get_certificate(server_crt_str_request)
+
+    crt_str = certutils.generate_dummy_crt_str(root_pem, server_crt_str,
+                                               request.host)
+    return self.create_crt_str_response(crt_str)
+
+  def get_certificate(self, request):
+    if request in self:
+      return self[request].response_data[0]
+    if request.command == 'ROOT_CERT':
+      raise KeyError('Root cert is not in the archive')
+    elif request.command == 'DUMMY_CERT':
+      response = self._generate_dummy_cert(request)
+    elif request.command == 'SERVER_CERT':
+      response = self._get_server_cert(request)
+    self[request] = response
+    return response.response_data[0]
 
 
 class ArchivedHttpRequest(object):

@@ -2,8 +2,8 @@
 
 Certificate Naming Conventions:
   ca:   a private crypto.X509  (w/ both the pub & priv keys)
-  cert: a public crypto.X509  (w/ just the pub key)
-  crt:  a public string (w/ just the pub cert)
+  crt_x509: a public crypto.X509  (w/ just the pub key)
+  crt_str:  a public string (w/ just the pub cert)
   key:  a private crypto.PKey  (from ca or pem)
   pem:  a private string (w/ both the pub & priv certs)
 """
@@ -46,9 +46,9 @@ def load_privatekey(key, filetype=crypto.FILETYPE_PEM):
   return crypto.load_privatekey(filetype, key)
 
 
-def load_cert(crt, filetype=crypto.FILETYPE_PEM):
+def load_crt_x509(crt_str, filetype=crypto.FILETYPE_PEM):
   """Loads x509 cert object from string."""
-  return crypto.load_certificate(filetype, crt)
+  return crypto.load_certificate(filetype, crt_str)
 
 
 def dump_privatekey(key, filetype=crypto.FILETYPE_PEM):
@@ -56,9 +56,9 @@ def dump_privatekey(key, filetype=crypto.FILETYPE_PEM):
   return crypto.dump_privatekey(filetype, key)
 
 
-def dump_cert(cert, filetype=crypto.FILETYPE_PEM):
+def dump_crt_x509(crt_x509, filetype=crypto.FILETYPE_PEM):
   """Dumps x509 cert object to string."""
-  return crypto.dump_certificate(filetype, cert)
+  return crypto.dump_certificate(filetype, crt_x509)
 
 
 def generate_dummy_ca(subject='sslproxy'):
@@ -101,9 +101,9 @@ def generate_dummy_ca(subject='sslproxy'):
 
 def get_host_cert(host):
   """Contacts the host and returns its certificate."""
-  host_cert = None
-  def verify_cb(conn, cert, errnum, depth, ok):
-    host_cert = cert
+  host_crt_x509 = None
+  def verify_cb(conn, crt_x509, errnum, depth, ok):
+    host_crt_x509 = crt_x509
     # The return code of 1 indicates that the certificate was ok.
     return 1
 
@@ -121,9 +121,9 @@ def get_host_cert(host):
   finally:
     connection.shutdown()
     connection.close()
-    if host_cert:
-      return dump_cert(host_cert)
-    return host_cert
+  if host_crt_x509:
+    return dump_crt_x509(host_crt_x509)
+  return host_crt_x509
 
 
 def write_dummy_ca(cert_path, ca, key):
@@ -149,7 +149,7 @@ def write_dummy_ca(cert_path, ca, key):
   windows_p12_path = root_path + '-cert.p12'
 
   pem_key = dump_privatekey(key)
-  pem_ca = dump_cert(ca)
+  pem_ca = dump_crt_x509(ca)
 
   # Dump the CA plus private key
   with open(cert_path, 'w') as f:
@@ -172,24 +172,25 @@ def write_dummy_ca(cert_path, ca, key):
     f.write(p12.export())
 
 
-def generate_dummy_crt(root_pem, server_crt, host):
-  """Generates a crt with the sni field in server_crt signed by the root_pem.
+def generate_dummy_crt_str(root_pem, server_crt_str, host):
+  """Generates a crt_str with the sni field in server_crt_str signed by the
+  root_pem.
 
   Args:
     root_pem: PEM formatted string representing the root cert
-    server_crt: PEM formatted string representing cert
-    host: host name to use if there is no server_crt
+    server_crt_str: PEM formatted string representing cert
+    host: host name to use if there is no server_crt_str
   Returns:
     a PEM formatted certificate string
   """
   if openssl_import_error:
     raise openssl_import_error
   common_name = host
-  if server_crt:
-    cert = load_cert(server_crt)
-    common_name = cert.get_subject().commonName
+  if server_crt_str:
+    crt_x509 = load_crt_x509(server_crt_str)
+    common_name = crt_x509.get_subject().commonName
 
-  ca = load_cert(root_pem)
+  ca = load_crt_x509(root_pem)
   key = load_privatekey(root_pem)
 
   req = crypto.X509Req()
@@ -198,13 +199,13 @@ def generate_dummy_crt(root_pem, server_crt, host):
   req.set_pubkey(ca.get_pubkey())
   req.sign(key, 'sha1')
 
-  cert = crypto.X509()
-  cert.gmtime_adj_notBefore(-60 * 60)
-  cert.gmtime_adj_notAfter(60 * 60 * 24 * 30)
-  cert.set_issuer(ca.get_subject())
-  cert.set_subject(req.get_subject())
-  cert.set_serial_number(int(time.time()*10000))
-  cert.set_pubkey(req.get_pubkey())
-  cert.sign(key, 'sha1')
+  crt_x509 = crypto.X509()
+  crt_x509.gmtime_adj_notBefore(-60 * 60)
+  crt_x509.gmtime_adj_notAfter(60 * 60 * 24 * 30)
+  crt_x509.set_issuer(ca.get_subject())
+  crt_x509.set_subject(req.get_subject())
+  crt_x509.set_serial_number(int(time.time()*10000))
+  crt_x509.set_pubkey(req.get_pubkey())
+  crt_x509.sign(key, 'sha1')
 
-  return dump_cert(cert)
+  return dump_crt_x509(crt_x509)

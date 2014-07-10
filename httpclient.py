@@ -472,14 +472,6 @@ class ControllableHttpArchiveFetch(object):
     else:
       self.SetReplayMode()
 
-  def GetResponse(self, req):
-    if req not in self.http_archive:
-      return None
-    return self.http_archive[req]
-
-  def SetResponse(self, req, resp):
-    self.http_archive[req] = resp
-
   def SetRecordMode(self):
     self.fetch = self.record_fetch
     self.is_record_mode = True

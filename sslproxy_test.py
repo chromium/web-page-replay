@@ -91,8 +91,8 @@ class Server(BaseHTTPServer.HTTPServer):
                          % (port, e))
 
   def get_certificate(self, req):
-    crt = certutils.generate_dummy_crt(self.root_pem, '', req.host)
-    return DummyResponse(crt)
+    crt_str = certutils.generate_dummy_crt_str(self.root_pem, '', req.host)
+    return DummyResponse(crt_str)
 
   def __enter__(self):
     thread = threading.Thread(target=self.serve_forever)
@@ -130,21 +130,21 @@ class TestClient(unittest.TestCase):
     if self._temp_dir:
       shutil.rmtree(self._temp_dir)
 
-  def verify_cb(self, conn, cert, errnum, depth, ok):
+  def verify_cb(self, conn, crt_x509, errnum, depth, ok):
     """A callback that verifies the certificate authentication worked.
 
     Args:
       conn: Connection object
-      cert: x509 object
+      crt_x509: x509 object
       errnum: possible error number
       depth: error depth
       ok: 1 if the authentication worked 0 if it didnt.
     Returns:
       1 or 0 depending on if the verification worked
     """
-    self.assertFalse(cert.has_expired())
+    self.assertFalse(crt_x509.has_expired())
     self.assertGreater(time.strftime('%Y%m%d%H%M%SZ', time.gmtime()),
-                       cert.get_notBefore())
+                       crt_x509.get_notBefore())
     return ok
 
   def test_no_host(self):
