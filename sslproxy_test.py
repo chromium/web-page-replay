@@ -15,11 +15,11 @@ import sslproxy
 
 class Client(object):
 
-  def __init__(self, pem_path, verify_cb, port, host_name='foo.com',
+  def __init__(self, ca_cert_path, verify_cb, port, host_name='foo.com',
                host='localhost'):
     self.host_name = host_name
     self.verify_cb = verify_cb
-    self.pem_path = pem_path
+    self.ca_cert_path = ca_cert_path
     self.port = port
     self.host_name = host_name
     self.host = host
@@ -28,8 +28,8 @@ class Client(object):
   def run_request(self):
     context = certutils.get_ssl_context()
     context.set_verify(certutils.VERIFY_PEER, self.verify_cb)  # Demand a cert
-    context.use_certificate_file(self.pem_path)
-    context.load_verify_locations(self.pem_path)
+    context.use_certificate_file(self.ca_cert_path)
+    context.load_verify_locations(self.ca_cert_path)
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     self.connection = certutils.get_ssl_connection(context, s)
@@ -75,11 +75,11 @@ class DummyResponse(object):
 class Server(BaseHTTPServer.HTTPServer):
   """SSL server."""
 
-  def __init__(self, pem_path, use_error_handler=False, port=0,
+  def __init__(self, ca_cert_path, use_error_handler=False, port=0,
                host='localhost'):
-    self.pem_path = pem_path
-    with open(pem_path, 'r') as pem_file:
-      self.root_pem = pem_file.read()
+    self.ca_cert_path = ca_cert_path
+    with open(ca_cert_path, 'r') as ca_file:
+      self.root_ca_str = ca_file.read()
     if use_error_handler:
       self.HANDLER = WrappedErrorHandler
     else:
@@ -91,7 +91,7 @@ class Server(BaseHTTPServer.HTTPServer):
                          % (port, e))
 
   def get_certificate(self, req):
-    crt_str = certutils.generate_dummy_crt_str(self.root_pem, '', req.host)
+    crt_str = certutils.generate_dummy_crt_str(self.root_ca_str, '', req.host)
     return DummyResponse(crt_str)
 
   def __enter__(self):
@@ -116,14 +116,14 @@ class TestClient(unittest.TestCase):
   def setUp(self):
     self._temp_dir = tempfile.mkdtemp(prefix='sslproxy_', dir='/tmp')
 
-    self.pem_path = self._temp_dir + 'testCA.pem'
+    self.ca_cert_path = self._temp_dir + 'testCA.pem'
     self.cert_path = self._temp_dir + 'testCA-cert.cer'
-    self.wrong_pem_path = self._temp_dir + 'wrong.pem'
+    self.wrong_ca_cert_path = self._temp_dir + 'wrong.pem'
     self.wrong_cert_path = self._temp_dir + 'wrong-cert.cer'
 
     # Write both pem and cer files for certificates
-    certutils.write_dummy_ca(self.pem_path, *certutils.generate_dummy_ca())
-    certutils.write_dummy_ca(self.wrong_pem_path,
+    certutils.write_dummy_ca(self.ca_cert_path, *certutils.generate_dummy_ca())
+    certutils.write_dummy_ca(self.wrong_ca_cert_path,
                              *certutils.generate_dummy_ca())
 
   def tearDown(self):
@@ -148,12 +148,12 @@ class TestClient(unittest.TestCase):
     return ok
 
   def test_no_host(self):
-    with Server(self.pem_path) as server:
+    with Server(self.ca_cert_path) as server:
       c = Client(self.cert_path, self.verify_cb, server.server_port, '')
       self.assertRaises(certutils.Error, c.run_request)
 
   def test_client_connection(self):
-    with Server(self.pem_path) as server:
+    with Server(self.ca_cert_path) as server:
       c = Client(self.cert_path, self.verify_cb, server.server_port, 'foo.com')
       c.run_request()
 
@@ -162,7 +162,7 @@ class TestClient(unittest.TestCase):
       c.run_request()
 
   def test_wrong_cert(self):
-    with Server(self.pem_path, True) as server:
+    with Server(self.ca_cert_path, True) as server:
       c = Client(self.wrong_cert_path, self.verify_cb, server.server_port,
                  'foo.com')
       self.assertRaises(certutils.Error, c.run_request)

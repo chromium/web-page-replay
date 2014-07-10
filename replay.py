@@ -127,7 +127,7 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
     server_manager.Append(
         replayspdyserver.ReplaySpdyServer, archive_fetch,
         custom_handlers, host=host, port=options.port,
-        certfile=options.https_root_pem_path)
+        certfile=options.https_root_ca_cert_path)
   else:
     custom_handlers.add_server_manager_handler(server_manager)
     archive_fetch = httpclient.ControllableHttpArchiveFetch(
@@ -147,12 +147,12 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
       if options.should_generate_certs:
         server_manager.Append(
             httpproxy.HttpsProxyServer, archive_fetch, custom_handlers,
-            options.https_root_pem_path, host=host, port=options.ssl_port,
+            options.https_root_ca_cert_path, host=host, port=options.ssl_port,
             use_delays=options.use_server_delay, **options.shaping_http)
       else:
         server_manager.Append(
             httpproxy.SingleCertHttpsProxyServer, archive_fetch,
-            custom_handlers, options.https_root_pem_path, host=host,
+            custom_handlers, options.https_root_ca_cert_path, host=host,
             port=options.ssl_port, use_delays=options.use_server_delay,
             **options.shaping_http)
     if options.http_to_https_port:
@@ -261,7 +261,7 @@ class OptionsWrapper(object):
           net_configs.GetNetConfig(self.net)
       self._nondefaults.update(['down', 'up', 'delay_ms'])
     if not self.ssl:
-      self._options.https_root_pem_path = None
+      self._options.https_root_ca_cert_path = None
     self.shaping_dns = self._ShapingKeywordArgs('dns')
     self.shaping_http = self._ShapingKeywordArgs('http')
     self.shaping_dummynet = self._ShapingKeywordArgs('dummynet')
@@ -344,8 +344,8 @@ def replay(options, replay_filename):
         AddDnsForward(server_manager, ipfw_dns_host)
       AddDnsProxy(server_manager, options, ipfw_dns_host, options.dns_port,
                   real_dns_lookup, http_archive)
-    if options.ssl and options.https_root_pem_path is None:
-      options.https_root_pem_path = os.path.join(os.path.dirname(__file__), 'wpr_cert.pem')
+    if options.ssl and options.https_root_ca_cert_path is None:
+      options.https_root_ca_cert_path = os.path.join(os.path.dirname(__file__), 'wpr_cert.pem')
     http_proxy_address = options.host
     if not http_proxy_address:
       http_proxy_address = platformsettings.get_httpproxy_ip_address(
@@ -529,7 +529,7 @@ def GetOptionParser():
       action='store',
       type='int',
       help='DNS port number to listen on.')
-  harness_group.add_option('-c', '--https_root_pem_path', default=None,
+  harness_group.add_option('-c', '--https_root_ca_cert_path', default=None,
       action='store',
       type='string',
       help='Certificate file to use with SSL (gets auto-generated if needed).')

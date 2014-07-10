@@ -439,13 +439,13 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     """Generat a dummy crt_str with the SNI field from the server crt_str."""
     assert request.command == 'DUMMY_CERT'
     root_request = ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
-    root_pem = self.get_certificate(root_request)
+    root_ca_str = self.get_certificate(root_request)
 
     server_crt_str_request = ArchivedHttpRequest(
         'SERVER_CERT', request.host, '', None, {})
     server_crt_str= self.get_certificate(server_crt_str_request)
 
-    crt_str = certutils.generate_dummy_crt_str(root_pem, server_crt_str,
+    crt_str = certutils.generate_dummy_crt_str(root_ca_str, server_crt_str,
                                                request.host)
     return self.create_crt_str_response(crt_str)
 

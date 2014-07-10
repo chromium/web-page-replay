@@ -1,11 +1,11 @@
 """Routines to generate root and server certificates.
 
 Certificate Naming Conventions:
-  ca:   a private crypto.X509  (w/ both the pub & priv keys)
-  crt_x509: a public crypto.X509  (w/ just the pub key)
+  ca:  crypto.X509 for the certificate authority (w/ both the pub & priv keys)
+  crt_x509:  a public crypto.X509  (w/ just the pub key)
   crt_str:  a public string (w/ just the pub cert)
   key:  a private crypto.PKey  (from ca or pem)
-  pem:  a private string (w/ both the pub & priv certs)
+  ca_str:  a private string (w/ both the pub & priv certs)
 """
 import logging
 import os
@@ -144,25 +144,25 @@ def write_dummy_ca(cert_path, ca, key):
     os.makedirs(dirname)
 
   root_path = os.path.splitext(cert_path)[0]
-  pem_path = root_path + '-cert.pem'
+  ca_path = root_path + '-cert.pem'
   android_cer_path = root_path + '-cert.cer'
   windows_p12_path = root_path + '-cert.p12'
 
-  pem_key = dump_privatekey(key)
-  pem_ca = dump_crt_x509(ca)
+  key_str = dump_privatekey(key)
+  ca_str = dump_crt_x509(ca)
 
   # Dump the CA plus private key
   with open(cert_path, 'w') as f:
-    f.write(pem_key)
-    f.write(pem_ca)
+    f.write(key_str)
+    f.write(ca_str)
 
   # Dump the certificate in PEM format
-  with open(pem_path, 'w') as f:
-    f.write(pem_ca)
+  with open(ca_path, 'w') as f:
+    f.write(ca_str)
 
   # Create a .cer file with the same contents for Android
   with open(android_cer_path, 'w') as f:
-    f.write(pem_ca)
+    f.write(ca_str)
 
   # Dump the certificate in PKCS12 format for Windows devices
   with open(windows_p12_path, 'w') as f:
@@ -172,12 +172,12 @@ def write_dummy_ca(cert_path, ca, key):
     f.write(p12.export())
 
 
-def generate_dummy_crt_str(root_pem, server_crt_str, host):
+def generate_dummy_crt_str(root_ca_str, server_crt_str, host):
   """Generates a crt_str with the sni field in server_crt_str signed by the
-  root_pem.
+  root_ca_str.
 
   Args:
-    root_pem: PEM formatted string representing the root cert
+    root_ca_str: PEM formatted string representing the root cert
     server_crt_str: PEM formatted string representing cert
     host: host name to use if there is no server_crt_str
   Returns:
@@ -190,8 +190,8 @@ def generate_dummy_crt_str(root_pem, server_crt_str, host):
     crt_x509 = load_crt_x509(server_crt_str)
     common_name = crt_x509.get_subject().commonName
 
-  ca = load_crt_x509(root_pem)
-  key = load_privatekey(root_pem)
+  ca = load_crt_x509(root_ca_str)
+  key = load_privatekey(root_ca_str)
 
   req = crypto.X509Req()
   subj = req.get_subject()

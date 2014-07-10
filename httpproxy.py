@@ -280,13 +280,13 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
 class HttpsProxyServer(HttpProxyServer):
   """SSL server that generates certs for each host."""
 
-  def __init__(self, http_archive_fetch, custom_handlers, https_root_pem_path,
+  def __init__(self, http_archive_fetch, custom_handlers, https_root_ca_cert_path,
                **kwargs):
-    self.pem_path = https_root_pem_path
+    self.ca_cert_path = https_root_ca_cert_path
     self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler)
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, **kwargs)
-    self.http_archive_fetch.http_archive.set_root_cert(https_root_pem_path)
+    self.http_archive_fetch.http_archive.set_root_cert(https_root_ca_cert_path)
 
   def cleanup(self):
     try:
@@ -298,12 +298,12 @@ class HttpsProxyServer(HttpProxyServer):
 class SingleCertHttpsProxyServer(HttpProxyServer):
   """SSL server."""
 
-  def __init__(self, http_archive_fetch, custom_handlers, https_root_pem_path,
+  def __init__(self, http_archive_fetch, custom_handlers, https_root_ca_cert_path,
                **kwargs):
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, protocol='HTTPS', **kwargs)
     self.socket = ssl.wrap_socket(
-        self.socket, certfile=https_root_pem_path, server_side=True,
+        self.socket, certfile=https_root_ca_cert_path, server_side=True,
         do_handshake_on_connect=False)
     # Ancestor class, DaemonServer, calls serve_forever() during its __init__.
 

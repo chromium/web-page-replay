@@ -34,31 +34,31 @@ class CertutilsTest(unittest.TestCase):
 
   def test_write_dummy_ca(self):
     base_path = os.path.join(self._temp_dir, 'testCA')
-    pem_path = base_path + '.pem'
+    ca_path = base_path + '.pem'
     cert_path = base_path + '-cert.pem'
     ca_android = base_path + '-cert.cer'
     ca_windows = base_path + '-cert.p12'
 
-    self.assertFalse(os.path.exists(pem_path))
+    self.assertFalse(os.path.exists(ca_path))
     self.assertFalse(os.path.exists(cert_path))
     self.assertFalse(os.path.exists(ca_android))
     self.assertFalse(os.path.exists(ca_windows))
 
     c, k = certutils.generate_dummy_ca()
-    certutils.write_dummy_ca(pem_path, c, k)
+    certutils.write_dummy_ca(ca_path, c, k)
 
-    self._check_cert_file(pem_path, c, k)
+    self._check_cert_file(ca_path, c, k)
     self._check_cert_file(cert_path, c)
     self._check_cert_file(ca_android, c)
     self.assertTrue(os.path.exists(ca_windows))
 
   def test_generate_cert(self):
-    pem_path = os.path.join(self._temp_dir, 'testCA.pem')
+    ca_path = os.path.join(self._temp_dir, 'testCA.pem')
     issuer = 'testIssuer'
     crt_x509, key = certutils.generate_dummy_ca(issuer)
-    certutils.write_dummy_ca(pem_path, crt_x509, key)
+    certutils.write_dummy_ca(ca_path, crt_x509, key)
 
-    with open(pem_path, 'r') as root_file:
+    with open(ca_path, 'r') as root_file:
       root_string = root_file.read()
     subject = 'testSubject'
     cert_string = certutils.generate_dummy_crt_str(
@@ -67,9 +67,9 @@ class CertutilsTest(unittest.TestCase):
     self.assertEqual(issuer, crt_x509.get_issuer().commonName)
     self.assertEqual(subject, crt_x509.get_subject().commonName)
 
-    with open(pem_path, 'r') as ca_file:
-      pem = ca_file.read()
-    cert_string = certutils.generate_dummy_crt_str(pem, cert_string,
+    with open(ca_path, 'r') as ca_file:
+      ca_str = ca_file.read()
+    cert_string = certutils.generate_dummy_crt_str(ca_str, cert_string,
                                                'host')
     crt_x509 = certutils.load_crt_x509(cert_string)
     self.assertEqual(issuer, crt_x509.get_issuer().commonName)

@@ -30,7 +30,7 @@ class SSLHandshakeHandler:
           new_context = certutils.get_ssl_context()
           crt_x509 = certutils.load_crt_x509(crt_str)
           new_context.use_certificate(crt_x509)
-          new_context.use_privatekey_file(self.server.pem_path)
+          new_context.use_privatekey_file(self.server.ca_cert_path)
           connection.set_context(new_context)
           return new_context
         # else: fail with 'no shared cipher'
