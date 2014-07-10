@@ -1,7 +1,6 @@
 """Extends BaseHTTPRequestHandler with SSL certificate generation."""
 
 import socket
-import httpproxy
 import certutils
 
 openssl_import_error = None
