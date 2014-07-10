@@ -1,6 +1,7 @@
 """Extends BaseHTTPRequestHandler with SSL certificate generation."""
 
 import socket
+import httpproxy
 import certutils
 
 openssl_import_error = None
@@ -34,14 +35,16 @@ class WrappedConnection(object):
       return ''
 
 
-
 def set_ca_cert(ca_cert):
   global cert_store
   cert_store = certutils.CertStore(ca_cert, cert_dir=None)
 
 
-class SslHandshakeHandler:
+class SslHandshakeHandler(object):
   """Handles Server Name Indication (SNI) using dummy certs."""
+
+  def __init__(self, request, client_address, server):
+    pass
 
   def setup(self):
     """Sets up connection providing the certificate to the client."""
@@ -77,7 +80,7 @@ class SslHandshakeHandler:
     except SSL.Error, v:
       self.connection.shutdown()
       self.connection.close()
-      raise Exception('SSL handshake error: %s' % str(v))
+      raise SSL.Error('SSL handshake error: %s' % str(v))
 
     # Re-wrap the read/write streams with our new connection.
     self.rfile = socket._fileobject(self.connection, 'rb', self.rbufsize,
@@ -96,7 +99,7 @@ def wrap_handler(handler_class, cert_file):
     raise openssl_import_error
   set_ca_cert(cert_file)
 
-  class WrappedHandler(SslHandshakeHandler, handler_class):
+  class WrappedHandler(handler_class, SslHandshakeHandler):
 
     def setup(self):
       handler_class.setup(self)
