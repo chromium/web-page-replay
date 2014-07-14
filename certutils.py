@@ -1,11 +1,12 @@
 """Routines to generate root and server certificates.
 
 Certificate Naming Conventions:
-  ca:  crypto.X509 for the certificate authority (w/ both the pub & priv keys)
-  crt_x509:  a public crypto.X509  (w/ just the pub key)
-  crt_str:  a public string (w/ just the pub cert)
+  ca_cert:  crypto.X509 for the certificate authority (w/ both the pub &
+                priv keys)
+  cert:  a crypto.X509 certificate (w/ just the pub key)
+  cert_str:  a certificate string (w/ just the pub cert)
   key:  a private crypto.PKey  (from ca or pem)
-  ca_str:  a private string (w/ both the pub & priv certs)
+  ca_cert_str:  a certificae authority string (w/ both the pub & priv certs)
 """
 import logging
 import os
@@ -42,32 +43,32 @@ def get_ssl_connection(context, connection):
 
 
 def load_privatekey(key, filetype=crypto.FILETYPE_PEM):
-  """Loads x509 private key object from string."""
+  """Loads obj private key object from string."""
   return crypto.load_privatekey(filetype, key)
 
 
-def load_crt_x509(crt_str, filetype=crypto.FILETYPE_PEM):
-  """Loads x509 cert object from string."""
-  return crypto.load_certificate(filetype, crt_str)
+def load_cert(cert_str, filetype=crypto.FILETYPE_PEM):
+  """Loads obj cert object from string."""
+  return crypto.load_certificate(filetype, cert_str)
 
 
-def dump_privatekey(key, filetype=crypto.FILETYPE_PEM):
-  """Dumps x509 private key object to string."""
+def _dump_privatekey(key, filetype=crypto.FILETYPE_PEM):
+  """Dumps obj private key object to string."""
   return crypto.dump_privatekey(filetype, key)
 
 
-def dump_crt_x509(crt_x509, filetype=crypto.FILETYPE_PEM):
-  """Dumps x509 cert object to string."""
-  return crypto.dump_certificate(filetype, crt_x509)
+def _dump_cert(cert, filetype=crypto.FILETYPE_PEM):
+  """Dumps obj cert object to string."""
+  return crypto.dump_certificate(filetype, cert)
 
 
-def generate_dummy_ca(subject='sslproxy'):
+def generate_dummy_ca_cert(subject='sslproxy'):
   """Generates dummy certificate authority.
 
   Args:
     subject: a string representing the desired root cert issuer
   Returns:
-    A tuple of the public key and the private key x509 objects for the root
+    A tuple of the public key and the private key strings for the root
     certificate
   """
   if openssl_import_error:
@@ -76,16 +77,16 @@ def generate_dummy_ca(subject='sslproxy'):
   key = crypto.PKey()
   key.generate_key(crypto.TYPE_RSA, 1024)
 
-  ca = crypto.X509()
-  ca.set_serial_number(int(time.time()*10000))
-  ca.set_version(2)
-  ca.get_subject().CN = subject
-  ca.get_subject().O = subject
-  ca.gmtime_adj_notBefore(-60 * 60 * 24 * 365 * 2)
-  ca.gmtime_adj_notAfter(60 * 60 * 24 * 365 * 2)
-  ca.set_issuer(ca.get_subject())
-  ca.set_pubkey(key)
-  ca.add_extensions([
+  ca_cert = crypto.X509()
+  ca_cert.set_serial_number(int(time.time()*10000))
+  ca_cert.set_version(2)
+  ca_cert.get_subject().CN = subject
+  ca_cert.get_subject().O = subject
+  ca_cert.gmtime_adj_notBefore(-60 * 60 * 24 * 365 * 2)
+  ca_cert.gmtime_adj_notAfter(60 * 60 * 24 * 365 * 2)
+  ca_cert.set_issuer(ca_cert.get_subject())
+  ca_cert.set_pubkey(key)
+  ca_cert.add_extensions([
       crypto.X509Extension('basicConstraints', True, 'CA:TRUE'),
       crypto.X509Extension('nsCertType', True, 'sslCA'),
       crypto.X509Extension('extendedKeyUsage', True,
@@ -93,17 +94,20 @@ def generate_dummy_ca(subject='sslproxy'):
                             'timeStamping,msCodeInd,msCodeCom,msCTLSign,'
                             'msSGC,msEFS,nsSGC')),
       crypto.X509Extension('keyUsage', False, 'keyCertSign, cRLSign'),
-      crypto.X509Extension('subjectKeyIdentifier', False, 'hash', subject=ca),
+      crypto.X509Extension('subjectKeyIdentifier', False, 'hash',
+                           subject=ca_cert),
       ])
-  ca.sign(key, 'sha1')
-  return ca, key
+  ca_cert.sign(key, 'sha1')
+  key_str = _dump_privatekey(key)
+  ca_cert_str = _dump_cert(ca_cert)
+  return ca_cert_str, key_str
 
 
-def get_host_cert(host):
+def get_host_cert(host, port=443):
   """Contacts the host and returns its certificate."""
-  host_crt_x509 = None
-  def verify_cb(conn, crt_x509, errnum, depth, ok):
-    host_crt_x509 = crt_x509
+  host_certs = []
+  def verify_cb(conn, cert, errnum, depth, ok):
+    host_certs.append(cert)
     # The return code of 1 indicates that the certificate was ok.
     return 1
 
@@ -112,7 +116,7 @@ def get_host_cert(host):
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   connection = SSL.Connection(context, s)
   try:
-    connection.connect((host, 443))
+    connection.connect((host, port))
     connection.send('')
   except SSL.SysCallError:
     pass
@@ -121,12 +125,12 @@ def get_host_cert(host):
   finally:
     connection.shutdown()
     connection.close()
-  if host_crt_x509:
-    return dump_crt_x509(host_crt_x509)
-  return host_crt_x509
+  if len(host_certs) > 0:
+    return _dump_cert(host_certs[-1])
+  return ''
 
 
-def write_dummy_ca(cert_path, ca, key):
+def write_dummy_ca_cert(ca_cert_str, key_str, cert_path):
   """Writes four certificate files.
 
   For example, if cert_path is "mycert.pem":
@@ -136,76 +140,75 @@ def write_dummy_ca(cert_path, ca, key):
       mycert-cert.p12 - CA in PKCS12 format for Windows devices
   Args:
     cert_path: path string such as "mycert.pem"
-    ca: crypto X509 generated certificate
-    key: crypto X509 generated private key
+    ca_cert_str: certificate string
+    key_str: private key string
   """
   dirname = os.path.dirname(cert_path)
   if dirname and not os.path.exists(dirname):
     os.makedirs(dirname)
 
   root_path = os.path.splitext(cert_path)[0]
-  ca_path = root_path + '-cert.pem'
+  ca_cert_path = root_path + '-cert.pem'
   android_cer_path = root_path + '-cert.cer'
   windows_p12_path = root_path + '-cert.p12'
-
-  key_str = dump_privatekey(key)
-  ca_str = dump_crt_x509(ca)
 
   # Dump the CA plus private key
   with open(cert_path, 'w') as f:
     f.write(key_str)
-    f.write(ca_str)
+    f.write(ca_cert_str)
 
   # Dump the certificate in PEM format
-  with open(ca_path, 'w') as f:
-    f.write(ca_str)
+  with open(ca_cert_path, 'w') as f:
+    f.write(ca_cert_str)
 
   # Create a .cer file with the same contents for Android
   with open(android_cer_path, 'w') as f:
-    f.write(ca_str)
+    f.write(ca_cert_str)
 
+  ca_cert = load_cert(ca_cert_str)
+  key = load_privatekey(key_str)
   # Dump the certificate in PKCS12 format for Windows devices
   with open(windows_p12_path, 'w') as f:
     p12 = crypto.PKCS12()
-    p12.set_certificate(ca)
+    p12.set_certificate(ca_cert)
     p12.set_privatekey(key)
     f.write(p12.export())
 
 
-def generate_dummy_crt_str(root_ca_str, server_crt_str, host):
-  """Generates a crt_str with the sni field in server_crt_str signed by the
-  root_ca_str.
+def generate_cert(root_ca_cert_str, server_cert_str, server_host):
+  """Generates a cert_str with the sni field in server_cert_str signed by the
+  root_ca_cert_str.
 
   Args:
-    root_ca_str: PEM formatted string representing the root cert
-    server_crt_str: PEM formatted string representing cert
-    host: host name to use if there is no server_crt_str
+    root_ca_cert_str: PEM formatted string representing the root cert
+    server_cert_str: PEM formatted string representing cert
+    server_host: host name to use if there is no server_cert_str
   Returns:
     a PEM formatted certificate string
   """
   if openssl_import_error:
     raise openssl_import_error
-  common_name = host
-  if server_crt_str:
-    crt_x509 = load_crt_x509(server_crt_str)
-    common_name = crt_x509.get_subject().commonName
+  common_name = server_host
+  if server_cert_str:
+    cert = load_cert(server_cert_str)
+    common_name = cert.get_subject().commonName
 
-  ca = load_crt_x509(root_ca_str)
-  key = load_privatekey(root_ca_str)
+  ca_cert = load_cert(root_ca_cert_str)
+  key = load_privatekey(root_ca_cert_str)
 
   req = crypto.X509Req()
   subj = req.get_subject()
   subj.CN = common_name
-  req.set_pubkey(ca.get_pubkey())
+  req.set_pubkey(ca_cert.get_pubkey())
   req.sign(key, 'sha1')
 
-  crt_x509 = crypto.X509()
-  crt_x509.gmtime_adj_notBefore(-60 * 60)
-  crt_x509.gmtime_adj_notAfter(60 * 60 * 24 * 30)
-  crt_x509.set_issuer(ca.get_subject())
-  crt_x509.set_subject(req.get_subject())
-  crt_x509.set_serial_number(int(time.time()*10000))
-  crt_x509.set_pubkey(req.get_pubkey())
-  crt_x509.sign(key, 'sha1')
+  cert = crypto.X509()
+  cert.gmtime_adj_notBefore(-60 * 60)
+  cert.gmtime_adj_notAfter(60 * 60 * 24 * 30)
+  cert.set_issuer(ca_cert.get_subject())
+  cert.set_subject(req.get_subject())
+  cert.set_serial_number(int(time.time()*10000))
+  cert.set_pubkey(req.get_pubkey())
+  cert.sign(key, 'sha1')
 
-  return dump_crt_x509(crt_x509)
+  return _dump_cert(cert)

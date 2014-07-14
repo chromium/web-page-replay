@@ -66,11 +66,19 @@ class WrappedErrorHandler(sslproxy.SSLHandshakeHandler, Handler):
     Handler.finish(self)
 
 
-class DummyResponse(object):
+class DummyArchive(object):
+  
+  def __init__(self, cert_str):
+    self.root_ca_cert_str = cert_str
+  
+  def get_certificate(self, host):
+    return certutils.generate_cert(self.root_ca_cert_str, '', host)
 
-  def __init__(self, response):
-    self.response_data = [response]
+class DummyFetch(object):
 
+  def __init__(self, cert_str):
+    self.http_archive = DummyArchive(cert_str)
+      
 
 class Server(BaseHTTPServer.HTTPServer):
   """SSL server."""
@@ -79,7 +87,8 @@ class Server(BaseHTTPServer.HTTPServer):
                host='localhost'):
     self.ca_cert_path = ca_cert_path
     with open(ca_cert_path, 'r') as ca_file:
-      self.root_ca_str = ca_file.read()
+      ca_cert_str = ca_file.read()
+    self.http_archive_fetch = DummyFetch(ca_cert_str)
     if use_error_handler:
       self.HANDLER = WrappedErrorHandler
     else:
@@ -89,10 +98,6 @@ class Server(BaseHTTPServer.HTTPServer):
     except Exception, e:
       raise RuntimeError('Could not start HTTPSServer on port %d: %s'
                          % (port, e))
-
-  def get_certificate(self, req):
-    crt_str = certutils.generate_dummy_crt_str(self.root_ca_str, '', req.host)
-    return DummyResponse(crt_str)
 
   def __enter__(self):
     thread = threading.Thread(target=self.serve_forever)
@@ -122,9 +127,8 @@ class TestClient(unittest.TestCase):
     self.wrong_cert_path = self._temp_dir + 'wrong-cert.cer'
 
     # Write both pem and cer files for certificates
-    certutils.write_dummy_ca(self.ca_cert_path, *certutils.generate_dummy_ca())
-    certutils.write_dummy_ca(self.wrong_ca_cert_path,
-                             *certutils.generate_dummy_ca())
+    certutils.write_dummy_ca_cert(*certutils.generate_dummy_ca_cert(), cert_path=self.ca_cert_path)
+    certutils.write_dummy_ca_cert(*certutils.generate_dummy_ca_cert(), cert_path=self.ca_cert_path)
 
   def tearDown(self):
     if self._temp_dir:

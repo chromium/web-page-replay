@@ -187,6 +187,17 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
       try:
         request = self.get_archived_http_request()
+        if ('client_204' in request.path or
+            'generate_204' in request.path or
+            'gen_204' in request.path or
+            'log204' in request.path or
+            'lsp.aspx' in request.path):
+          logging.debug(request.path)
+          logging.debug(request.host)
+          logging.debug('XXXX WE GOT A 204 XXXX')
+          self.send_error(204)
+          return
+ 
         if request is None:
           self.send_error(500)
           return
@@ -282,6 +293,7 @@ class HttpsProxyServer(HttpProxyServer):
 
   def __init__(self, http_archive_fetch, custom_handlers, https_root_ca_cert_path,
                **kwargs):
+    logging.debug('UUUUUUUUUUUUUUSSSSSSSSSEEE')
     self.ca_cert_path = https_root_ca_cert_path
     self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler)
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,

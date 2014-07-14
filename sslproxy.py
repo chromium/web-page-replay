@@ -6,16 +6,11 @@ import certutils
 import httparchive
 
 
-def get_crt_str_request(host):
-  return httparchive.ArchivedHttpRequest('DUMMY_CERT', host, '', None, {})
-
-
 class SSLHandshakeHandler:
   """Handles Server Name Indication (SNI) using dummy certs."""
 
   def setup(self):
     """Sets up connection providing the certificate to the client."""
-    self.server_name = None
     # One of: One of SSLv2_METHOD, SSLv3_METHOD, SSLv23_METHOD, or TLSv1_METHOD
     context = certutils.get_ssl_context()
     def handle_servername(connection):
@@ -23,13 +18,11 @@ class SSLHandshakeHandler:
       try:
         host = connection.get_servername()
         if host:
-          crt_str_request = get_crt_str_request(host)
-          crt_str = self.server.http_archive_fetch.http_archive.get_certificate(
-              crt_str_request)
-          self.server_name = host
+          cert_str = (
+              self.server.http_archive_fetch.http_archive.get_certificate(host))
           new_context = certutils.get_ssl_context()
-          crt_x509 = certutils.load_crt_x509(crt_str)
-          new_context.use_certificate(crt_x509)
+          cert = certutils.load_cert(cert_str)
+          new_context.use_certificate(cert)
           new_context.use_privatekey_file(self.server.ca_cert_path)
           connection.set_context(new_context)
           return new_context

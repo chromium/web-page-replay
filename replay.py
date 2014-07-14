@@ -538,7 +538,7 @@ def GetOptionParser():
       dest='ssl',
       help='Do not setup an SSL proxy.')
   option_parser.add_option_group(harness_group)
-  harness_group.add_option('--should_generate_certs', default=False,
+  harness_group.add_option('--generate_certs', default=False,
       action='store_true',
       dest='should_generate_certs',
       help='Use OpenSSL to generate certificate files for requested hosts.')
