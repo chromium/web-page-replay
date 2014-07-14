@@ -39,15 +39,11 @@ def set_ca_cert(ca_cert):
   cert_store = certutils.CertStore(ca_cert, cert_dir=None)
 
 
-class SslHandshakeHandler(object):
+class SslHandshakeHandler:
   """Handles Server Name Indication (SNI) using dummy certs."""
-
-  def __init__(self, request, client_address, server):
-    pass
 
   def setup(self):
     """Sets up connection providing the certificate to the client."""
-    self.server_name = None
     # One of: One of SSLv2_METHOD, SSLv3_METHOD, SSLv23_METHOD, or TLSv1_METHOD
     method = SSL.SSLv23_METHOD
     context = SSL.Context(method)
@@ -56,7 +52,6 @@ class SslHandshakeHandler(object):
       try:
         host = connection.get_servername()
         if host:
-          self.server_name = host
           cert = cert_store.get_cert(host)
           new_context = SSL.Context(SSL.SSLv23_METHOD)
           new_context.use_certificate_file(cert)
@@ -68,7 +63,7 @@ class SslHandshakeHandler(object):
         # can be gotten from the server.
       except Exception, e:
         # Do not leak any exceptions or else openssl crashes.
-        print('Exception in SNI handler', e)
+        logging.error('Exception in SNI handler', e)
 
     context.set_tlsext_servername_callback(handle_servername)
     self.connection = WrappedConnection(SSL.Connection(context,
