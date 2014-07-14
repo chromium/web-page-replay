@@ -67,10 +67,10 @@ class WrappedErrorHandler(sslproxy.SSLHandshakeHandler, Handler):
 
 
 class DummyArchive(object):
-  
+
   def __init__(self, cert_str):
     self.root_ca_cert_str = cert_str
-  
+
   def get_certificate(self, host):
     return certutils.generate_cert(self.root_ca_cert_str, '', host)
 
@@ -78,7 +78,7 @@ class DummyFetch(object):
 
   def __init__(self, cert_str):
     self.http_archive = DummyArchive(cert_str)
-      
+
 
 class Server(BaseHTTPServer.HTTPServer):
   """SSL server."""
@@ -127,28 +127,30 @@ class TestClient(unittest.TestCase):
     self.wrong_cert_path = self._temp_dir + 'wrong-cert.cer'
 
     # Write both pem and cer files for certificates
-    certutils.write_dummy_ca_cert(*certutils.generate_dummy_ca_cert(), cert_path=self.ca_cert_path)
-    certutils.write_dummy_ca_cert(*certutils.generate_dummy_ca_cert(), cert_path=self.ca_cert_path)
+    certutils.write_dummy_ca_cert(*certutils.generate_dummy_ca_cert(),
+                                  cert_path=self.ca_cert_path)
+    certutils.write_dummy_ca_cert(*certutils.generate_dummy_ca_cert(),
+                                  cert_path=self.ca_cert_path)
 
   def tearDown(self):
     if self._temp_dir:
       shutil.rmtree(self._temp_dir)
 
-  def verify_cb(self, conn, crt_x509, errnum, depth, ok):
+  def verify_cb(self, conn, cert, errnum, depth, ok):
     """A callback that verifies the certificate authentication worked.
 
     Args:
       conn: Connection object
-      crt_x509: x509 object
+      cert: x509 object
       errnum: possible error number
       depth: error depth
       ok: 1 if the authentication worked 0 if it didnt.
     Returns:
       1 or 0 depending on if the verification worked
     """
-    self.assertFalse(crt_x509.has_expired())
+    self.assertFalse(cert.has_expired())
     self.assertGreater(time.strftime('%Y%m%d%H%M%SZ', time.gmtime()),
-                       crt_x509.get_notBefore())
+                       cert.get_notBefore())
     return ok
 
   def test_no_host(self):

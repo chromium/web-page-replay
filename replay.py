@@ -345,7 +345,8 @@ def replay(options, replay_filename):
       AddDnsProxy(server_manager, options, ipfw_dns_host, options.dns_port,
                   real_dns_lookup, http_archive)
     if options.ssl and options.https_root_ca_cert_path is None:
-      options.https_root_ca_cert_path = os.path.join(os.path.dirname(__file__), 'wpr_cert.pem')
+      options.https_root_ca_cert_path = os.path.join(os.path.dirname(__file__),
+                                                     'wpr_cert.pem')
     http_proxy_address = options.host
     if not http_proxy_address:
       http_proxy_address = platformsettings.get_httpproxy_ip_address(
@@ -538,9 +539,8 @@ def GetOptionParser():
       dest='ssl',
       help='Do not setup an SSL proxy.')
   option_parser.add_option_group(harness_group)
-  harness_group.add_option('--generate_certs', default=False,
+  harness_group.add_option('--should_generate_certs', default=False,
       action='store_true',
-      dest='should_generate_certs',
       help='Use OpenSSL to generate certificate files for requested hosts.')
   harness_group.add_option('--no-admin-check', default=True,
       action='store_false',

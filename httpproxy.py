@@ -187,17 +187,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
       try:
         request = self.get_archived_http_request()
-        if ('client_204' in request.path or
-            'generate_204' in request.path or
-            'gen_204' in request.path or
-            'log204' in request.path or
-            'lsp.aspx' in request.path):
-          logging.debug(request.path)
-          logging.debug(request.host)
-          logging.debug('XXXX WE GOT A 204 XXXX')
-          self.send_error(204)
-          return
- 
+
         if request is None:
           self.send_error(500)
           return
@@ -291,9 +281,8 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
 class HttpsProxyServer(HttpProxyServer):
   """SSL server that generates certs for each host."""
 
-  def __init__(self, http_archive_fetch, custom_handlers, https_root_ca_cert_path,
-               **kwargs):
-    logging.debug('UUUUUUUUUUUUUUSSSSSSSSSEEE')
+  def __init__(self, http_archive_fetch, custom_handlers,
+               https_root_ca_cert_path, **kwargs):
     self.ca_cert_path = https_root_ca_cert_path
     self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler)
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
@@ -310,8 +299,8 @@ class HttpsProxyServer(HttpProxyServer):
 class SingleCertHttpsProxyServer(HttpProxyServer):
   """SSL server."""
 
-  def __init__(self, http_archive_fetch, custom_handlers, https_root_ca_cert_path,
-               **kwargs):
+  def __init__(self, http_archive_fetch, custom_handlers,
+               https_root_ca_cert_path, **kwargs):
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, protocol='HTTPS', **kwargs)
     self.socket = ssl.wrap_socket(
