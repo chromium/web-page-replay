@@ -411,21 +411,10 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       return '\n'.join(difflib.ndiff(closest_request_lines, request_lines))
     return None
 
-  def create_cert_response(self, cert_str):
-    """Creates ArchivedHttpResponse with the cert string as the response_data.
-
-    Args:
-      cert_str: A string representing a PEM formatted cert. The string can
-            contain the private key if it is for the root cert.
-    Returns:
-      an ArchivedHttpResponse
-    """
-    return ArchivedHttpResponse(11, 200, 'OK', [], [cert_str], {})
-
   def set_root_cert(self, cert_path):
     with open(cert_path, 'r') as cert_file:
       cert_str = cert_file.read()
-    cert_str_response = self.create_cert_response(cert_str)
+    cert_str_response = create_response(200, body=cert_str)
     root_request = ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
     self[root_request] = cert_str_response
 
@@ -433,8 +422,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     """Gets certificate from the server and stores it in archive"""
     request = ArchivedHttpRequest('SERVER_CERT', host, '', None, {})
     if request not in self:
-      self[request] = self.create_cert_response(
-          certutils.get_host_cert(host))
+      self[request] = create_response(200, body=certutils.get_host_cert(host))
     return self[request].response_data[0]
 
   def _get_root_cert(self):
@@ -452,7 +440,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
   def get_certificate(self, host):
     request = ArchivedHttpRequest('DUMMY_CERT', host, '', None, {})
     if request not in self:
-      self[request] = self.create_cert_response(self._generate_cert(host))
+      self[request] = create_response(200, body=self._generate_cert(host))
     return self[request].response_data[0]
 
 
