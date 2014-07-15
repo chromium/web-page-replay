@@ -38,8 +38,29 @@ def get_ssl_context(method=SSL_METHOD):
   return SSL.Context(method)
 
 
+class WrappedConnection(object):
+
+  def __init__(self, obj):
+    self._wrapped_obj = obj
+
+  def __getattr__(self, attr):
+    if attr in self.__dict__:
+      return getattr(self, attr)
+    return getattr(self._wrapped_obj, attr)
+
+  def recv(self, buflen=1024, flags=0):
+    try:
+      return self._wrapped_obj.recv(buflen, flags)
+    except SSL.SysCallError, e:
+      if e.args[1] == 'Unexpected EOF':
+        return ''
+      raise
+    except SSL.ZeroReturnError:
+      return ''
+
+
 def get_ssl_connection(context, connection):
-  return SSL.Connection(context, connection)
+  return WrappedConnection(SSL.Connection(context, connection))
 
 
 def load_privatekey(key, filetype=crypto.FILETYPE_PEM):

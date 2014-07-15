@@ -1,11 +1,7 @@
 (function () {
-  var orig_date = Date;
   var random_count = 0;
-  var date_count = 0;
-  var random_seed = 0.462;
-  var time_seed = 1204251968254;
   var random_count_threshold = 25;
-  var date_count_threshold = 25;
+  var random_seed = 0.462;
   Math.random = function() {
     random_count++;
     if (random_count > random_count_threshold){
@@ -24,6 +20,12 @@
       return arr;
     };
   }
+})();
+(function () {
+  var date_count = 0;
+  var date_count_threshold = 25;
+  var orig_date = Date;
+  var time_seed = 1204251968254;
   Date = function() {
     if (this instanceof Date) {
       date_count++;

@@ -26,6 +26,7 @@ class Client(object):
     self.connection = None
 
   def run_request(self):
+#<<<<<<< HEAD
     context = certutils.get_ssl_context()
     context.set_verify(certutils.VERIFY_PEER, self.verify_cb)  # Demand a cert
     context.use_certificate_file(self.ca_cert_path)
@@ -51,18 +52,18 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.raw_requestline = self.rfile.readline(65537)
 
 
-class WrappedErrorHandler(sslproxy.SSLHandshakeHandler, Handler):
+class WrappedErrorHandler(sslproxy.SslHandshakeHandler, Handler):
   """Wraps handler to verify expected sslproxy errors are being raised."""
 
   def setup(self):
     Handler.setup(self)
     try:
-      sslproxy.SSLHandshakeHandler.setup(self)
+      sslproxy.SslHandshakeHandler.setup(self)
     except certutils.Error:
       self.server.error_function = certutils.Error
 
   def finish(self):
-    sslproxy.SSLHandshakeHandler.finish(self)
+    sslproxy.SslHandshakeHandler.finish(self)
     Handler.finish(self)
 
 
@@ -120,7 +121,6 @@ class TestClient(unittest.TestCase):
 
   def setUp(self):
     self._temp_dir = tempfile.mkdtemp(prefix='sslproxy_', dir='/tmp')
-
     self.ca_cert_path = self._temp_dir + 'testCA.pem'
     self.cert_path = self._temp_dir + 'testCA-cert.cer'
     self.wrong_ca_cert_path = self._temp_dir + 'wrong.pem'

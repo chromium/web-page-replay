@@ -3,10 +3,9 @@ import logging
 import socket
 
 import certutils
-import httparchive
 
 
-class SSLHandshakeHandler:
+class SslHandshakeHandler:
   """Handles Server Name Indication (SNI) using dummy certs."""
 
   def setup(self):
@@ -29,7 +28,7 @@ class SSLHandshakeHandler:
         # else: fail with 'no shared cipher'
       except Exception, e:
         # Do not leak any exceptions or else openssl crashes.
-        print('Exception in SNI handler', e)
+        logging.error('Exception in SNI handler', e)
 
     context.set_tlsext_servername_callback(handle_servername)
     self.connection = certutils.get_ssl_connection(context, self.connection)
@@ -42,20 +41,6 @@ class SSLHandshakeHandler:
         logging.error('Dropping request without SNI')
         return ''
       raise certutils.Error('SSL handshake error %s: %s' % (host, str(v)))
-
-    def wrap_recv(recv):
-      """Wraps recv to handle ragged EOFs and ZeroReturnErrors."""
-      def wrapped_recv(buflen=1024, flags=0):
-        try:
-          return recv(buflen, flags)
-        except certutils.SysCallError, e:
-          if e.args[1] == 'Unexpected EOF':
-            return ''
-          raise
-        except certutils.ZeroReturnError:
-          return ''
-      return wrapped_recv
-    self.connection.recv = wrap_recv(self.connection.recv)
 
     # Re-wrap the read/write streams with our new connection.
     self.rfile = socket._fileobject(self.connection, 'rb', self.rbufsize,
@@ -73,13 +58,13 @@ def wrap_handler(handler_class):
   if certutils.openssl_import_error:
     raise certutils.openssl_import_error
 
-  class WrappedHandler(SSLHandshakeHandler, handler_class):
+  class WrappedHandler(SslHandshakeHandler, handler_class):
 
     def setup(self):
       handler_class.setup(self)
-      SSLHandshakeHandler.setup(self)
+      SslHandshakeHandler.setup(self)
 
     def finish(self):
       handler_class.finish(self)
-      SSLHandshakeHandler.finish(self)
+      SslHandshakeHandler.finish(self)
   return WrappedHandler
