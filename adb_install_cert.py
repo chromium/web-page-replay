@@ -29,7 +29,7 @@ class AndroidCertInstaller(object):
     if self.device_id:
       cmd.extend(['-s', self.device_id])
     cmd.extend(args)
-    return subprocess.check_output(cmd)
+    return self._run_cmd(cmd)
 
   def _adb_su_shell(self, *args):
     """Runs command as root."""
@@ -101,8 +101,9 @@ class AndroidCertInstaller(object):
     self._adb('push', self.reformatted_cert_path, '/sdcard/')
     self._remove(self.reformatted_cert_path)
     self._adb_su_shell('mount', '-o', 'remount,rw', '/system')
-    self._adb_su_shell('cp', '/sdcard/%s' % self.reformatted_cert_path,
-                       self.android_cacerts_path)
+    self._adb_su_shell(
+        'sh', '-c', 'cat /sdcard/%s > /system/etc/security/cacerts/%s'
+        % (self.reformatted_cert_path, self.reformatted_cert_path))
     self._adb_su_shell('chmod', '644', self.android_cacerts_path)
     if not self._is_cert_installed():
       logging.warning('Cert Install Failed')
