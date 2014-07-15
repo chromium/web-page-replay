@@ -16,16 +16,15 @@
 """Retrieve web resources over http."""
 
 import copy
-import httparchive
 import httplib
 import logging
-import os
-import platformsettings
 import random
-import re
-import script_injector
 import StringIO
-import util
+
+import httparchive
+import platformsettings
+import script_injector
+
 
 # PIL isn't always available, but we still want to be able to run without
 # the image scrambling functionality in this case.
@@ -65,6 +64,7 @@ def _InjectScripts(response, inject_script):
       response.set_data(text)
   return response
 
+
 def _ScrambleImages(response):
   """If the |response| is an image, attempt to scramble it.
 
@@ -98,10 +98,11 @@ def _ScrambleImages(response):
 
       response = copy.deepcopy(response)
       response.set_data(output_image_data)
-    except Exception, err:
+    except Exception:
       pass
 
   return response
+
 
 class DetailedHTTPResponse(httplib.HTTPResponse):
   """Preserve details relevant to replaying responses.
@@ -178,12 +179,14 @@ class DetailedHTTPSResponse(DetailedHTTPResponse):
   """Preserve details relevant to replaying SSL responses."""
   pass
 
+
 class DetailedHTTPSConnection(httplib.HTTPSConnection):
   """Preserve details relevant to replaying SSL connections."""
   response_class = DetailedHTTPSResponse
 
 
 class RealHttpFetch(object):
+
   def __init__(self, real_dns_lookup):
     """Initialize RealHttpFetch.
 
@@ -456,6 +459,7 @@ class ControllableHttpArchiveFetch(object):
       use_closest_match: If True, on replay mode, serve the closest match
         in the archive instead of giving a 404.
     """
+    self.http_archive = http_archive
     self.record_fetch = RecordHttpArchiveFetch(
         http_archive, real_dns_lookup, inject_script,
         cache_misses)

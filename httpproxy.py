@@ -14,26 +14,25 @@
 # limitations under the License.
 
 import BaseHTTPServer
-import daemonserver
 import errno
-import httparchive
 import logging
-import os
-import proxyshaper
-import re
 import socket
 import SocketServer
 import ssl
-import sslproxy
-import subprocess
-import sys
 import time
 import urlparse
+
+import certutils
+import daemonserver
+import httparchive
+import proxyshaper
+import sslproxy
 
 
 class HttpProxyError(Exception):
   """Module catch-all error."""
   pass
+
 
 class HttpProxyServerError(HttpProxyError):
   """Raised for errors like 'Address already in use'."""
@@ -158,7 +157,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.do_parse_and_handle_one_request()
     except socket.timeout, e:
       # A read or a write timed out.  Discard this connection
-      self.log_error("Request timed out: %r", e)
+      self.log_error('Request timed out: %r', e)
       self.close_connection = 1
       return
     except socket.error, e:
@@ -188,6 +187,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
       try:
         request = self.get_archived_http_request()
+
         if request is None:
           self.send_error(500)
           return
@@ -201,7 +201,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       finally:
         self.wfile.flush()  # Actually send the response if not already done.
     finally:
-      request_time_ms = (time.time() - start_time) * 1000.0;
+      request_time_ms = (time.time() - start_time) * 1000.0
       if request:
         logging.debug('Served: %s (%dms)', request, request_time_ms)
       self.server.total_request_time += request_time_ms
@@ -269,7 +269,7 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
   def cleanup(self):
     try:
       self.shutdown()
-    except KeyboardInterrupt, e:
+    except KeyboardInterrupt:
       pass
     logging.info('Stopped %s server. Total time processing requests: %dms',
                  self.protocol, self.total_request_time)
@@ -281,27 +281,30 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
 class HttpsProxyServer(HttpProxyServer):
   """SSL server that generates certs for each host."""
 
-  def __init__(self, http_archive_fetch, custom_handlers, certfile, **kwargs):
-    self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler, certfile)
+  def __init__(self, http_archive_fetch, custom_handlers,
+               https_root_ca_cert_path, **kwargs):
+    self.ca_cert_path = https_root_ca_cert_path
+    self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler)
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, **kwargs)
+    self.http_archive_fetch.http_archive.set_root_cert(https_root_ca_cert_path)
 
   def cleanup(self):
     try:
       self.shutdown()
     except KeyboardInterrupt:
       pass
-    sslproxy.certstore.cleanup()
 
 
 class SingleCertHttpsProxyServer(HttpProxyServer):
   """SSL server."""
 
-  def __init__(self, http_archive_fetch, custom_handlers, certfile, **kwargs):
+  def __init__(self, http_archive_fetch, custom_handlers,
+               https_root_ca_cert_path, **kwargs):
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, protocol='HTTPS', **kwargs)
     self.socket = ssl.wrap_socket(
-        self.socket, certfile=certfile, server_side=True,
+        self.socket, certfile=https_root_ca_cert_path, server_side=True,
         do_handshake_on_connect=False)
     # Ancestor class, DaemonServer, calls serve_forever() during its __init__.
 

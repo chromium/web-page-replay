@@ -10,49 +10,37 @@ import time
 import unittest
 
 import certutils
-from OpenSSL import SSL
 import sslproxy
-
-signal.signal(signal.SIGINT, signal.SIG_DFL)  # Exit on Ctrl-C
-
-error_function = None
 
 
 class Client(object):
 
-  def __init__(self, method, ca_path, verify_cb, port, host_name,
+  def __init__(self, ca_cert_path, verify_cb, port, host_name='foo.com',
                host='localhost'):
-    self.method = method
+    self.host_name = host_name
     self.verify_cb = verify_cb
-    self.ca_path = ca_path
+    self.ca_cert_path = ca_cert_path
     self.port = port
     self.host_name = host_name
     self.host = host
     self.connection = None
 
   def run_request(self):
-    context = SSL.Context(self.method)
-    context.set_verify(SSL.VERIFY_PEER, self.verify_cb)  # Demand a certificate
-    context.use_certificate_file(self.ca_path)
-    context.load_verify_locations(self.ca_path)
+    context = certutils.get_ssl_context()
+    context.set_verify(certutils.VERIFY_PEER, self.verify_cb)  # Demand a cert
+    context.use_certificate_file(self.ca_cert_path)
+    context.load_verify_locations(self.ca_cert_path)
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    self.connection = SSL.Connection(context, s)
+    self.connection = certutils.get_ssl_connection(context, s)
     self.connection.connect((self.host, self.port))
     self.connection.set_tlsext_host_name(self.host_name)
 
-    self.connection.send('GET / HTTP/1.1\r\nHost: google.com:443\r\n\r\n')
-
-    while True:
-      try:
-        self.connection.recv(65537)
-      except Exception:
-        pass
-      break
-
-  def shutDown(self):
-    self.connection.shutdown()
-    self.connection.close()
+    try:
+      self.connection.send('\r\n\r\n')
+    finally:
+      self.connection.shutdown()
+      self.connection.close()
 
 
 class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -63,20 +51,53 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.raw_requestline = self.rfile.readline(65537)
 
 
+class WrappedErrorHandler(sslproxy.SslHandshakeHandler, Handler):
+  """Wraps handler to verify expected sslproxy errors are being raised."""
+
+  def setup(self):
+    Handler.setup(self)
+    try:
+      sslproxy.SslHandshakeHandler.setup(self)
+    except certutils.Error:
+      self.server.error_function = certutils.Error
+
+  def finish(self):
+    sslproxy.SslHandshakeHandler.finish(self)
+    Handler.finish(self)
+
+
+class DummyArchive(object):
+
+  def __init__(self, cert_str):
+    self.root_ca_cert_str = cert_str
+
+  def get_certificate(self, host):
+    return certutils.generate_cert(self.root_ca_cert_str, '', host)
+
+class DummyFetch(object):
+
+  def __init__(self, cert_str):
+    self.http_archive = DummyArchive(cert_str)
+
+
 class Server(BaseHTTPServer.HTTPServer):
   """SSL server."""
 
-  def __init__(self, port, cert_file, use_sslproxy_wrapper=True,
+  def __init__(self, ca_cert_path, use_error_handler=False, port=0,
                host='localhost'):
-    if use_sslproxy_wrapper:
-      self.HANDLER = sslproxy.wrap_handler(Handler, cert_file)
-    else:
-      sslproxy.set_ca_cert(cert_file)
+    self.ca_cert_path = ca_cert_path
+    with open(ca_cert_path, 'r') as ca_file:
+      ca_cert_str = ca_file.read()
+    self.http_archive_fetch = DummyFetch(ca_cert_str)
+    if use_error_handler:
       self.HANDLER = WrappedErrorHandler
+    else:
+      self.HANDLER = sslproxy.wrap_handler(Handler)
     try:
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), self.HANDLER)
     except Exception, e:
-      raise 'Could not start HTTPSServer on port %d: %s' % (port, e)
+      raise RuntimeError('Could not start HTTPSServer on port %d: %s'
+                         % (port, e))
 
   def __enter__(self):
     thread = threading.Thread(target=self.serve_forever)
@@ -89,26 +110,9 @@ class Server(BaseHTTPServer.HTTPServer):
       self.shutdown()
     except KeyboardInterrupt:
       pass
-    sslproxy.cert_store.cleanup()
 
-  def __exit__(self):
+  def __exit__(self, type_, value_, traceback_):
     self.cleanup()
-
-
-class WrappedErrorHandler(sslproxy.SSLHandshakeHandler, Handler):
-  """Wraps handler to verify expected sslproxy errors are being raised."""
-
-  def setup(self):
-    Handler.setup(self)
-    try:
-      sslproxy.SSLHandshakeHandler.setup(self)
-    except SSL.Error:
-      global error_function
-      error_function = SSL.Error
-
-  def finish(self):
-    sslproxy.SSLHandshakeHandler.finish(self)
-    Handler.finish(self)
 
 
 class TestClient(unittest.TestCase):
@@ -116,25 +120,22 @@ class TestClient(unittest.TestCase):
 
   def setUp(self):
     self._temp_dir = tempfile.mkdtemp(prefix='sslproxy_', dir='/tmp')
+    self.ca_cert_path = self._temp_dir + 'testCA.pem'
+    self.cert_path = self._temp_dir + 'testCA-cert.cer'
+    self.wrong_ca_cert_path = self._temp_dir + 'wrong.pem'
+    self.wrong_cert_path = self._temp_dir + 'wrong-cert.cer'
 
-    self.ca = self._temp_dir + 'testCA.pem'
-    self.cert = self._temp_dir + 'testCA-cert.cer'
-    self.wrong_ca = self._temp_dir + 'wrong.pem'
-    self.wrong_cert = self._temp_dir + 'wrong-cert.cer'
-
-    c, k = certutils.generate_dummy_ca()
-    certutils.write_dummy_ca(self.ca, c, k)
-
-    c, k = certutils.generate_dummy_ca()
-    certutils.write_dummy_ca(self.wrong_ca, c, k)
+    # Write both pem and cer files for certificates
+    certutils.write_dummy_ca_cert(*certutils.generate_dummy_ca_cert(),
+                                  cert_path=self.ca_cert_path)
+    certutils.write_dummy_ca_cert(*certutils.generate_dummy_ca_cert(),
+                                  cert_path=self.ca_cert_path)
 
   def tearDown(self):
-    global error_function
-    error_function = None
     if self._temp_dir:
       shutil.rmtree(self._temp_dir)
 
-  def _verify_cb(self, conn, cert, errnum, depth, ok):
+  def verify_cb(self, conn, cert, errnum, depth, ok):
     """A callback that verifies the certificate authentication worked.
 
     Args:
@@ -142,64 +143,36 @@ class TestClient(unittest.TestCase):
       cert: x509 object
       errnum: possible error number
       depth: error depth
-      ok: return 1 if the verification worked 0 if it didn't
+      ok: 1 if the authentication worked 0 if it didnt.
+    Returns:
+      1 or 0 depending on if the verification worked
     """
-    self.ok = ok
     self.assertFalse(cert.has_expired())
     self.assertGreater(time.strftime('%Y%m%d%H%M%SZ', time.gmtime()),
                        cert.get_notBefore())
     return ok
 
-  def startServer(self, port, use_sslproxy_wrapper=False):
-    self.s = Server(port, self.ca, use_sslproxy_wrapper)
-    self.s.__enter__()
-
-  def stopServer(self):
-    self.s.__exit__()
-
   def test_no_host(self):
-    port = 12345
-    self.startServer(port)
-
-    c = Client(SSL.SSLv23_METHOD, self.cert, self._verify_cb, port, '')
-    self.assertRaises(SSL.Error, c.run_request)
-    c.shutDown()
-
-    self.stopServer()
-
-  def test_no_ca(self):
-    port = 12344
-    self.assertRaises(ValueError, Server, port, 'no.pem')
+    with Server(self.ca_cert_path) as server:
+      c = Client(self.cert_path, self.verify_cb, server.server_port, '')
+      self.assertRaises(certutils.Error, c.run_request)
 
   def test_client_connection(self):
-    port = 12346
-    self.startServer(port, True)
+    with Server(self.ca_cert_path) as server:
+      c = Client(self.cert_path, self.verify_cb, server.server_port, 'foo.com')
+      c.run_request()
 
-    c = Client(SSL.SSLv23_METHOD, self.cert, self._verify_cb, port, 'foo.com')
-    c.run_request()
-    self.assertTrue(self.ok)
-    c.shutDown()
-
-    c = Client(SSL.SSLv23_METHOD, self.cert, self._verify_cb, port,
-               'random.host')
-    c.run_request()
-    self.assertTrue(self.ok)
-    c.shutDown()
-
-    self.stopServer
+      c = Client(self.cert_path, self.verify_cb, server.server_port,
+                 'random.host')
+      c.run_request()
 
   def test_wrong_cert(self):
-    port = 12347
-    self.startServer(port)
-
-    c = Client(SSL.SSLv23_METHOD, self.wrong_cert, self._verify_cb, port,
-               'foo.com')
-    self.assertRaises(SSL.Error, c.run_request)
-    self.assertFalse(self.ok)
-    c.shutDown()
-    self.assertEqual(SSL.Error, error_function)
-    self.stopServer()
+    with Server(self.ca_cert_path, True) as server:
+      c = Client(self.wrong_cert_path, self.verify_cb, server.server_port,
+                 'foo.com')
+      self.assertRaises(certutils.Error, c.run_request)
 
 
 if __name__ == '__main__':
+  signal.signal(signal.SIGINT, signal.SIG_DFL)  # Exit on Ctrl-C
   unittest.main()

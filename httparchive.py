@@ -41,6 +41,7 @@ To merge multiple archives
 """
 
 import calendar
+import certutils
 import difflib
 import email.utils
 import httplib
@@ -279,43 +280,43 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     stats['HTTP_response_code'] = defaultdict(int)
     stats['content_type'] = defaultdict(int)
     stats['Documents'] = defaultdict(int)
-    
+
     for request in matching_requests:
       stats['Domains'][request.host] += 1
       stats['HTTP_response_code'][self[request].status] += 1
-      
+
       content_type = self[request].get_header('content-type')
       # Remove content type options for readability and higher level groupings.
-      str_content_type = str(content_type.split(';')[0] 
+      str_content_type = str(content_type.split(';')[0]
                             if content_type else None)
       stats['content_type'][str_content_type] += 1
 
       #  Documents are the main URL requested and not a referenced resource.
       if str_content_type == 'text/html' and not 'referer' in request.headers:
         stats['Documents'][request.host] += 1
-    
+
     print >>out, json.dumps(stats, indent=4)
     return out.getvalue()
 
   def merge(self, merged_archive=None, other_archives=None):
-    """Merge multiple archives into merged_archive by 'chaining' resources, 
+    """Merge multiple archives into merged_archive by 'chaining' resources,
     only resources that are not part of the accumlated archive are added"""
     if not other_archives:
       print 'No archives passed to merge'
       return
-    
-    # Note we already loaded 'replay_file'. 
+
+    # Note we already loaded 'replay_file'.
     print 'Loaded %d responses' % len(self)
 
     for archive in other_archives:
       if not os.path.exists(archive):
         print 'Error: Replay file "%s" does not exist' % archive
         return
-      
+
       http_archive_other = HttpArchive.Load(archive)
       print 'Loaded %d responses from %s' % (len(http_archive_other), archive)
       for r in http_archive_other:
-        # Only resources that are not already part of the current archive 
+        # Only resources that are not already part of the current archive
         # get added.
         if r not in self:
           print '\t %s ' % r
@@ -409,6 +410,50 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       closest_request_lines = closest_request.formatted_request.split('\n')
       return '\n'.join(difflib.ndiff(closest_request_lines, request_lines))
     return None
+
+  def create_cert_response(self, cert_str):
+    """Creates ArchivedHttpResponse with the cert string as the response_data.
+
+    Args:
+      cert_str: A string representing a PEM formatted cert. The string can
+            contain the private key if it is for the root cert.
+    Returns:
+      an ArchivedHttpResponse
+    """
+    return ArchivedHttpResponse(11, 200, 'OK', [], [cert_str], {})
+
+  def set_root_cert(self, cert_path):
+    with open(cert_path, 'r') as cert_file:
+      cert_str = cert_file.read()
+    cert_str_response = self.create_cert_response(cert_str)
+    root_request = ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
+    self[root_request] = cert_str_response
+
+  def _get_server_cert(self, host):
+    """Gets certificate from the server and stores it in archive"""
+    request = ArchivedHttpRequest('SERVER_CERT', host, '', None, {})
+    if request not in self:
+      self[request] = self.create_cert_response(
+          certutils.get_host_cert(host))
+    return self[request].response_data[0]
+
+  def _get_root_cert(self):
+    request = ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
+    if request not in self:
+      raise KeyError('Root cert is not in the archive')
+    return self[request].response_data[0]
+
+  def _generate_cert(self, host):
+    """Generate cert with the SNI field from the real server's response."""
+    root_ca_cert_str = self._get_root_cert()
+    return certutils.generate_cert(
+        root_ca_cert_str, self._get_server_cert(host), host)
+
+  def get_certificate(self, host):
+    request = ArchivedHttpRequest('DUMMY_CERT', host, '', None, {})
+    if request not in self:
+      self[request] = self.create_cert_response(self._generate_cert(host))
+    return self[request].response_data[0]
 
 
 class ArchivedHttpRequest(object):
