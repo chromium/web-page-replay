@@ -13,17 +13,37 @@ except ImportError, e:
 cert_store = None
 
 
+class WrappedConnection(object):
+
+  def __init__(self, obj):
+    self._wrapped_obj = obj
+
+  def __getattr__(self, attr):
+    if attr in self.__dict__:
+      return getattr(self, attr)
+    return getattr(self._wrapped_obj, attr)
+
+  def recv(self, buflen=1024, flags=0):
+    try:
+      return self._wrapped_obj.recv(buflen, flags)
+    except SSL.SysCallError, e:
+      if e.args[1] == 'Unexpected EOF':
+        return ''
+      raise
+    except SSL.ZeroReturnError:
+      return ''
+
+
 def set_ca_cert(ca_cert):
   global cert_store
   cert_store = certutils.CertStore(ca_cert, cert_dir=None)
 
 
-class SSLHandshakeHandler:
+class SslHandshakeHandler:
   """Handles Server Name Indication (SNI) using dummy certs."""
 
   def setup(self):
     """Sets up connection providing the certificate to the client."""
-    self.server_name = None
     # One of: One of SSLv2_METHOD, SSLv3_METHOD, SSLv23_METHOD, or TLSv1_METHOD
     method = SSL.SSLv23_METHOD
     context = SSL.Context(method)
@@ -32,7 +52,6 @@ class SSLHandshakeHandler:
       try:
         host = connection.get_servername()
         if host:
-          self.server_name = host
           cert = cert_store.get_cert(host)
           new_context = SSL.Context(SSL.SSLv23_METHOD)
           new_context.use_certificate_file(cert)
@@ -44,10 +63,11 @@ class SSLHandshakeHandler:
         # can be gotten from the server.
       except Exception, e:
         # Do not leak any exceptions or else openssl crashes.
-        print('Exception in SNI handler', e)
+        logging.error('Exception in SNI handler', e)
 
     context.set_tlsext_servername_callback(handle_servername)
-    self.connection = SSL.Connection(context, self.connection)
+    self.connection = WrappedConnection(SSL.Connection(context,
+                                                       self.connection))
     self.connection.set_accept_state()
     try:
       self.connection.do_handshake()
@@ -55,20 +75,6 @@ class SSLHandshakeHandler:
       self.connection.shutdown()
       self.connection.close()
       raise Exception('SSL handshake error: %s' % str(v))
-
-    def wrap_recv(recv):
-      """Wraps recv to handle ragged EOFs and ZeroReturnErrors."""
-      def wrapped_recv(buflen=1024, flags=0):
-        try:
-          return recv(buflen, flags)
-        except SSL.SysCallError, e:
-          if e.args[1] == 'Unexpected EOF':
-            return ''
-          raise
-        except SSL.ZeroReturnError:
-          return ''
-      return wrapped_recv
-    self.connection.recv = wrap_recv(self.connection.recv)
 
     # Re-wrap the read/write streams with our new connection.
     self.rfile = socket._fileobject(self.connection, 'rb', self.rbufsize,
@@ -82,20 +88,20 @@ class SSLHandshakeHandler:
 
 
 def wrap_handler(handler_class, cert_file):
-  """Wraps a BaseHTTPHandler wtih SSL MITM certificates."""
+  """Wraps a BaseHTTPHandler with SSL MITM certificates."""
   if openssl_import_error:
     raise openssl_import_error
   set_ca_cert(cert_file)
 
-  class WrappedHandler(SSLHandshakeHandler, handler_class):
+  class WrappedHandler(SslHandshakeHandler, handler_class):
 
     def setup(self):
       handler_class.setup(self)
-      SSLHandshakeHandler.setup(self)
+      SslHandshakeHandler.setup(self)
 
     def finish(self):
       handler_class.finish(self)
-      SSLHandshakeHandler.finish(self)
+      SslHandshakeHandler.finish(self)
   return WrappedHandler
 
 
