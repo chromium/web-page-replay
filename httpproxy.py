@@ -286,7 +286,7 @@ class HttpsProxyServer(HttpProxyServer):
     self.ca_cert_path = https_root_ca_cert_path
     self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler)
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
-                             is_ssl=True, **kwargs)
+                             is_ssl=True, protocol='HTTPS', **kwargs)
     self.http_archive_fetch.http_archive.set_root_cert(https_root_ca_cert_path)
 
   def cleanup(self):
