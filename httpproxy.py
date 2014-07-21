@@ -56,6 +56,12 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.wfile = proxyshaper.RateLimitedFile(
           self.server.get_active_request_count, self.wfile,
           self.server.traffic_shaping_down_bps)
+    self.handled_request = False
+
+  def finish(self):
+    BaseHTTPServer.BaseHTTPRequestHandler.setup(self)
+    if not self.handled_request:
+      logging.error('Client failed to make request')
 
   # Make request handler logging match our logging format.
   def log_request(self, code='-', size='-'): pass
@@ -203,6 +209,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     finally:
       request_time_ms = (time.time() - start_time) * 1000.0
       if request:
+        self.handled_request = True
         logging.debug('Served: %s (%dms)', request, request_time_ms)
       self.server.total_request_time += request_time_ms
       self.server.num_active_requests -= 1
