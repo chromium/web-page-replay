@@ -83,7 +83,7 @@ def _dump_cert(cert, filetype=crypto.FILETYPE_PEM):
   return crypto.dump_certificate(filetype, cert)
 
 
-def generate_dummy_ca_cert(subject='sslproxy'):
+def generate_dummy_ca_cert(subject='_WebPageReplayCert'):
   """Generates dummy certificate authority.
 
   Args:
