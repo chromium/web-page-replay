@@ -59,7 +59,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.has_handled_request = False
 
   def finish(self):
-    BaseHTTPServer.BaseHTTPRequestHandler.setup(self)
+    BaseHTTPServer.BaseHTTPRequestHandler.finish(self)
     if not self.has_handled_request:
       logging.error('Client failed to make request')
 
