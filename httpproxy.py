@@ -22,7 +22,6 @@ import ssl
 import time
 import urlparse
 
-import certutils
 import daemonserver
 import httparchive
 import proxyshaper
