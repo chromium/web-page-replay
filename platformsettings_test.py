@@ -135,6 +135,45 @@ OSX_DNS_STATE_SNOW_LEOPARD = """
 """
 
 
+class SystemProxyTest(unittest.TestCase):
+
+  def test_basic(self):
+    system_proxy = platformsettings.SystemProxy(None, None)
+    self.assertEqual(None, system_proxy.host)
+    self.assertEqual(None, system_proxy.port)
+    self.assertFalse(system_proxy)
+
+  def test_from_url_empty(self):
+    system_proxy = platformsettings.SystemProxy.from_url('')
+    self.assertEqual(None, system_proxy.host)
+    self.assertEqual(None, system_proxy.port)
+    self.assertFalse(system_proxy)
+
+  def test_from_url_basic(self):
+    system_proxy = platformsettings.SystemProxy.from_url('http://pxy.com:8888/')
+    self.assertEqual('pxy.com', system_proxy.host)
+    self.assertEqual(8888, system_proxy.port)
+    self.assertTrue(system_proxy)
+
+  def test_from_url_no_port(self):
+    system_proxy = platformsettings.SystemProxy.from_url('http://pxy.com/')
+    self.assertEqual('pxy.com', system_proxy.host)
+    self.assertEqual(None, system_proxy.port)
+    self.assertTrue(system_proxy)
+
+  def test_from_url_empty_string(self):
+    system_proxy = platformsettings.SystemProxy.from_url('')
+    self.assertEqual(None, system_proxy.host)
+    self.assertEqual(None, system_proxy.port)
+    self.assertFalse(system_proxy)
+
+  def test_from_url_bad_string(self):
+    system_proxy = platformsettings.SystemProxy.from_url('foo:80')
+    self.assertEqual(None, system_proxy.host)
+    self.assertEqual(None, system_proxy.port)
+    self.assertFalse(system_proxy)
+
+
 class Win7Settings(platformsettings._WindowsPlatformSettings):
   @classmethod
   def _ipconfig(cls, *args):

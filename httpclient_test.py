@@ -14,7 +14,9 @@
 # limitations under the License.
 
 import unittest
+
 import httpclient
+import platformsettings
 
 
 class RealHttpFetchTest(unittest.TestCase):
@@ -112,6 +114,64 @@ class RealHttpFetchTest(unittest.TestCase):
                 ('set-cookie', self.COOKIE_1[12:]),
                 ('fake-header', 'first line\n second line')]
     self.assertEqual(result, expected)
+
+
+class RealHttpFetchGetConnectionTest(unittest.TestCase):
+  """Test that a connection is made with request IP/port or proxy IP/port."""
+
+  def setUp(self):
+    def real_dns_lookup(host):
+      return {
+          'example.com': '127.127.127.127',
+          'proxy.com': '2.2.2.2',
+          }[host]
+    self.fetch = httpclient.RealHttpFetch(real_dns_lookup)
+    self.https_proxy = None
+    self.http_proxy = None
+    def get_proxy(is_ssl):
+      return self.https_proxy if is_ssl else self.http_proxy
+    self.fetch._get_system_proxy = get_proxy
+
+  def set_http_proxy(self, host, port):
+    self.http_proxy = platformsettings.SystemProxy(host, port)
+
+  def set_https_proxy(self, host, port):
+    self.https_proxy = platformsettings.SystemProxy(host, port)
+
+  def test_get_connection_without_proxy_connects_to_host_ip(self):
+    """HTTP connection with no proxy connects to host IP."""
+    self.set_http_proxy(host=None, port=None)
+    connection = self.fetch._get_connection('example.com', None, is_ssl=False)
+    self.assertEqual('127.127.127.127', connection.host)
+    self.assertEqual(80, connection.port)  # default HTTP port
+
+  def test_get_connection_without_proxy_uses_nondefault_request_port(self):
+    """HTTP connection with no proxy connects with request port."""
+    self.set_https_proxy(host=None, port=None)
+    connection = self.fetch._get_connection('example.com', 8888, is_ssl=False)
+    self.assertEqual('127.127.127.127', connection.host)
+    self.assertEqual(8888, connection.port)  # request HTTP port
+
+  def test_get_connection_with_proxy_uses_proxy_port(self):
+    """HTTP connection with proxy connects used proxy port."""
+    self.set_http_proxy(host='proxy.com', port=None)
+    connection = self.fetch._get_connection('example.com', 8888, is_ssl=False)
+    self.assertEqual('2.2.2.2', connection.host)  # proxy IP
+    self.assertEqual(80, connection.port)  # proxy port (default HTTP)
+
+  def test_ssl_get_connection_without_proxy_connects_to_host_ip(self):
+    """HTTPS (SSL) connection with no proxy connects to host IP."""
+    self.set_https_proxy(host=None, port=None)
+    connection = self.fetch._get_connection('example.com', None, is_ssl=True)
+    self.assertEqual('127.127.127.127', connection.host)
+    self.assertEqual(443, connection.port)  # default SSL port
+
+  def test_ssl_get_connection_with_proxy_connects_to_proxy_ip(self):
+    """HTTPS (SSL) connection with proxy connects to proxy IP."""
+    self.set_https_proxy(host='proxy.com', port=8443)
+    connection = self.fetch._get_connection('example.com', None, is_ssl=True)
+    self.assertEqual('2.2.2.2', connection.host)  # proxy IP
+    self.assertEqual(8443, connection.port)  # SSL proxy port
 
 
 if __name__ == '__main__':

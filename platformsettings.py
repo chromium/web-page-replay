@@ -38,6 +38,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urlparse
 
 
 class PlatformSettingsError(Exception):
@@ -90,6 +91,42 @@ def FindExecutable(executable):
                                                           ]))
 
 
+class SystemProxy(object):
+  """A host/port pair for a HTTP or HTTPS proxy configuration."""
+
+  def __init__(self, host, port):
+    """Initialize a SystemProxy instance.
+
+    Args:
+      host: a host name or IP address string (e.g. "example.com" or "1.1.1.1").
+      port: a port string or integer (e.g. "8888" or 8888).
+    """
+    self.host = host
+    self.port = int(port) if port else None
+
+  def __nonzero__(self):
+    """True if the host is set."""
+    return bool(self.host)
+
+  @classmethod
+  def from_url(cls, proxy_url):
+    """Create a SystemProxy instance.
+
+    If proxy_url is None, an empty string, or an invalid URL, the
+    SystemProxy instance with have None and None for the host and port
+    (no exception is raised).
+
+    Args:
+      proxy_url: a proxy url string such as "http://proxy.com:8888/".
+    Returns:
+      a System proxy instance.
+    """
+    if proxy_url:
+      parse_result = urlparse.urlparse(proxy_url)
+      return cls(parse_result.hostname, parse_result.port)
+    return cls(None, None)
+
+
 class _BasePlatformSettings(object):
 
   def get_system_logging_handler(self):
@@ -118,6 +155,10 @@ class _BasePlatformSettings(object):
     if is_server_mode:
       return '0.0.0.0'
     return '127.0.0.1'
+
+  def get_system_proxy(self, use_ssl):
+    """Returns the system HTTP(S) proxy host, port."""
+    return SystemProxy(None, None)
 
   def _ipfw_cmd(self):
     raise NotImplementedError
@@ -258,6 +299,11 @@ class _PosixPlatformSettings(_BasePlatformSettings):
         if raw_input(prompt).lower() == 'y':
           subprocess.check_call(['sudo', 'chmod', '+s', args[1]])
     return args
+
+  def get_system_proxy(self, use_ssl):
+    """Returns the system HTTP(S) proxy host, port."""
+    proxy_url = os.environ.get('https_proxy' if use_ssl else 'http_proxy')
+    return SystemProxy.from_url(proxy_url)
 
   def _ipfw_cmd(self):
     return 'ipfw'
@@ -696,6 +742,7 @@ timer = _inst.timer
 
 get_server_ip_address = _inst.get_server_ip_address
 get_httpproxy_ip_address = _inst.get_httpproxy_ip_address
+get_system_proxy = _inst.get_system_proxy
 ipfw = _inst.ipfw
 set_temporary_tcp_init_cwnd = _inst.set_temporary_tcp_init_cwnd
 setup_temporary_loopback_config = _inst.setup_temporary_loopback_config
