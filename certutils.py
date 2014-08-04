@@ -209,6 +209,7 @@ def generate_cert(root_ca_cert_str, server_cert_str, server_host):
   """
   if openssl_import_error:
     raise openssl_import_error
+
   common_name = server_host
   if server_cert_str:
     cert = load_cert(server_cert_str)

@@ -22,7 +22,6 @@ import ssl
 import time
 import urlparse
 
-import certutils
 import daemonserver
 import httparchive
 import proxyshaper
@@ -59,7 +58,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.has_handled_request = False
 
   def finish(self):
-    BaseHTTPServer.BaseHTTPRequestHandler.setup(self)
+    BaseHTTPServer.BaseHTTPRequestHandler.finish(self)
     if not self.has_handled_request:
       logging.error('Client failed to make request')
 
