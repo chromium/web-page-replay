@@ -68,4 +68,3 @@ def wrap_handler(handler_class):
       handler_class.finish(self)
       SslHandshakeHandler.finish(self)
   return WrappedHandler
-
