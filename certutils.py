@@ -94,6 +94,7 @@ def generate_dummy_ca_cert(subject='_WebPageReplayCert'):
   """
   if openssl_import_error:
     raise openssl_import_error
+
   key = crypto.PKey()
   key.generate_key(crypto.TYPE_RSA, 1024)
 
