@@ -30,20 +30,22 @@ import time
 
 openssl_import_error = None
 
-SSL_METHOD = None
-VERIFY_PEER = None
-SysCallError = None
 Error = None
+SSL_METHOD = None
+SysCallError = None
+VERIFY_PEER = None
 ZeroReturnError = None
+FILETYPE_PEM = None
 
 try:
   from OpenSSL import crypto, SSL
 
-  SSL_METHOD = SSL.SSLv23_METHOD
-  VERIFY_PEER = SSL.VERIFY_PEER
-  SysCallError = SSL.SysCallError
   Error = SSL.Error
+  SSL_METHOD = SSL.SSLv23_METHOD
+  SysCallError = SSL.SysCallError
+  VERIFY_PEER = SSL.VERIFY_PEER
   ZeroReturnError = SSL.ZeroReturnError
+  FILETYPE_PEM = crypto.FILETYPE_PEM
 except ImportError, e:
   openssl_import_error = e
 
@@ -78,22 +80,22 @@ def get_ssl_connection(context, connection):
   return WrappedConnection(SSL.Connection(context, connection))
 
 
-def load_privatekey(key, filetype=crypto.FILETYPE_PEM):
+def load_privatekey(key, filetype=FILETYPE_PEM):
   """Loads obj private key object from string."""
   return crypto.load_privatekey(filetype, key)
 
 
-def load_cert(cert_str, filetype=crypto.FILETYPE_PEM):
+def load_cert(cert_str, filetype=FILETYPE_PEM):
   """Loads obj cert object from string."""
   return crypto.load_certificate(filetype, cert_str)
 
 
-def _dump_privatekey(key, filetype=crypto.FILETYPE_PEM):
+def _dump_privatekey(key, filetype=FILETYPE_PEM):
   """Dumps obj private key object to string."""
   return crypto.dump_privatekey(filetype, key)
 
 
-def _dump_cert(cert, filetype=crypto.FILETYPE_PEM):
+def _dump_cert(cert, filetype=FILETYPE_PEM):
   """Dumps obj cert object to string."""
   return crypto.dump_certificate(filetype, cert)
 
