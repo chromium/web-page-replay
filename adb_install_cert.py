@@ -23,6 +23,12 @@ import sys
 KEYCODE_ENTER = '66'
 KEYCODE_TAB = '61'
 
+class CertInstallError(Exception):
+  pass
+
+class CertRemovalError(Exception):
+  pass
+
 
 class AndroidCertInstaller(object):
   """Certificate installer for phones with KitKat."""
@@ -91,19 +97,32 @@ class AndroidCertInstaller(object):
       cert_file.write(contents)
 
   def _remove_cert_from_cacerts(self):
+    self._adb_su_shell('mount', '-o', 'remount,rw', '/system')
     self._adb_su_shell('rm', self.android_cacerts_path)
 
   def _is_cert_installed(self):
     return (self._adb_su_shell('ls', self.android_cacerts_path).strip() ==
             self.android_cacerts_path)
 
-  def install_cert(self, overwrite_cert=False):
-    """Installs a certificate putting it in /system/etc/security/cacerts."""
+  def _generate_reformatted_cert_path(self):
     output = self._run_cmd(['openssl', 'x509', '-inform', 'PEM',
                             '-subject_hash_old', '-in', self.cert_path])
     self.reformatted_cert_path = output.partition('\n')[0].strip() + '.0'
     self.android_cacerts_path = ('/system/etc/security/cacerts/%s'
                                  % self.reformatted_cert_path)
+
+  def remove_cert(self):
+    self._generate_reformatted_cert_path()
+
+    if self._is_cert_installed():
+      self._remove_cert_from_cacerts()
+
+    if self._is_cert_installed():
+      raise CertRemovalError('Cert Removal Failed')
+
+  def install_cert(self, overwrite_cert=False):
+    """Installs a certificate putting it in /system/etc/security/cacerts."""
+    self._generate_reformatted_cert_path()
 
     if self._is_cert_installed():
       if overwrite_cert:
@@ -121,7 +140,7 @@ class AndroidCertInstaller(object):
         % (self.reformatted_cert_path, self.reformatted_cert_path))
     self._adb_su_shell('chmod', '644', self.android_cacerts_path)
     if not self._is_cert_installed():
-      logging.warning('Cert Install Failed')
+      raise CertInstallError('Cert Install Failed')
 
   def install_cert_using_gui(self):
     """Installs certificate on the device using adb commands."""
@@ -165,7 +184,10 @@ def parse_args():
       '-n', '--cert-name', default='dummycert', help='certificate name')
   parser.add_argument(
       '--overwrite', default=False, action='store_true',
-      help='Overwrite certificate file if its already installed')
+      help='Overwrite certificate file if it is already installed')
+  parser.add_argument(
+      '--remove', default=False, action='store_true',
+      help='Remove certificate file if it is installed')
   parser.add_argument(
       '--device-id', help='device serial number')
   parser.add_argument(
@@ -177,7 +199,10 @@ def main():
   args = parse_args()
   cert_installer = AndroidCertInstaller(args.device_id, args.cert_name,
                                         args.cert_path)
-  cert_installer.install_cert(args.overwrite)
+  if args.remove:
+    cert_installer.remove_cert()
+  else:
+    cert_installer.install_cert(args.overwrite)
 
 
 if __name__ == '__main__':
