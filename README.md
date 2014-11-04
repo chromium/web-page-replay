@@ -11,7 +11,7 @@ the origin servers, the network, etc.
 Check out the [getting
 started](documentation/GettingStarted.md) guide or take a
 look at the [architecture
-diagram](documentation/WebPageReplatDiagram.png).
+diagram](documentation/WebPageReplayDiagram.png).
 
 ## I want to help
 If you find issues with the project, you can file issues on this repo.
