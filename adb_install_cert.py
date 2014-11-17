@@ -105,8 +105,20 @@ class AndroidCertInstaller(object):
             self.android_cacerts_path)
 
   def _generate_reformatted_cert_path(self):
+    # Determine OpenSSL version, string is of the form
+    # 'OpenSSL 0.9.8za 5 Jun 2014' .
+    openssl_version = self._run_cmd(['openssl', 'version']).split()
+
+    if len(openssl_version) < 2:
+      raise ValueError('Unexpected OpenSSL version string: ', openssl_version)
+
+    # subject_hash flag name changed as of OpenSSL version 1.0.0 .
+    is_old_openssl_version = openssl_version[1].startswith('0')
+    subject_hash_flag = (
+        '-subject_hash' if is_old_openssl_version else '-subject_hash_old')
+
     output = self._run_cmd(['openssl', 'x509', '-inform', 'PEM',
-                            '-subject_hash_old', '-in', self.cert_path])
+                            subject_hash_flag, '-in', self.cert_path])
     self.reformatted_cert_path = output.partition('\n')[0].strip() + '.0'
     self.android_cacerts_path = ('/system/etc/security/cacerts/%s'
                                  % self.reformatted_cert_path)
