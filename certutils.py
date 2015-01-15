@@ -231,17 +231,17 @@ def generate_cert(root_ca_cert_str, server_cert_str, server_host):
   if server_cert_str:
     cert = load_cert(server_cert_str)
     common_name = cert.get_subject().commonName
+  else:
+    cert = crypto.X509()
 
   ca_cert = load_cert(root_ca_cert_str)
   key = load_privatekey(root_ca_cert_str)
 
   req = crypto.X509Req()
-  subj = req.get_subject()
-  subj.CN = common_name
+  req.get_subject().CN = common_name
   req.set_pubkey(ca_cert.get_pubkey())
   req.sign(key, 'sha1')
 
-  cert = crypto.X509()
   cert.gmtime_adj_notBefore(-60 * 60)
   cert.gmtime_adj_notAfter(60 * 60 * 24 * 30)
   cert.set_issuer(ca_cert.get_subject())
