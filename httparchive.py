@@ -411,31 +411,12 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       return '\n'.join(difflib.ndiff(closest_request_lines, request_lines))
     return None
 
-  def set_root_cert(self, cert_path):
-    with open(cert_path, 'r') as cert_file:
-      cert_str = cert_file.read()
-    cert_str_response = create_response(200, body=cert_str)
-    root_request = ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
-    self[root_request] = cert_str_response
-
-  def _get_server_cert(self, host):
+  def get_server_cert(self, host):
     """Gets certificate from the server and stores it in archive"""
     request = ArchivedHttpRequest('SERVER_CERT', host, '', None, {})
     if request not in self:
       self[request] = create_response(200, body=certutils.get_host_cert(host))
     return self[request].response_data[0]
-
-  def _get_root_cert(self):
-    request = ArchivedHttpRequest('ROOT_CERT', '', '', None, {})
-    if request not in self:
-      raise KeyError('Root cert is not in the archive')
-    return self[request].response_data[0]
-
-  def _generate_cert(self, host):
-    """Generate cert with the SNI field from the real server's response."""
-    root_ca_cert_str = self._get_root_cert()
-    return certutils.generate_cert(
-        root_ca_cert_str, self._get_server_cert(host), host)
 
   def get_certificate(self, host):
     request = ArchivedHttpRequest('DUMMY_CERT', host, '', None, {})

@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import BaseHTTPServer
+import certutils
 import errno
 import logging
 import socket
@@ -293,13 +294,31 @@ class HttpsProxyServer(HttpProxyServer):
     self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler)
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, protocol='HTTPS', **kwargs)
-    self.http_archive_fetch.http_archive.set_root_cert(https_root_ca_cert_path)
+    with open(self.ca_cert_path, 'r') as cert_file:
+      self._ca_cert_str = cert_file.read()
+    self._host_to_cert_map = {}
+    self._server_cert_to_cert_map = {}
 
   def cleanup(self):
     try:
       self.shutdown()
     except KeyboardInterrupt:
       pass
+
+  def get_certificate(self, host):
+    if host in self._host_to_cert_map:
+      return self._host_to_cert_map[host]
+
+    server_cert = self.http_archive_fetch.http_archive.get_server_cert(host)
+    if server_cert in self._server_cert_to_cert_map:
+      cert = self._server_cert_to_cert_map[server_cert]
+      self._host_to_cert_map[host] = cert
+      return cert
+
+    cert = certutils.generate_cert(self._ca_cert_str, server_cert, host)
+    self._server_cert_to_cert_map[server_cert] = cert
+    self._host_to_cert_map[host] = cert
+    return cert
 
 
 class SingleCertHttpsProxyServer(HttpProxyServer):

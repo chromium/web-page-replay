@@ -82,16 +82,14 @@ class WrappedErrorHandler(sslproxy.SslHandshakeHandler, Handler):
 
 class DummyArchive(object):
 
-  def __init__(self, cert_str):
-    self.root_ca_cert_str = cert_str
+  def __init__(self):
+    pass
 
-  def get_certificate(self, host):
-    return certutils.generate_cert(self.root_ca_cert_str, '', host)
 
 class DummyFetch(object):
 
-  def __init__(self, cert_str):
-    self.http_archive = DummyArchive(cert_str)
+  def __init__(self):
+    self.http_archive = DummyArchive()
 
 
 class Server(BaseHTTPServer.HTTPServer):
@@ -101,8 +99,8 @@ class Server(BaseHTTPServer.HTTPServer):
                host='localhost'):
     self.ca_cert_path = ca_cert_path
     with open(ca_cert_path, 'r') as ca_file:
-      ca_cert_str = ca_file.read()
-    self.http_archive_fetch = DummyFetch(ca_cert_str)
+      self.ca_cert_str = ca_file.read()
+    self.http_archive_fetch = DummyFetch()
     if use_error_handler:
       self.HANDLER = WrappedErrorHandler
     else:
@@ -127,6 +125,9 @@ class Server(BaseHTTPServer.HTTPServer):
 
   def __exit__(self, type_, value_, traceback_):
     self.cleanup()
+
+  def get_certificate(self, host):
+    return certutils.generate_cert(self.ca_cert_str, '', host)
 
 
 class TestClient(unittest.TestCase):
