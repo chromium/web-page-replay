@@ -69,7 +69,7 @@ class SslHandshakeHandler:
 
 
 def wrap_handler(handler_class):
-  """Wraps a BaseHTTPHandler wtih SSL MITM certificates."""
+  """Wraps a BaseHTTPHandler with SSL MITM certificates."""
   if certutils.openssl_import_error:
     raise certutils.openssl_import_error
 

@@ -48,6 +48,7 @@ import sys
 import traceback
 
 import cachemissarchive
+import certutils
 import customhandlers
 import dnsproxy
 import httparchive
@@ -200,6 +201,7 @@ class OptionsWrapper(object):
         if getattr(options, name) != value])
     self._CheckConflicts()
     self._CheckValidIp('host')
+    self._CheckFeatureSupport()
     self._MassageValues()
 
   def _CheckConflicts(self):
@@ -219,6 +221,11 @@ class OptionsWrapper(object):
         socket.inet_aton(value)
       except:
         self._parser.error('Option --%s must be a valid IPv4 address.' % name)
+
+  def _CheckFeatureSupport(self):
+    if self._options.should_generate_certs and not certutils.has_sni():
+      self._parser.error('Option --should_generate_certs requires pyOpenSSL '
+                         '0.13 or greater for SNI support.')
 
   def _ShapingKeywordArgs(self, shaping_key):
     """Return the shaping keyword args for |shaping_key|.
