@@ -1,4 +1,4 @@
-# Contributing  
+# Contributing
 
 1. Thanks for considering contributing to Web Page Replay. You're awesome!
 2. Style Guide - The source code of Web Page Replay follows the [Google
@@ -8,7 +8,14 @@ guidelines. You may also wish to email web-page-replay-dev at
 googlegroups.com for advice on your change before starting.
 3. Get the code - Fork this repo and clone it locally.
 4. Get a review - All submissions, including submissions by project members,
-require review. 
+require review.
+
+## Using rietveld
+
+1. Make your changes.
+2. Commit your changes.
+3. Run 'yes "" |git cl config' (use default configs).
+4. Run 'git cl upload'.
 
 ## The fine print
 
