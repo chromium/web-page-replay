@@ -12,10 +12,15 @@ require review.
 
 ## Using rietveld
 
-1. Make your changes.
-2. Commit your changes.
-3. Run 'yes "" |git cl config' (use default configs).
-4. Run 'git cl upload'.
+1. Make sure that you have a fork of the original repo.
+2. Make your changes.
+3. Commit your changes.
+4. Run 'yes "" |git cl config' (first time only).
+5. Run 'git cl upload'.
+6. Once the review is approved, run 'git cl land' to land your changes. This also
+pushes your change to your forked branch.
+7. Login your github account and make a pull request to merge the change from
+your forked branch to the original repo.
 
 ## The fine print
 
