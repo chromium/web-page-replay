@@ -84,6 +84,10 @@ class CertutilsTest(unittest.TestCase):
       cert = certutils.load_cert(cert_str)
       self.assertEqual(issuer, cert.get_subject().commonName)
 
+  def test_get_host_cert_gives_empty_for_bad_host(self):
+    cert_str = certutils.get_host_cert('not_a_valid_host_name_2472341234234234')
+    self.assertEqual('', cert_str)
+
   def test_write_dummy_ca_cert(self):
     base_path = os.path.join(self._temp_dir, 'testCA')
     ca_cert_path = base_path + '.pem'

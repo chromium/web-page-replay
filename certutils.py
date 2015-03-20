@@ -156,8 +156,8 @@ def get_host_cert(host, port=443):
   host_certs = []
   def verify_cb(conn, cert, errnum, depth, ok):
     host_certs.append(cert)
-    # The return code of 1 indicates that the certificate was ok.
-    return 1
+    # Return True to indicates that the certificate was ok.
+    return True
 
   context = SSL.Context(SSL.SSLv23_METHOD)
   context.set_verify(SSL.VERIFY_PEER, verify_cb)  # Demand a certificate
@@ -173,9 +173,10 @@ def get_host_cert(host, port=443):
   finally:
     connection.shutdown()
     connection.close()
-  if len(host_certs) > 0:
-    return _dump_cert(host_certs[-1])
-  return ''
+  if not host_certs:
+    logging.warning('Unable to get host certificate from %s:%s', host, port)
+    return ''
+  return _dump_cert(host_certs[-1])
 
 
 def write_dummy_ca_cert(ca_cert_str, key_str, cert_path):
