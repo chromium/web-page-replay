@@ -658,7 +658,7 @@ class _WindowsPlatformSettings(_BasePlatformSettings):
     """Modify DNS information on the primary interface."""
     output = self._check_output('netsh', 'interface', 'ip', 'set', 'dns',
                                 iface_name, 'dhcp')
-                           
+
   def _get_interfaces_with_dns(self):
     output = self._netsh_show_dns()
     lines = output.split('\n')
@@ -691,24 +691,24 @@ class _WindowsPlatformSettings(_BasePlatformSettings):
     # configured. We should save/restore all of them.
     ifaces = self._get_interfaces_with_dns()
     self._primary_interfaces = ifaces
-    
+
   def _restore_primary_interface_properties(self):
     for iface in self._primary_interfaces:
-      (iface_dns, iface_name, iface_kind) = iface 
+      (iface_dns, iface_name, iface_kind) = iface
       self._netsh_set_dns(iface_name, iface_dns)
       if iface_kind == "dhcp":
         self._netsh_set_dns_dhcp(iface_name)
-    
+
   def _get_primary_nameserver(self):
     ifaces = self._get_interfaces_with_dns()
     if not len(ifaces):
       raise DnsUpdateError("Interface with valid DNS configured not found.")
     (iface_dns, iface_name, iface_kind) = ifaces[0]
     return iface_dns
-  
+
   def _set_primary_nameserver(self, dns):
     for iface in self._primary_interfaces:
-      (iface_dns, iface_name, iface_kind) = iface 
+      (iface_dns, iface_name, iface_kind) = iface
       self._netsh_set_dns(iface_name, dns)
 
 

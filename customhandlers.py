@@ -73,7 +73,7 @@ class CustomHandlers(object):
         try:
           os.makedirs(options.screenshot_dir)
         except IOError:
-          logging.error('Unable to create screenshot dir: %s', 
+          logging.error('Unable to create screenshot dir: %s',
                          options.screenshot_dir)
           options.screenshot_dir = None
       if options.screenshot_dir:

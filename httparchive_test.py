@@ -254,8 +254,8 @@ class HttpArchiveTest(unittest.TestCase):
     precondition_failed_response = httparchive.create_response(412)
 
     # if-match headers
-    # If the request would, without the If-Match header field, 
-    # result in anything other than a 2xx or 412 status, 
+    # If the request would, without the If-Match header field,
+    # result in anything other than a 2xx or 412 status,
     # then the If-Match header MUST be ignored.
 
     request_headers = {
@@ -305,8 +305,8 @@ class HttpArchiveTest(unittest.TestCase):
     precondition_failed_response = httparchive.create_response(412)
 
     # if-none-match headers
-    # If the request would, without the If-None-Match header field, 
-    # result in anything other than a 2xx or 304 status, 
+    # If the request would, without the If-None-Match header field,
+    # result in anything other than a 2xx or 304 status,
     # then the If-None-Match header MUST be ignored.
 
     request_headers = {
