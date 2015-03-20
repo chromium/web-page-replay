@@ -39,10 +39,8 @@ setuptools.setup(
     install_requires=['dnspython>=1.8'],
     packages=[
         '',
-        'perftracker',
         'third_party',
-        'third_party.ipaddr',
-        'third_party.nbhttp'
+        'third_party.ipaddr'
         ],
     package_dir={'': '.'},
     package_data={

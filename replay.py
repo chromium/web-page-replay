@@ -56,7 +56,6 @@ import httpclient
 import httpproxy
 import net_configs
 import platformsettings
-import replayspdyserver
 import script_injector
 import servermanager
 import trafficshaper
@@ -116,53 +115,39 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
                 cache_misses):
   inject_script = script_injector.GetInjectScript(options.inject_scripts)
   custom_handlers = customhandlers.CustomHandlers(options, http_archive)
-  if options.spdy:
-    assert not options.record, 'spdy cannot be used with --record.'
-    archive_fetch = httpclient.ReplayHttpArchiveFetch(
-        http_archive, real_dns_lookup,
-        inject_script,
-        options.diff_unknown_requests,
-        cache_misses=cache_misses,
-        use_closest_match=options.use_closest_match,
-        scramble_images=options.scramble_images)
-    server_manager.Append(
-        replayspdyserver.ReplaySpdyServer, archive_fetch,
-        custom_handlers, host=host, port=options.port,
-        certfile=options.https_root_ca_cert_path)
-  else:
-    custom_handlers.add_server_manager_handler(server_manager)
-    archive_fetch = httpclient.ControllableHttpArchiveFetch(
-        http_archive, real_dns_lookup,
-        inject_script,
-        options.diff_unknown_requests, options.record,
-        cache_misses=cache_misses, use_closest_match=options.use_closest_match,
-        scramble_images=options.scramble_images)
-    server_manager.AppendRecordCallback(archive_fetch.SetRecordMode)
-    server_manager.AppendReplayCallback(archive_fetch.SetReplayMode)
-    server_manager.Append(
-        httpproxy.HttpProxyServer,
-        archive_fetch, custom_handlers,
-        host=host, port=options.port, use_delays=options.use_server_delay,
-        **options.shaping_http)
-    if options.ssl:
-      if options.should_generate_certs:
-        server_manager.Append(
-            httpproxy.HttpsProxyServer, archive_fetch, custom_handlers,
-            options.https_root_ca_cert_path, host=host, port=options.ssl_port,
-            use_delays=options.use_server_delay, **options.shaping_http)
-      else:
-        server_manager.Append(
-            httpproxy.SingleCertHttpsProxyServer, archive_fetch,
-            custom_handlers, options.https_root_ca_cert_path, host=host,
-            port=options.ssl_port, use_delays=options.use_server_delay,
-            **options.shaping_http)
-    if options.http_to_https_port:
+  custom_handlers.add_server_manager_handler(server_manager)
+  archive_fetch = httpclient.ControllableHttpArchiveFetch(
+      http_archive, real_dns_lookup,
+      inject_script,
+      options.diff_unknown_requests, options.record,
+      cache_misses=cache_misses, use_closest_match=options.use_closest_match,
+      scramble_images=options.scramble_images)
+  server_manager.AppendRecordCallback(archive_fetch.SetRecordMode)
+  server_manager.AppendReplayCallback(archive_fetch.SetReplayMode)
+  server_manager.Append(
+      httpproxy.HttpProxyServer,
+      archive_fetch, custom_handlers,
+      host=host, port=options.port, use_delays=options.use_server_delay,
+      **options.shaping_http)
+  if options.ssl:
+    if options.should_generate_certs:
       server_manager.Append(
-          httpproxy.HttpToHttpsProxyServer,
-          archive_fetch, custom_handlers,
-          host=host, port=options.http_to_https_port,
-          use_delays=options.use_server_delay,
+          httpproxy.HttpsProxyServer, archive_fetch, custom_handlers,
+          options.https_root_ca_cert_path, host=host, port=options.ssl_port,
+          use_delays=options.use_server_delay, **options.shaping_http)
+    else:
+      server_manager.Append(
+          httpproxy.SingleCertHttpsProxyServer, archive_fetch,
+          custom_handlers, options.https_root_ca_cert_path, host=host,
+          port=options.ssl_port, use_delays=options.use_server_delay,
           **options.shaping_http)
+  if options.http_to_https_port:
+    server_manager.Append(
+        httpproxy.HttpToHttpsProxyServer,
+        archive_fetch, custom_handlers,
+        host=host, port=options.http_to_https_port,
+        use_delays=options.use_server_delay,
+        **options.shaping_http)
 
 
 def AddTrafficShaper(server_manager, options, host):
@@ -188,7 +173,7 @@ class OptionsWrapper(object):
       ('record', ('down', 'up', 'delay_ms', 'packet_loss_rate', 'net',
                   'spdy', 'use_server_delay')),
       ('append', ('down', 'up', 'delay_ms', 'packet_loss_rate', 'net',
-                  'spdy', 'use_server_delay')),  # same as --record
+                  'use_server_delay')),  # same as --record
       ('net', ('down', 'up', 'delay_ms')),
       ('server', ('server_mode',)),
   )
@@ -402,9 +387,6 @@ def GetOptionParser():
       description=__doc__,
       epilog='http://code.google.com/p/web-page-replay/')
 
-  option_parser.add_option('--spdy', default=False,
-      action='store_true',
-      help='Replay via SPDY. (Can be combined with --no-ssl).')
   option_parser.add_option('-r', '--record', default=False,
       action='store_true',
       help='Download real responses and record them to replay_file')

@@ -97,9 +97,6 @@ class CustomHandlers(object):
   def get_generator_url_response_code(self, request, url_suffix):
     """Parse special generator URLs for the embedded response code.
 
-    Clients like perftracker can use URLs of this form to request
-    a response with a particular response code.
-
     Args:
       request: an ArchivedHttpRequest instance
       url_suffix: string that is after the handler prefix (e.g. 304)
