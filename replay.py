@@ -47,7 +47,6 @@ import socket
 import sys
 import traceback
 
-import cachemissarchive
 import certutils
 import customhandlers
 import dnsproxy
@@ -111,8 +110,7 @@ def AddDnsProxy(server_manager, options, host, port, real_dns_lookup,
                         dns_lookup=dnsproxy.ReplayDnsLookup(host, dns_filters))
 
 
-def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
-                cache_misses):
+def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive):
   inject_script = script_injector.GetInjectScript(options.inject_scripts)
   custom_handlers = customhandlers.CustomHandlers(options, http_archive)
   custom_handlers.add_server_manager_handler(server_manager)
@@ -120,7 +118,7 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive,
       http_archive, real_dns_lookup,
       inject_script,
       options.diff_unknown_requests, options.record,
-      cache_misses=cache_misses, use_closest_match=options.use_closest_match,
+      use_closest_match=options.use_closest_match,
       scramble_images=options.scramble_images)
   server_manager.AppendRecordCallback(archive_fetch.SetRecordMode)
   server_manager.AppendReplayCallback(archive_fetch.SetReplayMode)
@@ -292,17 +290,6 @@ def replay(options, replay_filename):
     platformsettings.rerun_as_administrator()
   configure_logging(options.log_level, options.log_file)
   server_manager = servermanager.ServerManager(options.record)
-  cache_misses = None
-  if options.cache_miss_file:
-    if os.path.exists(options.cache_miss_file):
-      logging.warning('Cache Miss Archive file %s already exists; '
-                      'replay will load and append entries to archive file',
-                      options.cache_miss_file)
-      cache_misses = cachemissarchive.CacheMissArchive.Load(
-          options.cache_miss_file)
-    else:
-      cache_misses = cachemissarchive.CacheMissArchive(
-          options.cache_miss_file)
   if options.server:
     AddDnsForward(server_manager, options.server)
   else:
@@ -344,7 +331,7 @@ def replay(options, replay_filename):
       http_proxy_address = platformsettings.get_httpproxy_ip_address(
           options.server_mode)
     AddWebProxy(server_manager, options, http_proxy_address, real_dns_lookup,
-                http_archive, cache_misses)
+                http_archive)
     AddTrafficShaper(server_manager, options, ipfw_dns_host)
 
   exit_status = 0
@@ -365,12 +352,6 @@ def replay(options, replay_filename):
   if options.record:
     http_archive.Persist(replay_filename)
     logging.info('Saved %d responses to %s', len(http_archive), replay_filename)
-  if cache_misses:
-    cache_misses.Persist()
-    logging.info('Saved %d cache misses and %d requests to %s',
-                 cache_misses.get_total_cache_misses(),
-                 len(cache_misses.request_counts.keys()),
-                 options.cache_miss_file)
   return exit_status
 
 
@@ -402,12 +383,6 @@ def GetOptionParser():
       action='store',
       type='string',
       help='Log file to use in addition to writting logs to stderr.')
-  option_parser.add_option('-e', '--cache_miss_file', default=None,
-      action='store',
-      dest='cache_miss_file',
-      type='string',
-      help='Archive file to record cache misses as pickled objects.'
-           'Cache misses occur when a request cannot be served in replay mode.')
 
   network_group = optparse.OptionGroup(option_parser,
       'Network Simulation Options',

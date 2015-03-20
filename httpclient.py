@@ -162,7 +162,7 @@ class DetailedHTTPResponse(httplib.HTTPResponse):
   def _read_chunk_size(cls, line):
     chunk_extensions_pos = line.find(';')
     if chunk_extensions_pos != -1:
-      line = line[:extention_pos]  # strip chunk-extensions
+      line = line[:chunk_extensions_pos]  # strip chunk-extensions
     try:
       chunk_size = int(line, 16)
     except ValueError:
@@ -352,20 +352,17 @@ class RealHttpFetch(object):
 class RecordHttpArchiveFetch(object):
   """Make real HTTP fetches and save responses in the given HttpArchive."""
 
-  def __init__(self, http_archive, real_dns_lookup, inject_script,
-               cache_misses=None):
+  def __init__(self, http_archive, real_dns_lookup, inject_script):
     """Initialize RecordHttpArchiveFetch.
 
     Args:
       http_archive: an instance of a HttpArchive
       real_dns_lookup: a function that resolves a host to an IP.
       inject_script: script string to inject in all pages
-      cache_misses: instance of CacheMissArchive
     """
     self.http_archive = http_archive
     self.real_http_fetch = RealHttpFetch(real_dns_lookup)
     self.inject_script = inject_script
-    self.cache_misses = cache_misses
 
   def __call__(self, request):
     """Fetch the request and return the response.
@@ -375,10 +372,6 @@ class RecordHttpArchiveFetch(object):
     Returns:
       an ArchivedHttpResponse
     """
-    if self.cache_misses:
-      self.cache_misses.record_request(
-          request, is_record_mode=True, is_cache_miss=False)
-
     # If request is already in the archive, return the archived response.
     if request in self.http_archive:
       logging.debug('Repeated request found: %s', request)
@@ -398,7 +391,7 @@ class ReplayHttpArchiveFetch(object):
   """Serve responses from the given HttpArchive."""
 
   def __init__(self, http_archive, real_dns_lookup, inject_script,
-               use_diff_on_unknown_requests=False, cache_misses=None,
+               use_diff_on_unknown_requests=False,
                use_closest_match=False, scramble_images=False):
     """Initialize ReplayHttpArchiveFetch.
 
@@ -408,15 +401,12 @@ class ReplayHttpArchiveFetch(object):
       inject_script: script string to inject in all pages
       use_diff_on_unknown_requests: If True, log unknown requests
         with a diff to requests that look similar.
-      cache_misses: Instance of CacheMissArchive.
-        Callback updates archive on cache misses
       use_closest_match: If True, on replay mode, serve the closest match
         in the archive instead of giving a 404.
     """
     self.http_archive = http_archive
     self.inject_script = inject_script
     self.use_diff_on_unknown_requests = use_diff_on_unknown_requests
-    self.cache_misses = cache_misses
     self.use_closest_match = use_closest_match
     self.scramble_images = scramble_images
     self.real_http_fetch = RealHttpFetch(real_dns_lookup)
@@ -443,10 +433,6 @@ class ReplayHttpArchiveFetch(object):
           logging.info('Request not found: %s\nUsing closest match: %s',
                        request, closest_request)
 
-    if self.cache_misses:
-      self.cache_misses.record_request(
-          request, is_record_mode=False, is_cache_miss=not response)
-
     if not response:
       reason = str(request)
       if self.use_diff_on_unknown_requests:
@@ -469,8 +455,7 @@ class ControllableHttpArchiveFetch(object):
 
   def __init__(self, http_archive, real_dns_lookup,
                inject_script, use_diff_on_unknown_requests,
-               use_record_mode, cache_misses, use_closest_match,
-               scramble_images):
+               use_record_mode, use_closest_match, scramble_images):
     """Initialize HttpArchiveFetch.
 
     Args:
@@ -480,18 +465,15 @@ class ControllableHttpArchiveFetch(object):
       use_diff_on_unknown_requests: If True, log unknown requests
         with a diff to requests that look similar.
       use_record_mode: If True, start in server in record mode.
-      cache_misses: Instance of CacheMissArchive.
       use_closest_match: If True, on replay mode, serve the closest match
         in the archive instead of giving a 404.
     """
     self.http_archive = http_archive
     self.record_fetch = RecordHttpArchiveFetch(
-        http_archive, real_dns_lookup, inject_script,
-        cache_misses)
+        http_archive, real_dns_lookup, inject_script)
     self.replay_fetch = ReplayHttpArchiveFetch(
         http_archive, real_dns_lookup, inject_script,
-        use_diff_on_unknown_requests, cache_misses,
-        use_closest_match, scramble_images)
+        use_diff_on_unknown_requests, use_closest_match, scramble_images)
     if use_record_mode:
       self.SetRecordMode()
     else:
