@@ -41,7 +41,8 @@ class AndroidCertInstaller(object):
     self.cert_path = cert_path
     self.file_name = os.path.basename(self.cert_path)
 
-  def _run_cmd(self, cmd):
+  @staticmethod
+  def _run_cmd(cmd):
     return subprocess.check_output(cmd)
 
   def _adb(self, *args):
@@ -80,7 +81,8 @@ class AndroidCertInstaller(object):
     """Inputs text."""
     self._adb('shell', 'input', 'text', text)
 
-  def _remove(self, file_name):
+  @staticmethod
+  def _remove(file_name):
     """Deletes file."""
     if os.path.exists(file_name):
       os.remove(file_name)

@@ -167,8 +167,8 @@ class OptionsWrapper(object):
     if options.record and options.HasTrafficShaping():
        [...]
   """
-  _TRAFFICSHAPING_OPTIONS = set(
-      ['down', 'up', 'delay_ms', 'packet_loss_rate', 'init_cwnd', 'net'])
+  _TRAFFICSHAPING_OPTIONS = {
+      'down', 'up', 'delay_ms', 'packet_loss_rate', 'init_cwnd', 'net'}
   _CONFLICTING_OPTIONS = (
       ('record', ('down', 'up', 'delay_ms', 'packet_loss_rate', 'net',
                   'spdy', 'use_server_delay')),

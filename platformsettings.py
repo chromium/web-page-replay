@@ -242,7 +242,7 @@ class _BasePlatformSettings(object):
   def _get_primary_nameserver(self):
     raise NotImplementedError
 
-  def _set_primary_nameserver(self):
+  def _set_primary_nameserver(self, _):
     raise NotImplementedError
 
   def get_original_primary_nameserver(self):

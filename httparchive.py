@@ -198,7 +198,8 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
             status = 304  # not modified
     return status
 
-  def is_etag_match(self, request_etag, response_etag):
+  @staticmethod
+  def is_etag_match(request_etag, response_etag):
     """Determines whether the entity tags of the request/response matches.
 
     Args:
@@ -274,12 +275,13 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
       return
 
     out = StringIO.StringIO()
-    stats = {}
-    stats['Total'] = len(matching_requests)
-    stats['Domains'] = defaultdict(int)
-    stats['HTTP_response_code'] = defaultdict(int)
-    stats['content_type'] = defaultdict(int)
-    stats['Documents'] = defaultdict(int)
+    stats = {
+        'Total': len(matching_requests),
+        'Domains': defaultdict(int),
+        'HTTP_response_code': defaultdict(int),
+        'content_type': defaultdict(int),
+        'Documents': defaultdict(int),
+        }
 
     for request in matching_requests:
       stats['Domains'][request.host] += 1
@@ -743,7 +745,8 @@ class ArchivedHttpResponse(object):
         self.headers.pop(i)
         return
 
-  def _get_epoch_seconds(self, date_str):
+  @staticmethod
+  def _get_epoch_seconds(date_str):
     """Return the epoch seconds of a date header.
 
     Args:

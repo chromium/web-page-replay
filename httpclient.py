@@ -262,7 +262,8 @@ class RealHttpFetch(object):
     port = int(host_parts[1]) if len(host_parts) == 2 else None
     return host, port
 
-  def _get_system_proxy(self, is_ssl):
+  @staticmethod
+  def _get_system_proxy(is_ssl):
     return platformsettings.get_system_proxy(is_ssl)
 
   def _get_connection(self, request_host, request_port, is_ssl):

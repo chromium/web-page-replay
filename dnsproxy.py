@@ -44,7 +44,8 @@ class RealDnsLookup(object):
     self.dns_cache_lock = threading.Lock()
     self.dns_cache = {}
 
-  def _IsIPAddress(self, hostname):
+  @staticmethod
+  def _IsIPAddress(hostname):
     try:
       socket.inet_aton(hostname)
       return True

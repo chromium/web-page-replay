@@ -166,7 +166,8 @@ class CacheMissArchive(persistentmixin.PersistentMixin):
 
     return '\n'.join(str_list)
 
-  def _match_urls(self, url_1, url_2):
+  @staticmethod
+  def _match_urls(url_1, url_2):
     """Returns true if urls match.
 
     Args:
