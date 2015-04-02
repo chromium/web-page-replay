@@ -206,7 +206,8 @@ class OptionsWrapper(object):
         self._parser.error('Option --%s must be a valid IPv4 address.' % name)
 
   def _CheckFeatureSupport(self):
-    if self._options.should_generate_certs and not certutils.has_sni():
+    if (self._options.should_generate_certs and
+        not platformsettings.HasSniSupport()):
       self._parser.error('Option --should_generate_certs requires pyOpenSSL '
                          '0.13 or greater for SNI support.')
 

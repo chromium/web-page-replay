@@ -50,14 +50,6 @@ except ImportError, e:
   openssl_import_error = e
 
 
-def has_sni():
-  """Return True if OpenSSL has support for SNI.
-
-  pyOpenSSL added SNI support in 0.13. The set_tlsext_servername_callback
-  method was added for that.
-  """
-  return hasattr(get_ssl_context(), 'set_tlsext_servername_callback')
-
 def get_ssl_context(method=SSL_METHOD):
   # One of: One of SSLv2_METHOD, SSLv3_METHOD, SSLv23_METHOD, or TLSv1_METHOD
   if openssl_import_error:

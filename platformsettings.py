@@ -27,6 +27,7 @@ For the full list of functions, see the bottom of the file.
 
 import atexit
 import distutils.spawn
+import distutils.version
 import fileinput
 import logging
 import os
@@ -90,6 +91,13 @@ def FindExecutable(executable):
                                                           '/usr/local/sbin',
                                                           ]))
 
+def HasSniSupport():
+  try:
+    import OpenSSL
+    return (version.StrictVersion(OpenSSL.__version__) >=
+            version.StrictVersion('0.13'))
+  except ImportError:
+    return False
 
 class SystemProxy(object):
   """A host/port pair for a HTTP or HTTPS proxy configuration."""
