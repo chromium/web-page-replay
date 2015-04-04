@@ -1,5 +1,5 @@
 [![Build
-Status](https://travis-ci.org/[nedn]/[web-page-replay].png)](https://travis-ci.org/[nedn]/[web-page-replay])
+Status](https://travis-ci.org/nedn/web-page-replay.png)](https://travis-ci.org/nedn/web-page-replay)
 # Web Page Replay
 Record live Web pages and use them for local performance testing!
 
