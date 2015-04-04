@@ -1,5 +1,8 @@
 [![Build
 Status](https://travis-ci.org/chromium/web-page-replay.png)](https://travis-ci.org/chromium/web-page-replay)
+[![Coverage
+Status](https://coveralls.io/repos/chromium/web-page-replay/badge.svg)](https://coveralls.io/r/chromium/web-page-replay)
+
 # Web Page Replay
 Record live Web pages and use them for local performance testing!
 

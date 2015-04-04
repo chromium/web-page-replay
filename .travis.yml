@@ -19,7 +19,6 @@ python:
 
 install:
  - pip install -r requirements.txt
- - pip install pyOpenSSL
  - pip install coveralls
 
 # traffic_shaper test requires sudo.
