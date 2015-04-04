@@ -26,7 +26,7 @@ install:
 sudo: required
 
 script:
- - sudo $(which coverage) ./run_tests
+ - sudo $(which coverage) run run_tests
 
 after_script:
  - coveralls
