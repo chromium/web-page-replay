@@ -19,9 +19,13 @@ python:
 
 install:
  - pip install -r requirements.txt
+ - pip install coveralls
 
 # traffic_shaper test requires sudo.
 sudo: required
 
 script:
- - sudo ./run_tests
+ - sudo coverage run_tests
+
+after_success:
+ - coveralls
