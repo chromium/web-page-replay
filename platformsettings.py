@@ -175,6 +175,15 @@ class _BasePlatformSettings(object):
     ipfw_cmd = (self._ipfw_cmd(), ) + args
     return self._check_output(*ipfw_cmd, elevate_privilege=True)
 
+  def has_ipfw(self):
+    try:
+      self.ipfw('list')
+      return True
+    except AssertionError as e:
+      logging.warning('Failed to start ipfw command. '
+                      'Error: %s' % e.message)
+      return False
+
   def _get_cwnd(self):
     return None
 
@@ -752,6 +761,7 @@ get_server_ip_address = _inst.get_server_ip_address
 get_httpproxy_ip_address = _inst.get_httpproxy_ip_address
 get_system_proxy = _inst.get_system_proxy
 ipfw = _inst.ipfw
+has_ipfw = _inst.has_ipfw
 set_temporary_tcp_init_cwnd = _inst.set_temporary_tcp_init_cwnd
 setup_temporary_loopback_config = _inst.setup_temporary_loopback_config
 

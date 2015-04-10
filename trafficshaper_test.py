@@ -188,6 +188,9 @@ class TcpTrafficShaperTest(TimedTestCase):
 
   def testTcpConnectToIp(self):
     """Verify that it takes |delay_ms| to establish a TCP connection."""
+    if not platformsettings.has_ipfw():
+      logging.warning('ipfw is not available in path. Skip the test')
+      return
     with TimedTcpServer(self.host, self.port):
       for delay_ms in (100, 175):
         with self.TrafficShaper(delay_ms=delay_ms):
@@ -198,6 +201,9 @@ class TcpTrafficShaperTest(TimedTestCase):
 
   def testTcpUploadShaping(self):
     """Verify that 'up' bandwidth is shaped on TCP connections."""
+    if not platformsettings.has_ipfw():
+      logging.warning('ipfw is not available in path. Skip the test')
+      return
     num_bytes = 1024 * 100
     bandwidth_kbits = 2000
     expected_ms = 8.0 * num_bytes / bandwidth_kbits
@@ -207,6 +213,9 @@ class TcpTrafficShaperTest(TimedTestCase):
 
   def testTcpDownloadShaping(self):
     """Verify that 'down' bandwidth is shaped on TCP connections."""
+    if not platformsettings.has_ipfw():
+      logging.warning('ipfw is not available in path. Skip the test')
+      return
     num_bytes = 1024 * 100
     bandwidth_kbits = 2000
     expected_ms = 8.0 * num_bytes / bandwidth_kbits
@@ -240,6 +249,9 @@ class UdpTrafficShaperTest(TimedTestCase):
             GetElapsedMs(read_time, self.timer()))
 
   def testUdpDelay(self):
+    if not platformsettings.has_ipfw():
+      logging.warning('ipfw is not available in path. Skip the test')
+      return
     for delay_ms in (100, 170):
       expected_ms = delay_ms / 2
       with TimedUdpServer(self.host, self.dns_port):
