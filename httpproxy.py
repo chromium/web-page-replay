@@ -20,6 +20,7 @@ import logging
 import socket
 import SocketServer
 import ssl
+import sys
 import time
 import urlparse
 
@@ -27,6 +28,18 @@ import daemonserver
 import httparchive
 import proxyshaper
 import sslproxy
+
+
+def _HandleSSLCertificateError():
+  """
+  This method is intended to be called from
+  BaseHTTPServer.HTTPServer.handle_error().
+  """
+  exc_type, exc_value, exc_traceback = sys.exc_info()
+  if isinstance(exc_value, ssl.SSLError):
+    return
+
+  raise
 
 
 class HttpProxyError(Exception):
@@ -320,6 +333,9 @@ class HttpsProxyServer(HttpProxyServer):
     self._host_to_cert_map[host] = cert
     return cert
 
+  def handle_error(self, request, client_address):
+    _HandleSSLCertificateError()
+
 
 class SingleCertHttpsProxyServer(HttpProxyServer):
   """SSL server."""
@@ -333,6 +349,9 @@ class SingleCertHttpsProxyServer(HttpProxyServer):
         do_handshake_on_connect=False)
     # Ancestor class, DaemonServer, calls serve_forever() during its __init__.
 
+  def handle_error(self, request, client_address):
+    _HandleSSLCertificateError()
+
 
 class HttpToHttpsProxyServer(HttpProxyServer):
   """Listens for HTTP requests but sends them to the target as HTTPS requests"""
@@ -340,3 +359,6 @@ class HttpToHttpsProxyServer(HttpProxyServer):
   def __init__(self, http_archive_fetch, custom_handlers, **kwargs):
     HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
                              is_ssl=True, protocol='HTTP-to-HTTPS', **kwargs)
+
+  def handle_error(self, request, client_address):
+    _HandleSSLCertificateError()
