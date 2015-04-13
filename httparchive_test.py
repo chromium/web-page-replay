@@ -78,6 +78,11 @@ class HttpArchiveTest(unittest.TestCase):
                'hello': 'world'}
     self.assertEqual(request._TrimHeaders(header3), [('hello', 'world')])
 
+    # Tests that spaces and trailing comma get stripped.
+    header4 = {'accept-encoding': 'gzip, deflate,, '}
+    self.assertEqual(request._TrimHeaders(header4),
+                     [('accept-encoding', 'gzip,deflate')])
+
   def test_matches(self):
     headers = {}
     request1 = httparchive.ArchivedHttpRequest(
