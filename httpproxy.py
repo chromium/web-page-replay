@@ -69,12 +69,6 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.wfile = proxyshaper.RateLimitedFile(
           self.server.get_active_request_count, self.wfile,
           self.server.traffic_shaping_down_bps)
-    self.has_handled_request = False
-
-  def finish(self):
-    BaseHTTPServer.BaseHTTPRequestHandler.finish(self)
-    if not self.has_handled_request:
-      logging.error('Client failed to make request')
 
   # Make request handler logging match our logging format.
   def log_request(self, code='-', size='-'): pass
@@ -179,12 +173,21 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
       self.log_error('Request timed out: %r', e)
       self.close_connection = 1
       return
+    except ssl.SSLError:
+      # There is insufficient information passed up the stack from OpenSSL to
+      # determine the true cause of the SSL error. This almost always happens
+      # because the client refuses to accept the self-signed certs of
+      # WebPageReplay.
+      self.close_connection = 1
+      return
     except socket.error, e:
       # Connection reset errors happen all the time due to the browser closing
       # without terminating the connection properly.  They can be safely
       # ignored.
-      if e[0] != errno.ECONNRESET:
-        raise
+      self.close_connection = 1
+      if e[0] == errno.ECONNRESET:
+        return
+      raise
 
   def do_parse_and_handle_one_request(self):
     start_time = time.time()
@@ -198,6 +201,7 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.send_error(414)
         return
       if not self.raw_requestline:
+        logging.error('Client request contained no data.')
         self.close_connection = 1
         return
       if not self.parse_request():
@@ -222,7 +226,6 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     finally:
       request_time_ms = (time.time() - start_time) * 1000.0
       if request:
-        self.has_handled_request = True
         logging.debug('Served: %s (%dms)', request, request_time_ms)
       self.server.total_request_time += request_time_ms
       self.server.num_active_requests -= 1
