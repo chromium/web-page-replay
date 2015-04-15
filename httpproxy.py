@@ -164,30 +164,35 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                     self.headers['host'], self.path, e)
 
   def handle_one_request(self):
-    """Handle a single HTTP request."""
+    """Handle a single HTTP request.
+
+    This method overrides a method from BaseHTTPRequestHandler. When this
+    method returns, it must leave self.close_connection in the correct state.
+    Since WPR doesn't support the keep-alive header, this property must always
+    be set to 1.
+    """
     try:
       self.raw_requestline = self.rfile.readline(65537)
       self.do_parse_and_handle_one_request()
     except socket.timeout, e:
       # A read or a write timed out.  Discard this connection
       self.log_error('Request timed out: %r', e)
-      self.close_connection = 1
       return
     except ssl.SSLError:
       # There is insufficient information passed up the stack from OpenSSL to
       # determine the true cause of the SSL error. This almost always happens
       # because the client refuses to accept the self-signed certs of
       # WebPageReplay.
-      self.close_connection = 1
       return
     except socket.error, e:
       # Connection reset errors happen all the time due to the browser closing
       # without terminating the connection properly.  They can be safely
       # ignored.
-      self.close_connection = 1
       if e[0] == errno.ECONNRESET:
         return
       raise
+    finally:
+      self.close_connection = 1
 
   def do_parse_and_handle_one_request(self):
     start_time = time.time()
@@ -202,7 +207,6 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         return
       if not self.raw_requestline:
         logging.error('Client request contained no data.')
-        self.close_connection = 1
         return
       if not self.parse_request():
         # An error code has been sent, just exit
@@ -225,9 +229,13 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.wfile.flush()  # Actually send the response if not already done.
     finally:
       request_time_ms = (time.time() - start_time) * 1000.0
-      if request:
-        logging.debug('Served: %s (%dms)', request, request_time_ms)
       self.server.total_request_time += request_time_ms
+      if request:
+        if response:
+          logging.debug('Served: %s (%dms)', request, request_time_ms)
+        else:
+          logging.warning('Failed to find response for: %s (%dms)',
+                          request, request_time_ms)
       self.server.num_active_requests -= 1
 
   def send_error(self, status, body=None):
