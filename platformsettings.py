@@ -94,8 +94,8 @@ def FindExecutable(executable):
 def HasSniSupport():
   try:
     import OpenSSL
-    return (version.StrictVersion(OpenSSL.__version__) >=
-            version.StrictVersion('0.13'))
+    return (distutils.version.StrictVersion(OpenSSL.__version__) >=
+            distutils.version.StrictVersion('0.13'))
   except ImportError:
     return False
 

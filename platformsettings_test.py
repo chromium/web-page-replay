@@ -174,6 +174,12 @@ class SystemProxyTest(unittest.TestCase):
     self.assertFalse(system_proxy)
 
 
+class HasSniTest(unittest.TestCase):
+  def test_has_sni(self):
+    # Check that no exception is raised.
+    platformsettings.HasSniSupport()
+
+
 class Win7Settings(platformsettings._WindowsPlatformSettings):
   @classmethod
   def _ipconfig(cls, *args):
