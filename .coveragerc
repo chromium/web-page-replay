@@ -1,2 +1,4 @@
 [report]
-omit = */third_party/*
+omit =
+  */python?.?/*
+  */third_party/*
