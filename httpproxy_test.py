@@ -19,6 +19,7 @@ import httpproxy
 import threading
 import time
 import unittest
+import util
 
 
 class MockCustomResponseHandler(object):
@@ -74,16 +75,9 @@ class HttpProxyTest(unittest.TestCase):
       res = conn.getresponse().read()
       self.assertEqual(len(res), 0)
 
-    # Wait 1 second for any stray threads to finish running.
-    end_time = time.time() + 1
-    while time.time() < end_time:
-      final_thread_count = threading.activeCount()
-      if final_thread_count == initial_thread_count:
-        break
-      time.sleep(0.01)
+    # Check to make sure that there is no leak thread.
+    util.WaitFor(lambda: threading.activeCount() == initial_thread_count, 1)
 
-    final_thread_count = threading.activeCount()
-    self.assertEqual(initial_thread_count, final_thread_count)
     self.assertEqual(request_count, HttpProxyTest.HANDLED_REQUEST_COUNT)
 
 

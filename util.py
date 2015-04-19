@@ -16,6 +16,9 @@
 
 """Miscellaneous utility functions."""
 
+import inspect
+import logging
+import time
 
 try:
   # pkg_resources (part of setuptools) is needed when WPR is
@@ -45,3 +48,48 @@ except ImportError:
 
   def resource_string(resource_name):
     return open(_resource_path(resource_name)).read()
+
+
+class TimeoutException(Exception):
+  pass
+
+
+def WaitFor(condition, timeout):
+  """Waits for up to |timeout| secs for the function |condition| to return True.
+
+  Polling frequency is (elapsed_time / 10), with a min of .1s and max of 5s.
+
+  Returns:
+    Result of |condition| function (if present).
+  """
+  min_poll_interval = 0.1
+  max_poll_interval = 5
+  output_interval = 300
+
+  def GetConditionString():
+    if condition.__name__ == '<lambda>':
+      try:
+        return inspect.getsource(condition).strip()
+      except IOError:
+        pass
+    return condition.__name__
+
+  start_time = time.time()
+  last_output_time = start_time
+  while True:
+    res = condition()
+    if res:
+      return res
+    now = time.time()
+    elapsed_time = now - start_time
+    last_output_elapsed_time = now - last_output_time
+    if elapsed_time > timeout:
+      raise TimeoutException('Timed out while waiting %ds for %s.' %
+                                        (timeout, GetConditionString()))
+    if last_output_elapsed_time > output_interval:
+      logging.info('Continuing to wait %ds for %s. Elapsed: %ds.',
+                   timeout, GetConditionString(), elapsed_time)
+      last_output_time = time.time()
+    poll_interval = min(max(elapsed_time / 10., min_poll_interval),
+                        max_poll_interval)
+    time.sleep(poll_interval)
