@@ -255,7 +255,12 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
   # SocketServer.TCPServer (the parent of BaseHTTPServer.HTTPServer).
   # Since we're intercepting many domains through this single server,
   # it is quite possible to get more than 5 concurrent requests.
-  request_queue_size = 128
+  request_queue_size = 256
+
+  # Allow sockets to be reused. See
+  # http://svn.python.org/projects/python/trunk/Lib/SocketServer.py for more
+  # details.
+  allow_reuse_address = True
 
   # Don't prevent python from exiting when there is thread activity.
   daemon_threads = True
