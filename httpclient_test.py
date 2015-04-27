@@ -177,7 +177,6 @@ class RealHttpFetchGetConnectionTest(unittest.TestCase):
     """HTTPS (SSL) connection with proxy tunnels to target host."""
     self.set_https_proxy(host='proxy.com', port=8443)
     connection = self.fetch._get_connection('example.com', None, is_ssl=True)
-    connection.set_tunnel('example.com', None)
     self.assertEqual('example.com', connection._tunnel_host)  # host name
     self.assertEqual(None, connection._tunnel_port)  # host port
 
