@@ -592,7 +592,8 @@ class ArchivedHttpRequest(object):
     - cache-control:  sometimes sent from Chrome with 'max-age=0' as value.
     - connection, method, scheme, url, version: Cause problems with spdy.
     - cookie: Extremely sensitive to request/response order.
-    - keep-alive: Not supported by Web Page Replay.
+    - keep-alive: Doesn't affect the content of the request, only some
+      transient state of the transport layer.
     - user-agent: Changes with every Chrome version.
     - proxy-connection: Sent for proxy requests.
 

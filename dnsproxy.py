@@ -289,6 +289,7 @@ class DnsProxyServer(SocketServer.ThreadingUDPServer,
   def cleanup(self):
     try:
       self.shutdown()
+      self.server_close()
     except KeyboardInterrupt, e:
       pass
     logging.info('Stopped DNS server')

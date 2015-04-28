@@ -168,8 +168,8 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     This method overrides a method from BaseHTTPRequestHandler. When this
     method returns, it must leave self.close_connection in the correct state.
-    Since WPR doesn't support the keep-alive header, this property must always
-    be set to 1.
+    If this method raises an exception, the state of self.close_connection
+    doesn't matter.
     """
     try:
       self.raw_requestline = self.rfile.readline(65537)
@@ -177,22 +177,24 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     except socket.timeout, e:
       # A read or a write timed out.  Discard this connection
       self.log_error('Request timed out: %r', e)
+      self.close_connection = 1
       return
     except ssl.SSLError:
       # There is insufficient information passed up the stack from OpenSSL to
       # determine the true cause of the SSL error. This almost always happens
       # because the client refuses to accept the self-signed certs of
       # WebPageReplay.
+      self.close_connection = 1
       return
     except socket.error, e:
       # Connection reset errors happen all the time due to the browser closing
       # without terminating the connection properly.  They can be safely
       # ignored.
       if e[0] == errno.ECONNRESET:
+        self.close_connection = 1
         return
       raise
-    finally:
-      self.close_connection = 1
+
 
   def do_parse_and_handle_one_request(self):
     start_time = time.time()
@@ -204,15 +206,22 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.request_version = ''
         self.command = ''
         self.send_error(414)
+        self.close_connection = 0
         return
       if not self.raw_requestline:
-        logging.error('Client request contained no data.')
+        # This indicates that the socket has been closed by the client.
+        self.close_connection = 1
         return
+
+      # self.parse_request() sets self.close_connection. There is no need to
+      # set the property after the method is executed, unless custom behavior
+      # is desired.
       if not self.parse_request():
-        # An error code has been sent, just exit
+        # An error code has been sent, just exit.
         return
 
       try:
+        response = None
         request = self.get_archived_http_request()
 
         if request is None:
@@ -305,6 +314,7 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
   def cleanup(self):
     try:
       self.shutdown()
+      self.server_close()
     except KeyboardInterrupt:
       pass
     logging.info('Stopped %s server. Total time processing requests: %dms',
@@ -331,6 +341,7 @@ class HttpsProxyServer(HttpProxyServer):
   def cleanup(self):
     try:
       self.shutdown()
+      self.server_close()
     except KeyboardInterrupt:
       pass
 
