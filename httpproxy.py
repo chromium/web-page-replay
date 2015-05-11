@@ -17,6 +17,7 @@ import BaseHTTPServer
 import certutils
 import errno
 import logging
+import resource
 import socket
 import SocketServer
 import ssl
@@ -266,6 +267,10 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
   # it is quite possible to get more than 5 concurrent requests.
   request_queue_size = 256
 
+  # The number of simultaneous connections that the HTTP server supports. This
+  # is primarily limited by system limits such as RLIMIT_NOFILE.
+  connection_limit = 500
+
   # Allow sockets to be reused. See
   # http://svn.python.org/projects/python/trunk/Lib/SocketServer.py for more
   # details.
@@ -290,6 +295,20 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
            Bandwidths measured in [K|M]{bit/s|Byte/s}. '0' means unlimited.
       delay_ms: Propagation delay in milliseconds. '0' means no delay.
     """
+    # BaseHTTPServer opens a new thread and two fds for each connection.
+    # Check that the process can open at least 1000 fds.
+    soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    # Add some wiggle room since there are probably fds not associated with
+    # connections.
+    wiggle_room = 100
+    desired_limit = 2 * HttpProxyServer.connection_limit + wiggle_room
+    if soft_limit < desired_limit:
+      assert desired_limit <= hard_limit, (
+          'The hard limit for number of open files per process is %s which '
+          'is lower than the desired limit of %s.' %
+          (hard_limit, desired_limit))
+      resource.setrlimit(resource.RLIMIT_NOFILE, (desired_limit, hard_limit))
+
     try:
       BaseHTTPServer.HTTPServer.__init__(self, (host, port), self.HANDLER)
     except Exception, e:
@@ -303,6 +322,7 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
     self.traffic_shaping_up_bps = proxyshaper.GetBitsPerSecond(up_bandwidth)
     self.traffic_shaping_delay_ms = int(delay_ms)
     self.num_active_requests = 0
+    self.num_active_connections = 0
     self.total_request_time = 0
     self.protocol = protocol
 
@@ -322,6 +342,19 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
 
   def get_active_request_count(self):
     return self.num_active_requests
+
+  def get_request(self):
+    self.num_active_connections += 1
+    if self.num_active_connections >= HttpProxyServer.connection_limit:
+      logging.error(
+          'Number of active connections (%s) surpasses the '
+          'supported limit of %s.' %
+          (self.num_active_connections, HttpProxyServer.connection_limit))
+    return BaseHTTPServer.HTTPServer.get_request(self)
+
+  def close_request(self, request):
+    BaseHTTPServer.HTTPServer.close_request(self, request)
+    self.num_active_connections -= 1
 
 
 class HttpsProxyServer(HttpProxyServer):

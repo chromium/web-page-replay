@@ -151,6 +151,32 @@ class HttpProxyTest(unittest.TestCase):
 
     util.WaitFor(lambda: threading.activeCount() == initial_thread_count, 1)
 
+  # Test that opening 400 simultaneous connections does not cause httpproxy to
+  # hit a process fd limit. The default limit is 256 fds.
+  def test_max_fd(self):
+    response = httparchive.ArchivedHttpResponse(
+        version=11, status=200, reason="OK",
+        headers=[("Connection", "keep-alive")], response_data=["bat1"])
+    self.set_up_proxy_server(response)
+    t = threading.Thread(
+        target=HttpProxyTest.serve_requests_forever, args=(self,))
+    t.start()
+
+    # Make a bunch of requests.
+    request_count = 400
+    connections = []
+    for _ in range(request_count):
+      conn = httplib.HTTPConnection('localhost', 8889, timeout=10)
+      conn.request("GET","/index.html",headers={"Connection":"keep-alive"})
+      res = conn.getresponse().read()
+      self.assertEqual(res, "bat1")
+      connections.append(conn)
+
+    # Check that the right number of requests have been handled.
+    self.assertEqual(request_count, HttpProxyTest.HANDLED_REQUEST_COUNT)
+
+    for conn in connections:
+      conn.close()
 
 if __name__ == '__main__':
   unittest.main()
