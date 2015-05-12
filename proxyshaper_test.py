@@ -44,7 +44,7 @@ ERROR_RATES = (
 
 
 class TimedTestCase(unittest.TestCase):
-  def assertAlmostEqual(self, expected, actual, tolerance=0.05):
+  def assertValuesAlmostEqual(self, expected, actual, tolerance=0.05):
     """Like the following with nicer default message:
            assertTrue(expected <= actual + tolerance &&
                       expected >= actual - tolerance)
@@ -66,7 +66,7 @@ class RateLimitedFileTest(TimedTestCase):
     self.assertEqual(num_bytes, len(limited_f.read()))
     expected_ms = 8.0 * num_bytes / bps * 1000.0
     actual_ms = (proxyshaper.TIMER() - start) * 1000.0
-    self.assertAlmostEqual(expected_ms, actual_ms)
+    self.assertValuesAlmostEqual(expected_ms, actual_ms)
 
   def testReadlineLimitedBasic(self):
     num_bytes = 1024 * 8 + 512
@@ -78,7 +78,7 @@ class RateLimitedFileTest(TimedTestCase):
     self.assertEqual(num_bytes, len(limited_f.readline()))
     expected_ms = 8.0 * num_bytes / bps * 1000.0
     actual_ms = (proxyshaper.TIMER() - start) * 1000.0
-    self.assertAlmostEqual(expected_ms, actual_ms)
+    self.assertValuesAlmostEqual(expected_ms, actual_ms)
 
   def testReadLimitedSlowedByMultipleRequests(self):
     num_bytes = 1024
@@ -92,7 +92,7 @@ class RateLimitedFileTest(TimedTestCase):
     self.assertEqual(num_bytes, len(num_read_bytes))
     expected_ms = 8.0 * num_bytes / (bps / float(request_count)) * 1000.0
     actual_ms = (proxyshaper.TIMER() - start) * 1000.0
-    self.assertAlmostEqual(expected_ms, actual_ms)
+    self.assertValuesAlmostEqual(expected_ms, actual_ms)
 
   def testWriteLimitedBasic(self):
     num_bytes = 1024 * 10 + 350
@@ -105,7 +105,7 @@ class RateLimitedFileTest(TimedTestCase):
     self.assertEqual(num_bytes, len(limited_f.getvalue()))
     expected_ms = 8.0 * num_bytes / bps * 1000.0
     actual_ms = (proxyshaper.TIMER() - start) * 1000.0
-    self.assertAlmostEqual(expected_ms, actual_ms)
+    self.assertValuesAlmostEqual(expected_ms, actual_ms)
 
   def testWriteLimitedSlowedByMultipleRequests(self):
     num_bytes = 1024 * 10
@@ -119,7 +119,7 @@ class RateLimitedFileTest(TimedTestCase):
     self.assertEqual(num_bytes, len(limited_f.getvalue()))
     expected_ms = 8.0 * num_bytes / (bps / float(request_count)) * 1000.0
     actual_ms = (proxyshaper.TIMER() - start) * 1000.0
-    self.assertAlmostEqual(expected_ms, actual_ms)
+    self.assertValuesAlmostEqual(expected_ms, actual_ms)
 
 
 class GetBitsPerSecondTest(unittest.TestCase):

@@ -71,6 +71,7 @@ class SslHandshakeHandler:
 def wrap_handler(handler_class):
   """Wraps a BaseHTTPHandler with SSL MITM certificates."""
   if certutils.openssl_import_error:
+    # pylint: disable=raising-bad-type
     raise certutils.openssl_import_error
 
   class WrappedHandler(SslHandshakeHandler, handler_class):

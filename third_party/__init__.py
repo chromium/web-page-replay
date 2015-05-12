@@ -22,4 +22,5 @@ except NameError:
 third_party_dir = os.path.dirname(os.path.abspath(__file__))
 ipaddr_dir = os.path.join(third_party_dir, "ipaddr")
 sys.path.append(ipaddr_dir)  # workaround for no __init__.py
+import ipaddr
 sys.path.append(third_party_dir)

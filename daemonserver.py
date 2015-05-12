@@ -25,7 +25,8 @@ class DaemonServer(object):
     # the components do not need to communicate with each other. On Linux,
     # "taskset" could be used to assign each process to specific CPU/core.
     # Of course, only bother with this if the processing speed is an issue.
-    # Some related discussion: http://stackoverflow.com/questions/990102/python-global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
+    # Some related discussion: http://stackoverflow.com/questions/990102/python-
+    # global-interpreter-lock-gil-workaround-on-multi-core-systems-using-tasks
     thread = threading.Thread(target=self.serve_forever)
     thread.daemon = True  # Python exits when no non-daemon threads are left.
     thread.start()

@@ -21,13 +21,10 @@ import SocketServer
 import threading
 import time
 
-import third_party
-import dns.flags
-import dns.message
-import dns.rcode
-import dns.resolver
-import dns.rdatatype
-import ipaddr
+from third_party import dns
+from third_party.dns import rdatatype
+from third_party import ipaddr
+
 
 
 class DnsProxyException(Exception):
@@ -52,7 +49,7 @@ class RealDnsLookup(object):
     except socket.error:
       return False
 
-  def __call__(self, hostname, rdtype=dns.rdatatype.A):
+  def __call__(self, hostname, rdtype=rdatatype.A):
     """Return real IP for a host.
 
     Args:

@@ -251,7 +251,7 @@ class RealHttpFetch(object):
           logging.warning(
               'Response header in wrong format [%s]', line)
           continue
-        name, value = name_value
+        name, value = name_value  # pylint: disable=unpacking-non-sequence
       all_headers.append((name, value))
     return all_headers
 

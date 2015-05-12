@@ -18,7 +18,6 @@ import httparchive
 import httplib
 import httpproxy
 import threading
-import time
 import unittest
 import util
 
@@ -33,6 +32,7 @@ class MockCustomResponseHandler(object):
     self._response = response
 
   def handle(self, request):
+    del request
     return self._response
 
 

@@ -180,6 +180,7 @@ class HasSniTest(unittest.TestCase):
     platformsettings.HasSniSupport()
 
 
+# pylint: disable=abstract-method
 class Win7Settings(platformsettings._WindowsPlatformSettings):
   @classmethod
   def _ipconfig(cls, *args):

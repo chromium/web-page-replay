@@ -123,14 +123,15 @@ class ServerManager(object):
         time.sleep(1)
         if self.should_exit:
           break
-    except:
+    except Exception:
       exception_info = sys.exc_info()
     finally:
       for server_exit in server_exits:
         try:
           if server_exit(*exception_info):
             exception_info = (None, None, None)
-        except:
+        except Exception:
           exception_info = sys.exc_info()
       if exception_info != (None, None, None):
+        # pylint: disable=raising-bad-type
         raise exception_info[0], exception_info[1], exception_info[2]

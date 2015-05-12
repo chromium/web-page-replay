@@ -67,7 +67,7 @@ def LogRunTime(fn):
     try:
       return fn(self, *args, **kwargs)
     finally:
-      run_time = (time.time() - start_time) * 1000.0;
+      run_time = (time.time() - start_time) * 1000.0
       logging.debug('%s: %dms', fn.__name__, run_time)
   return wrapped
 
@@ -92,7 +92,7 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
         the archive to find potential matches.
   """
 
-  def __init__(self):
+  def __init__(self):  # pylint: disable=super-init-not-called
     self.responses_by_host = defaultdict(dict)
 
   def __setstate__(self, state):

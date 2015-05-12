@@ -21,13 +21,11 @@ $ sudo ./trafficshaper_test.py
 
 import daemonserver
 import logging
-import multiprocessing
 import platformsettings
 import socket
 import SocketServer
 import trafficshaper
 import unittest
-
 
 RESPONSE_SIZE_KEY = 'response-size:'
 TEST_DNS_PORT = 5555
@@ -134,7 +132,7 @@ class TcpTestSocketCreator:
 
 
 class TimedTestCase(unittest.TestCase):
-  def assertAlmostEqual(self, expected, actual, tolerance=0.05):
+  def assertValuesAlmostEqual(self, expected, actual, tolerance=0.05):
     """Like the following with nicer default message:
            assertTrue(expected <= actual + tolerance &&
                       expected >= actual - tolerance)
@@ -197,7 +195,7 @@ class TcpTrafficShaperTest(TimedTestCase):
           start_time = self.timer()
           with self.tcp_socket_creator:
             connect_time = GetElapsedMs(start_time, self.timer())
-        self.assertAlmostEqual(delay_ms, connect_time, tolerance=0.12)
+        self.assertValuesAlmostEqual(delay_ms, connect_time, tolerance=0.12)
 
   def testTcpUploadShaping(self):
     """Verify that 'up' bandwidth is shaped on TCP connections."""
@@ -209,7 +207,7 @@ class TcpTrafficShaperTest(TimedTestCase):
     expected_ms = 8.0 * num_bytes / bandwidth_kbits
     with TimedTcpServer(self.host, self.port):
       with self.TrafficShaper(up_bandwidth='%sKbit/s' % bandwidth_kbits):
-        self.assertAlmostEqual(expected_ms, self.GetTcpSendTimeMs(num_bytes))
+        self.assertValuesAlmostEqual(expected_ms, self.GetTcpSendTimeMs(num_bytes))
 
   def testTcpDownloadShaping(self):
     """Verify that 'down' bandwidth is shaped on TCP connections."""
@@ -221,7 +219,7 @@ class TcpTrafficShaperTest(TimedTestCase):
     expected_ms = 8.0 * num_bytes / bandwidth_kbits
     with TimedTcpServer(self.host, self.port):
       with self.TrafficShaper(down_bandwidth='%sKbit/s' % bandwidth_kbits):
-        self.assertAlmostEqual(expected_ms, self.GetTcpReceiveTimeMs(num_bytes))
+        self.assertValuesAlmostEqual(expected_ms, self.GetTcpReceiveTimeMs(num_bytes))
 
   def testTcpInterleavedDownloads(self):
     # TODO(slamm): write tcp interleaved downloads test
@@ -257,8 +255,8 @@ class UdpTrafficShaperTest(TimedTestCase):
       with TimedUdpServer(self.host, self.dns_port):
         with self.TrafficShaper(delay_ms=delay_ms):
           send_ms, receive_ms = self.GetUdpSendReceiveTimesMs()
-          self.assertAlmostEqual(expected_ms, send_ms, tolerance=0.10)
-          self.assertAlmostEqual(expected_ms, receive_ms, tolerance=0.10)
+          self.assertValuesAlmostEqual(expected_ms, send_ms, tolerance=0.10)
+          self.assertValuesAlmostEqual(expected_ms, receive_ms, tolerance=0.10)
 
 
   def testUdpInterleavedDelay(self):

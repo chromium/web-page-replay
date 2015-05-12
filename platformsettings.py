@@ -37,7 +37,6 @@ import socket
 import stat
 import subprocess
 import sys
-import tempfile
 import time
 import urlparse
 
@@ -65,8 +64,9 @@ class NotAdministratorError(PlatformSettingsError):
 class CalledProcessError(PlatformSettingsError):
     """Raised when a _check_output() process returns a non-zero exit status."""
     def __init__(self, returncode, cmd):
-        self.returncode = returncode
-        self.cmd = cmd
+      super(CalledProcessError, self).__init__()
+      self.returncode = returncode
+      self.cmd = cmd
 
     def __str__(self):
         return 'Command "%s" returned non-zero exit status %d' % (
@@ -166,6 +166,7 @@ class _BasePlatformSettings(object):
 
   def get_system_proxy(self, use_ssl):
     """Returns the system HTTP(S) proxy host, port."""
+    del use_ssl
     return SystemProxy(None, None)
 
   def _ipfw_cmd(self):
@@ -280,6 +281,9 @@ class _BasePlatformSettings(object):
 
 
 class _PosixPlatformSettings(_BasePlatformSettings):
+
+  # pylint: disable=abstract-method
+  # Suppress lint check for _get_primary_nameserver & _set_primary_nameserver
 
   def rerun_as_administrator(self):
     """If needed, rerun the program with administrative privileges.
@@ -572,6 +576,9 @@ class _LinuxPlatformSettings(_PosixPlatformSettings):
 
 
 class _WindowsPlatformSettings(_BasePlatformSettings):
+
+  # pylint: disable=abstract-method
+  # Suppress lint check for _ipfw_cmd
 
   def get_system_logging_handler(self):
     """Return a handler for the logging module (optional).

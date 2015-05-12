@@ -72,9 +72,14 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
           self.server.traffic_shaping_down_bps)
 
   # Make request handler logging match our logging format.
-  def log_request(self, code='-', size='-'): pass
-  def log_error(self, format, *args): logging.error(format, *args)
-  def log_message(self, format, *args): logging.info(format, *args)
+  def log_request(self, code='-', size='-'):
+    pass
+
+  def log_error(self, format, *args):  # pylint:disable=redefined-builtin
+    logging.error(format, *args)
+
+  def log_message(self, format, *args):  # pylint:disable=redefined-builtin
+    logging.info(format, *args)
 
   def read_request_body(self):
     request_body = None
