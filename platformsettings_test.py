@@ -55,7 +55,7 @@ Ethernet adapter Local Area Connection:
    DHCP Server . . . . . . . . . . . : 172.11.22.33
    DNS Servers . . . . . . . . . . . : 8.8.4.4
    NetBIOS over Tcpip. . . . . . . . : Enabled
-""" % { 'ip_addr': WINDOWS_7_IP, 'mac_addr': WINDOWS_7_MAC }
+""" % {'ip_addr': WINDOWS_7_IP, 'mac_addr': WINDOWS_7_MAC}
 
 WINDOWS_XP_IP = '172.1.2.3'
 WINDOWS_XP_MAC = '00-34-B8-1F-FA-70'
@@ -85,7 +85,7 @@ Ethernet adapter Local Area Connection 2:
                                             8.8.4.4
         Lease Obtained. . . . . . . . . . : Thursday, April 07, 2011 9:14:55 AM
         Lease Expires . . . . . . . . . . : Thursday, April 07, 2011 1:14:55 PM
-""" % { 'ip_addr': WINDOWS_XP_IP, 'mac_addr': WINDOWS_XP_MAC }
+""" % {'ip_addr': WINDOWS_XP_IP, 'mac_addr': WINDOWS_XP_MAC}
 
 
 # scutil show State:/Network/Global/IPv4

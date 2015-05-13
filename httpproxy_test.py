@@ -100,7 +100,7 @@ class HttpProxyTest(unittest.TestCase):
     request_count = 10
     for _ in range(request_count):
       conn = httplib.HTTPConnection('localhost', 8889, timeout=10)
-      conn.request("GET","/index.html")
+      conn.request("GET", "/index.html")
       res = conn.getresponse().read()
       self.assertEqual(res, "bat1")
       conn.close()
@@ -128,14 +128,14 @@ class HttpProxyTest(unittest.TestCase):
     connections = []
     for _ in range(request_count):
       conn = httplib.HTTPConnection('localhost', 8889, timeout=10)
-      conn.request("GET","/index.html",headers={"Connection":"keep-alive"})
+      conn.request("GET", "/index.html", headers={"Connection": "keep-alive"})
       res = conn.getresponse().read()
       self.assertEqual(res, "bat1")
       connections.append(conn)
 
     # Repeat the same requests.
     for conn in connections:
-      conn.request("GET","/index.html",headers={"Connection":"keep-alive"})
+      conn.request("GET", "/index.html", headers={"Connection": "keep-alive"})
       res = conn.getresponse().read()
       self.assertEqual(res, "bat1")
 
@@ -167,7 +167,7 @@ class HttpProxyTest(unittest.TestCase):
     connections = []
     for _ in range(request_count):
       conn = httplib.HTTPConnection('localhost', 8889, timeout=10)
-      conn.request("GET","/index.html",headers={"Connection":"keep-alive"})
+      conn.request("GET", "/index.html", headers={"Connection": "keep-alive"})
       res = conn.getresponse().read()
       self.assertEqual(res, "bat1")
       connections.append(conn)

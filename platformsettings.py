@@ -723,7 +723,7 @@ class _WindowsPlatformSettings(_BasePlatformSettings):
         elif iface_dns_config == "DNS servers configured through DHCP":
           iface_kind = "dhcp"
       if iface_name and iface_dns and iface_kind:
-        ifaces.append( (iface_dns, iface_name, iface_kind) )
+        ifaces.append((iface_dns, iface_name, iface_kind))
         iface_name = None
         iface_dns = None
     return ifaces

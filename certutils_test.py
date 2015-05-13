@@ -74,7 +74,7 @@ class CertutilsTest(unittest.TestCase):
     self.assertEqual(c.get_subject().commonName, subject)
 
   def test_get_host_cert(self):
-    ca_cert_path = os.path.join(self._temp_dir,'rootCA.pem')
+    ca_cert_path = os.path.join(self._temp_dir, 'rootCA.pem')
     issuer = 'testCA'
     certutils.write_dummy_ca_cert(*certutils.generate_dummy_ca_cert(issuer),
                                   cert_path=ca_cert_path)

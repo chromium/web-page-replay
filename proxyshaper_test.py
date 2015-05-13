@@ -24,6 +24,7 @@ import StringIO
 import unittest
 
 
+# pylint: disable=bad-whitespace
 VALID_RATES = (
     # input,       expected_bps
     ( '384Kbit/s',   384000),

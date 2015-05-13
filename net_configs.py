@@ -28,6 +28,7 @@ import collections
 NetConfig = collections.namedtuple('NetConfig', ['down', 'up', 'delay_ms'])
 
 
+# pylint: disable=bad-whitespace
 _NET_CONFIGS = {
     'dialup': NetConfig(down=   '49Kbit/s', up=  '30Kbit/s', delay_ms= '120'),
     '3g':     NetConfig(down= '1638Kbit/s', up= '768Kbit/s', delay_ms= '150'),
