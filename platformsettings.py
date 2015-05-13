@@ -62,15 +62,15 @@ class NotAdministratorError(PlatformSettingsError):
 
 
 class CalledProcessError(PlatformSettingsError):
-    """Raised when a _check_output() process returns a non-zero exit status."""
-    def __init__(self, returncode, cmd):
-      super(CalledProcessError, self).__init__()
-      self.returncode = returncode
-      self.cmd = cmd
+  """Raised when a _check_output() process returns a non-zero exit status."""
+  def __init__(self, returncode, cmd):
+    super(CalledProcessError, self).__init__()
+    self.returncode = returncode
+    self.cmd = cmd
 
-    def __str__(self):
-        return 'Command "%s" returned non-zero exit status %d' % (
-            ' '.join(self.cmd), self.returncode)
+  def __str__(self):
+    return 'Command "%s" returned non-zero exit status %d' % (
+        ' '.join(self.cmd), self.returncode)
 
 
 def FindExecutable(executable):

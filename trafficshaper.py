@@ -169,8 +169,8 @@ class TrafficShaper(object):
   def __exit__(self, unused_exc_type, unused_exc_val, unused_exc_tb):
     if self.is_shaping:
       try:
-          self._delete_rules()
-          logging.info('Stopped shaping traffic')
+        self._delete_rules()
+        logging.info('Stopped shaping traffic')
       except Exception:
         logging.error('Unable to stop shaping traffic.')
         raise
