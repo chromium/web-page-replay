@@ -99,6 +99,24 @@ def HasSniSupport():
   except ImportError:
     return False
 
+
+def SupportsFdLimitControl():
+  """Whether the platform supports changing the process fd limit."""
+  return os.name is 'posix'
+
+
+def GetFdLimit():
+  """Returns a tuple of (soft_limit, hard_limit)."""
+  import resource
+  return resource.getrlimit(resource.RLIMIT_NOFILE)
+
+
+def AdjustFdLimit(new_soft_limit, new_hard_limit):
+  """Sets a new soft and hard limit for max number of fds."""
+  import resource
+  resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft_limit, new_hard_limit))
+
+
 class SystemProxy(object):
   """A host/port pair for a HTTP or HTTPS proxy configuration."""
 
