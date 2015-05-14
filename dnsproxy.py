@@ -21,7 +21,10 @@ import SocketServer
 import threading
 import time
 
-from third_party import dns
+from third_party.dns import flags
+from third_party.dns import message
+from third_party.dns import rcode
+from third_party.dns import resolver
 from third_party.dns import rdatatype
 from third_party import ipaddr
 
@@ -36,7 +39,7 @@ class RealDnsLookup(object):
     if '127.0.0.1' in name_servers:
       raise DnsProxyException(
           'Invalid nameserver: 127.0.0.1 (causes an infinte loop)')
-    self.resolver = dns.resolver.get_default_resolver()
+    self.resolver = resolver.get_default_resolver()
     self.resolver.nameservers = name_servers
     self.dns_cache_lock = threading.Lock()
     self.dns_cache = {}
@@ -67,13 +70,13 @@ class RealDnsLookup(object):
       return ip
     try:
       answers = self.resolver.query(hostname, rdtype)
-    except dns.resolver.NXDOMAIN:
+    except resolver.NXDOMAIN:
       return None
-    except dns.resolver.NoNameservers:
+    except resolver.NoNameservers:
       logging.debug('_real_dns_lookup(%s) -> No nameserver.',
                     hostname)
       return None
-    except (dns.resolver.NoAnswer, dns.resolver.Timeout) as ex:
+    except (resolver.NoAnswer, resolver.Timeout) as ex:
       logging.debug('_real_dns_lookup(%s) -> None (%s)',
                     hostname, ex.__class__.__name__)
       return None
@@ -238,10 +241,10 @@ class UdpDnsHandler(SocketServer.DatagramRequestHandler):
     return packet
 
   def get_dns_no_such_name_response(self):
-    query_message = dns.message.from_wire(self.data)
-    response_message = dns.message.make_response(query_message)
-    response_message.flags |= dns.flags.AA | dns.flags.RA
-    response_message.set_rcode(dns.rcode.NXDOMAIN)
+    query_message = message.from_wire(self.data)
+    response_message = message.make_response(query_message)
+    response_message.flags |= flags.AA | flags.RA
+    response_message.set_rcode(rcode.NXDOMAIN)
     return response_message.to_wire()
 
 
