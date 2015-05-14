@@ -65,19 +65,20 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
     self.raw_requestline = self.rfile.readline(65537)
 
 
-class WrappedErrorHandler(sslproxy.SslHandshakeHandler, Handler):
+class WrappedErrorHandler(Handler):
   """Wraps handler to verify expected sslproxy errors are being raised."""
 
   def setup(self):
     Handler.setup(self)
     try:
-      sslproxy.SslHandshakeHandler.setup(self)
+      sslproxy._SetUpUsingDummyCert(self)
     except certutils.Error:
       self.server.error_function = certutils.Error
 
   def finish(self):
-    sslproxy.SslHandshakeHandler.finish(self)
     Handler.finish(self)
+    self.connection.shutdown()
+    self.connection.close()
 
 
 class DummyArchive(object):

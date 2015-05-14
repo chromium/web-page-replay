@@ -42,6 +42,7 @@ To merge multiple archives
 
 import calendar
 import certutils
+import cPickle
 import difflib
 import email.utils
 import httplib
@@ -50,7 +51,6 @@ import json
 import logging
 import optparse
 import os
-import persistentmixin
 import StringIO
 import subprocess
 import sys
@@ -58,6 +58,7 @@ import tempfile
 import time
 import urlparse
 from collections import defaultdict
+
 
 
 def LogRunTime(fn):
@@ -77,13 +78,8 @@ class HttpArchiveException(Exception):
   pass
 
 
-class HttpArchive(dict, persistentmixin.PersistentMixin):
+class HttpArchive(dict):
   """Dict with ArchivedHttpRequest keys and ArchivedHttpResponse values.
-
-  PersistentMixin adds the following methods:
-    AssertWritable(filename)
-    Load(filename)
-    Persist(filename)
 
   Attributes:
     responses_by_host: dict of {hostname, {request: response}}. This must remain
@@ -425,6 +421,35 @@ class HttpArchive(dict, persistentmixin.PersistentMixin):
     if request not in self:
       self[request] = create_response(200, body=self._generate_cert(host))
     return self[request].response_data[0]
+
+  @classmethod
+  def AssertWritable(cls, filename):
+    """Raises an IOError if filename is not writable."""
+    persist_dir = os.path.dirname(os.path.abspath(filename))
+    if not os.path.exists(persist_dir):
+      raise IOError('Directory does not exist: %s' % persist_dir)
+    if os.path.exists(filename):
+      if not os.access(filename, os.W_OK):
+        raise IOError('Need write permission on file: %s' % filename)
+    elif not os.access(persist_dir, os.W_OK):
+      raise IOError('Need write permission on directory: %s' % persist_dir)
+
+  @classmethod
+  def Load(cls, filename):
+    """Load an instance from filename."""
+    return cPickle.load(open(filename, 'rb'))
+
+  def Persist(self, filename):
+    """Persist all state to filename."""
+    try:
+      original_checkinterval = sys.getcheckinterval()
+      sys.setcheckinterval(2**31-1)  # Lock out other threads so nothing can
+                                     # modify |self| during pickling.
+      pickled_self = cPickle.dumps(self, cPickle.HIGHEST_PROTOCOL)
+    finally:
+      sys.setcheckinterval(original_checkinterval)
+    with open(filename, 'wb') as f:
+      f.write(pickled_self)
 
 
 class ArchivedHttpRequest(object):

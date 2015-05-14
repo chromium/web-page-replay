@@ -116,7 +116,7 @@ class TimedTcpServer(SocketServer.ThreadingTCPServer,
       pass
 
 
-class TcpTestSocketCreator:
+class TcpTestSocketCreator(object):
   """A TCP socket creator suitable for with-statement."""
 
   def __init__(self, host, port, timeout=1.0):
