@@ -23,4 +23,16 @@ third_party_dir = os.path.dirname(os.path.abspath(__file__))
 ipaddr_dir = os.path.join(third_party_dir, "ipaddr")
 sys.path.append(ipaddr_dir)  # workaround for no __init__.py
 import ipaddr
-sys.path.append(third_party_dir)
+
+# Modules in dns/ import sibling modules by "import dns/xxx", but
+# some platform has dns/ in global site-packages directory so we need to raise
+# the precedence of local search path (crbug/493869).
+# The implementation here preloads all dns/ modules into this package so clients
+# don't need to worry about import path issue.
+# An easier solution might be modify dns/ modules to use relative path, but I
+# tried not to touch third_party lib for now.
+sys.path.insert(0, third_party_dir)
+from dns import __all__ as all_dns_modules
+all_dns_modules = ['dns.' + m for m in  all_dns_modules]
+map(__import__, all_dns_modules)
+sys.path.pop(0)
