@@ -50,6 +50,11 @@ class MockHttpArchiveHandler(httpproxy.HttpArchiveHandler):
     HttpProxyTest.HANDLED_REQUEST_COUNT += 1
 
 
+class MockRules(object):
+  def Find(self, unused_rule_type_name):  # pylint: disable=unused-argument
+    return lambda unused_request, unused_response: None
+
+
 class HttpProxyTest(unittest.TestCase):
   def setUp(self):
     self.has_proxy_server_bound_port = False
@@ -65,9 +70,11 @@ class HttpProxyTest(unittest.TestCase):
     self.host = 'localhost'
     self.port = 8889
     custom_handlers = MockCustomResponseHandler(response)
+    rules = MockRules()
     http_archive_fetch = MockHttpArchiveFetch()
     self.proxy_server = httpproxy.HttpProxyServer(
-        http_archive_fetch, custom_handlers, host=self.host, port=self.port)
+        http_archive_fetch, custom_handlers, rules,
+        host=self.host, port=self.port)
     self.proxy_server.RequestHandlerClass = MockHttpArchiveHandler
     self.has_proxy_server_bound_port = True
 

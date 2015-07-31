@@ -54,6 +54,7 @@ import httpclient
 import httpproxy
 import net_configs
 import platformsettings
+import rules_parser
 import script_injector
 import servermanager
 import trafficshaper
@@ -110,6 +111,14 @@ def AddDnsProxy(server_manager, options, host, port, real_dns_lookup,
 
 
 def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive):
+  if options.rules_path:
+    with open(options.rules_path) as file_obj:
+      allowed_imports = [
+          name.strip() for name in options.allowed_rule_imports.split(',')]
+      rules = rules_parser.Rules(file_obj, allowed_imports)
+    logging.info('Parsed %s rules:\n%s', options.rules_path, rules)
+  else:
+    rules = rules_parser.Rules()
   inject_script = script_injector.GetInjectScript(options.inject_scripts)
   custom_handlers = customhandlers.CustomHandlers(options, http_archive)
   custom_handlers.add_server_manager_handler(server_manager)
@@ -123,25 +132,25 @@ def AddWebProxy(server_manager, options, host, real_dns_lookup, http_archive):
   server_manager.AppendReplayCallback(archive_fetch.SetReplayMode)
   server_manager.Append(
       httpproxy.HttpProxyServer,
-      archive_fetch, custom_handlers,
+      archive_fetch, custom_handlers, rules,
       host=host, port=options.port, use_delays=options.use_server_delay,
       **options.shaping_http)
   if options.ssl:
     if options.should_generate_certs:
       server_manager.Append(
-          httpproxy.HttpsProxyServer, archive_fetch, custom_handlers,
+          httpproxy.HttpsProxyServer, archive_fetch, custom_handlers, rules,
           options.https_root_ca_cert_path, host=host, port=options.ssl_port,
           use_delays=options.use_server_delay, **options.shaping_http)
     else:
       server_manager.Append(
           httpproxy.SingleCertHttpsProxyServer, archive_fetch,
-          custom_handlers, options.https_root_ca_cert_path, host=host,
+          custom_handlers, rules, options.https_root_ca_cert_path, host=host,
           port=options.ssl_port, use_delays=options.use_server_delay,
           **options.shaping_http)
   if options.http_to_https_port:
     server_manager.Append(
         httpproxy.HttpToHttpsProxyServer,
-        archive_fetch, custom_handlers,
+        archive_fetch, custom_handlers, rules,
         host=host, port=options.http_to_https_port,
         use_delays=options.use_server_delay,
         **options.shaping_http)
@@ -514,6 +523,13 @@ def GetOptionParser():
       action='store_true',
       dest='scramble_images',
       help='Scramble image responses.')
+  harness_group.add_option('--rules_path', default=None,
+      action='store',
+      help='Path of file containing Python rules.')
+  harness_group.add_option('--allowed_rule_imports', default='rules',
+      action='store',
+      help='A comma-separate list of allowed rule imports, or \'*\' to allow'
+           ' all packages.  Defaults to \'%default\'.')
   return option_parser
 
 

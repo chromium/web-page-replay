@@ -15,6 +15,7 @@
 
 import BaseHTTPServer
 import certutils
+import collections
 import errno
 import logging
 import socket
@@ -101,6 +102,11 @@ class HttpArchiveHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     query = '?%s' % parsed.query if parsed.query else ''
     fragment = '#%s' % parsed.fragment if parsed.fragment else ''
     full_path = '%s%s%s%s' % (parsed.path, params, query, fragment)
+
+    StubRequest = collections.namedtuple('StubRequest', ('host', 'full_path'))
+    request, response = StubRequest(host, full_path), None
+
+    self.server.log_url(request, response)
 
     return httparchive.ArchivedHttpRequest(
         self.command,
@@ -283,13 +289,14 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
   # Don't prevent python from exiting when there is thread activity.
   daemon_threads = True
 
-  def __init__(self, http_archive_fetch, custom_handlers,
+  def __init__(self, http_archive_fetch, custom_handlers, rules,
                host='localhost', port=80, use_delays=False, is_ssl=False,
                protocol='HTTP',
                down_bandwidth='0', up_bandwidth='0', delay_ms='0'):
     """Start HTTP server.
 
     Args:
+      rules: a rule_parser Rules.
       host: a host string (name or IP) for the web proxy.
       port: a port string (e.g. '80') for the web proxy.
       use_delays: if True, add response data delays during replay.
@@ -330,6 +337,7 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
     self.num_active_connections = 0
     self.total_request_time = 0
     self.protocol = protocol
+    self.log_url = rules.Find('log_url')
 
     # Note: This message may be scraped. Do not change it.
     logging.warning(
@@ -365,11 +373,11 @@ class HttpProxyServer(SocketServer.ThreadingMixIn,
 class HttpsProxyServer(HttpProxyServer):
   """SSL server that generates certs for each host."""
 
-  def __init__(self, http_archive_fetch, custom_handlers,
+  def __init__(self, http_archive_fetch, custom_handlers, rules,
                https_root_ca_cert_path, **kwargs):
     self.ca_cert_path = https_root_ca_cert_path
     self.HANDLER = sslproxy.wrap_handler(HttpArchiveHandler)
-    HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
+    HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers, rules,
                              is_ssl=True, protocol='HTTPS', **kwargs)
     with open(self.ca_cert_path, 'r') as cert_file:
       self._ca_cert_str = cert_file.read()
@@ -405,9 +413,9 @@ class HttpsProxyServer(HttpProxyServer):
 class SingleCertHttpsProxyServer(HttpProxyServer):
   """SSL server."""
 
-  def __init__(self, http_archive_fetch, custom_handlers,
+  def __init__(self, http_archive_fetch, custom_handlers, rules,
                https_root_ca_cert_path, **kwargs):
-    HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
+    HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers, rules,
                              is_ssl=True, protocol='HTTPS', **kwargs)
     self.socket = ssl.wrap_socket(
         self.socket, certfile=https_root_ca_cert_path, server_side=True,
@@ -421,8 +429,8 @@ class SingleCertHttpsProxyServer(HttpProxyServer):
 class HttpToHttpsProxyServer(HttpProxyServer):
   """Listens for HTTP requests but sends them to the target as HTTPS requests"""
 
-  def __init__(self, http_archive_fetch, custom_handlers, **kwargs):
-    HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers,
+  def __init__(self, http_archive_fetch, custom_handlers, rules, **kwargs):
+    HttpProxyServer.__init__(self, http_archive_fetch, custom_handlers, rules,
                              is_ssl=True, protocol='HTTP-to-HTTPS', **kwargs)
 
   def handle_error(self, request, client_address):
