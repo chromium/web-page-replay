@@ -682,6 +682,8 @@ class ArchivedHttpRequest(object):
     if 'accept-encoding' in headers:
       accept_encoding = headers['accept-encoding']
       accept_encoding = accept_encoding.replace('sdch', '')
+      # Strip lzma so Opera's requests matches archives recorded using Chrome.
+      accept_encoding = accept_encoding.replace('lzma', '')
       stripped_encodings = [e.strip() for e in accept_encoding.split(',')]
       accept_encoding = ','.join(filter(bool, stripped_encodings))
       headers['accept-encoding'] = accept_encoding
