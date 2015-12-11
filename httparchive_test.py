@@ -85,6 +85,10 @@ class HttpArchiveTest(unittest.TestCase):
     self.assertEqual(request._TrimHeaders(header5),
                      [('accept-encoding', 'gzip,deflate')])
 
+    # Tests that x-client-data gets stripped.
+    header6 = {'x-client-data': 'testdata'}
+    self.assertEqual(request._TrimHeaders(header6), [])
+
   def test_matches(self):
     headers = {}
     request1 = httparchive.ArchivedHttpRequest(
