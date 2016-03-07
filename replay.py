@@ -316,7 +316,8 @@ def replay(options, replay_filename):
     AddDnsForward(server_manager, options.server)
   else:
     real_dns_lookup = dnsproxy.RealDnsLookup(
-        name_servers=[platformsettings.get_original_primary_nameserver()])
+        name_servers=[platformsettings.get_original_primary_nameserver()],
+        dns_forwarding=options.dns_forwarding)
     if options.record:
       httparchive.HttpArchive.AssertWritable(replay_filename)
       if options.append and os.path.exists(replay_filename):
