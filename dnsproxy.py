@@ -35,10 +35,11 @@ class DnsProxyException(Exception):
 
 
 class RealDnsLookup(object):
-  def __init__(self, name_servers, dns_forwarding):
-    if '127.0.0.1' in name_servers and dns_forwarding:
+  def __init__(self, name_servers, dns_forwarding, proxy_host, proxy_port):
+    if proxy_host in name_servers and proxy_port == 53 and dns_forwarding:
       raise DnsProxyException(
-          'Invalid nameserver: 127.0.0.1 (causes an infinte loop)')
+          'Invalid nameserver: %s (causes an infinte loop)'.format(
+              proxy_host))
     self.resolver = resolver.get_default_resolver()
     self.resolver.nameservers = name_servers
     self.dns_cache_lock = threading.Lock()
