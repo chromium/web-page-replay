@@ -62,18 +62,23 @@ class AndroidCertInstaller(object):
     cmd.extend(args)
     return self._run_cmd(cmd)
 
+  def _adb_shell(self, *args):
+    cmd = ['shell']
+    cmd.extend(args)
+    return self._adb(*cmd)
+
   def _adb_su_shell(self, *args):
     """Runs command as root."""
     build_version_sdk = int(self._get_property('ro.build.version.sdk'))
     if build_version_sdk >= _ANDROID_M_BUILD_VERSION:
-      cmd = ['shell', 'su', '0']
+      cmd = ['su', '0']
     else:
-      cmd = ['shell', 'su', '-c']
+      cmd = ['su', '-c']
     cmd.extend(args)
-    return self._adb(*cmd)
+    return self._adb_shell(*cmd)
 
   def _get_property(self, prop):
-    return self._adb('shell', 'getprop', prop).strip()
+    return self._adb_shell('getprop', prop).strip()
 
   def check_device(self):
     install_warning = False
@@ -88,11 +93,11 @@ class AndroidCertInstaller(object):
 
   def _input_key(self, key):
     """Inputs a keyevent."""
-    self._adb('shell', 'input', 'keyevent', key)
+    self._adb_shell('input', 'keyevent', key)
 
   def _input_text(self, text):
     """Inputs text."""
-    self._adb('shell', 'input', 'text', text)
+    self._adb_shell('input', 'text', text)
 
   @staticmethod
   def _remove(file_name):
@@ -181,7 +186,7 @@ class AndroidCertInstaller(object):
     self._adb('push', self.cert_path, '/sdcard/')
 
     # Start credential install intent.
-    self._adb('shell', 'am', 'start', '-W', '-a', 'android.credentials.INSTALL')
+    self._adb_shell('am', 'start', '-W', '-a', 'android.credentials.INSTALL')
 
     # Move to and click search button.
     self._input_key(KEYCODE_TAB)
@@ -194,7 +199,7 @@ class AndroidCertInstaller(object):
     self._input_key(KEYCODE_ENTER)
 
     # These coordinates work for hammerhead devices.
-    self._adb('shell', 'input', 'tap', '300', '300')
+    self._adb_shell('input', 'tap', '300', '300')
 
     # Name the certificate and click enter.
     self._input_text(self.cert_name)
@@ -204,7 +209,7 @@ class AndroidCertInstaller(object):
     self._input_key(KEYCODE_ENTER)
 
     # Remove the file.
-    self._adb('shell', 'rm', '/sdcard/' + self.file_name)
+    self._adb_shell('rm', '/sdcard/' + self.file_name)
 
 
 def parse_args():
