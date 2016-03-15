@@ -118,7 +118,7 @@ class AndroidCertInstaller(object):
 
   def _remove_cert_from_cacerts(self):
     self._adb_su_shell('mount', '-o', 'remount,rw', '/system')
-    self._adb_su_shell('rm', self.android_cacerts_path)
+    self._adb_su_shell('rm', '-f', self.android_cacerts_path)
 
   def _is_cert_installed(self):
     return (self._adb_su_shell('ls', self.android_cacerts_path).strip() ==
