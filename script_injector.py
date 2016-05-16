@@ -47,6 +47,11 @@ def GetInjectScript(scripts):
   return jsmin.jsmin(''.join(lines), quote_chars="'\"`")
 
 
+def _IsHtmlContent(content):
+  content = content.strip()
+  return  content == '' or (content.startswith('<') and content.endswith('>'))
+
+
 def InjectScript(content, content_type, script_to_inject):
   """Inject |script_to_inject| into |content| if |content_type| is 'text/html'.
 
@@ -59,7 +64,7 @@ def InjectScript(content, content_type, script_to_inject):
     |already_injected| indicates if |script_to_inject| is already in |content|.
   """
   already_injected = False
-  if content_type and content_type == 'text/html':
+  if content_type and content_type == 'text/html' and _IsHtmlContent(content):
     already_injected = not content or script_to_inject in content
     if not already_injected:
       def InsertScriptAfter(matchobj):

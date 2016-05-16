@@ -52,6 +52,13 @@ class ScriptInjectorTest(unittest.TestCase):
     self.assertEqual(source, '')
     self.assertTrue(already_injected)
 
+  def test_non_html_content_with_html_content_type(self):
+    json_source = '{"test": 1"}'
+    source, already_injected = script_injector.InjectScript(
+        json_source, TEXT_HTML, SCRIPT_TO_INJECT)
+    self.assertEqual(source, json_source)
+    self.assertFalse(already_injected)
+
   def test_already_injected(self):
     source, already_injected = script_injector.InjectScript(
         TEMPLATE_HEAD % EXPECTED_SCRIPT, TEXT_HTML, SCRIPT_TO_INJECT)
