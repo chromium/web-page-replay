@@ -59,8 +59,8 @@ import script_injector
 import servermanager
 import trafficshaper
 
-if sys.version < '2.6':
-  print 'Need Python 2.6 or greater.'
+if sys.version_info < (2, 7, 9):
+  print 'Need Python 2.7.9 or greater.'
   sys.exit(1)
 
 
