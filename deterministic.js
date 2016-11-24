@@ -1,3 +1,5 @@
+'use strict';
+
 (function () {
   var random_count = 0;
   var random_count_threshold = 25;
