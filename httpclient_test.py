@@ -191,7 +191,8 @@ class ActualNetworkFetchTest(test_utils.RealNetworkFetchTest):
 
   def testFetchNonSSLRequest(self):
     real_dns_lookup = dnsproxy.RealDnsLookup(
-        name_servers=[platformsettings.get_original_primary_nameserver()])
+        name_servers=[platformsettings.get_original_primary_nameserver()],
+        dns_forwarding=False, proxy_host='127.0.0.1', proxy_port=5353)
     fetch = httpclient.RealHttpFetch(real_dns_lookup)
     request = httparchive.ArchivedHttpRequest(
         command='GET', host='google.com', full_path='/search?q=dogs',
@@ -201,7 +202,8 @@ class ActualNetworkFetchTest(test_utils.RealNetworkFetchTest):
 
   def testFetchSSLRequest(self):
     real_dns_lookup = dnsproxy.RealDnsLookup(
-        name_servers=[platformsettings.get_original_primary_nameserver()])
+        name_servers=[platformsettings.get_original_primary_nameserver()],
+        dns_forwarding=False, proxy_host='127.0.0.1', proxy_port=5353)
     fetch = httpclient.RealHttpFetch(real_dns_lookup)
     request = httparchive.ArchivedHttpRequest(
         command='GET', host='google.com', full_path='/search?q=dogs',
