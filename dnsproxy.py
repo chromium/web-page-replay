@@ -34,9 +34,13 @@ class DnsProxyException(Exception):
   pass
 
 
+DEFAULT_DNS_PORT = 53
+
+
 class RealDnsLookup(object):
   def __init__(self, name_servers, dns_forwarding, proxy_host, proxy_port):
-    if proxy_host in name_servers and proxy_port == 53 and dns_forwarding:
+    if (proxy_host in name_servers and proxy_port == DEFAULT_DNS_PORT and
+        dns_forwarding):
       raise DnsProxyException(
           'Invalid nameserver: %s (causes an infinte loop)'.format(
               proxy_host))
