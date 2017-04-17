@@ -129,6 +129,7 @@ class CertutilsTest(unittest.TestCase):
     cert = certutils.load_cert(cert_string)
     self.assertEqual(issuer, cert.get_issuer().commonName)
     self.assertEqual(subject, cert.get_subject().commonName)
+    self.assertEqual(2, cert.get_version())
     self.assertEqual(2, cert.get_extension_count())
     self.assertEqual(b"subjectAltName", cert.get_extension(0).get_short_name())
     self.assertEqual(b"extendedKeyUsage",
