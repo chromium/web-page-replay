@@ -240,6 +240,7 @@ def generate_cert(root_ca_cert_str, server_cert_str, server_host):
   ca_key = load_privatekey(root_ca_cert_str)
 
   cert = crypto.X509()
+  cert.set_version(2)
   cert.get_subject().CN = common_name
   cert.gmtime_adj_notBefore(-60 * 60)
   cert.gmtime_adj_notAfter(60 * 60 * 24 * 30)
