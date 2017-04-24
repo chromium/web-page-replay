@@ -25,4 +25,4 @@ code](https://docs.google.com/document/d/1cehHn3Lig7UYw_7pqQJjkbPTV3kS11EYwjKO-6
 If you find issues with the project, you can file issues on this repo.
 If you want to do more and contribute code to help the project evolve,
 check out our [contribution
-guidelines](documentation/Contributing.md). 
+guidelines](documentation/Contributing.md).
