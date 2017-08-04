@@ -7,8 +7,7 @@ Status](https://coveralls.io/repos/chromium/web-page-replay/badge.svg)](https://
 This tool is now deprecated & is replaced by
 [WebPageReplayGo](https://github.com/catapult-project/catapult/blob/master/web_page_replay_go/README.md)
 
-For the rationale, please see:
-bit.ly/wpr-go-project(https://bit.ly/wpr-go-project)
+For the rationale, please see: https://bit.ly/wpr-go-project
 
 # Web Page Replay
 Record live Web pages and use them for local performance testing!
